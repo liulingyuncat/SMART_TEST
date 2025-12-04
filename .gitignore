@@ -1,0 +1,60 @@
+# 通用忽略文件
+.DS_Store
+.vscode/
+*.log
+*.swp
+*.swo
+*~
+
+# 前端
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+frontend/build/
+frontend/coverage/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# 后端 Go
+backend/tmp/
+backend/*.exe
+backend/*.test
+backend/*.out
+backend/vendor/
+backend/coverage
+backend/services_coverage
+
+# 后端存储文件
+backend/storage/static/
+backend/storage/attachments/
+backend/storage/versions/
+backend/storage/exports/
+
+# 数据库文件（可选，根据需要调整）
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/*.db.bak
+
+# 临时文件和备份
+*.tmp
+*.bak
+*.backup
+*~
+
+# IDE 特定文件
+.idea/
+*.iml
+.vscode/settings.json
+.vscode/launch.json
+*.sublime-project
+*.sublime-workspace
+
+# 操作系统文件
+Thumbs.db
+Desktop.ini
