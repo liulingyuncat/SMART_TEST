@@ -18,7 +18,7 @@ WORKDIR /app/frontend
 
 # 复制依赖文件并安装
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --production=false
+RUN npm ci --production=false --legacy-peer-deps
 
 # 复制源码并构建
 COPY frontend/ ./
