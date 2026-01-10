@@ -1,12 +1,12 @@
 package services
 
 import (
-	"errors"
 	"testing"
 	"webtest/internal/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"gorm.io/gorm"
 )
 
 // MockManualTestCaseRepository 模拟Repository层
@@ -134,7 +134,10 @@ func (m *MockManualTestCaseRepository) DeleteByCaseID(caseID string) error {
 
 func (m *MockManualTestCaseRepository) GetMaxIDByProjectAndType(projectID uint, caseType string) (uint, error) {
 	args := m.Called(projectID, caseType)
-	return uint(args.Int(0)), args.Error(1)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
+	return args.Get(0).(uint), args.Error(1)
 }
 
 func (m *MockManualTestCaseRepository) GetByProjectAndTypeOrdered(projectID uint, caseType string) ([]*models.ManualTestCase, error) {
@@ -264,6 +267,9 @@ func TestCreateCase_AIType_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
+	// Mock GetMaxIDByProjectAndType方法
+	mockRepo.On("GetMaxIDByProjectAndType", uint(1), "ai").Return(uint(0), nil)
+
 	// Mock Create方法
 	mockRepo.On("Create", mock.AnythingOfType("*models.ManualTestCase")).Return(nil)
 
@@ -297,33 +303,31 @@ func TestCreateCase_OverallType_MultiLanguage_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock CreateBatch方法,期望创建1条记录(Language字段已移除)
-	mockRepo.On("CreateBatch", mock.MatchedBy(func(cases []*models.ManualTestCase) bool {
-		if len(cases) != 1 {
-			return false
-		}
-		// 验证业务字段一致
-		for _, c := range cases {
-			if c.MajorFunctionCN != "登录功能" || c.ProjectID != 1 {
-				return false
-			}
-		}
-		return true
+	// Mock GetMaxIDByProjectAndType方法
+	mockRepo.On("GetMaxIDByProjectAndType", uint(1), "overall").Return(uint(0), nil)
+
+	// Mock Create方法
+	mockRepo.On("Create", mock.MatchedBy(func(tc *models.ManualTestCase) bool {
+		// 验证overall用例使用多语言字段
+		return tc.CaseType == "overall" &&
+			tc.MajorFunctionCN == "登录功能" &&
+			tc.ProjectID == 1 &&
+			tc.TestResult == "NR"
 	})).Return(nil)
 
 	// 执行测试
 	result, err := service.CreateCase(1, 123, CreateCaseRequest{
-		CaseType:      "overall",
-		Language:      "中文",
-		MajorFunction: "登录功能",
-		TestResult:    "NR",
+		CaseType:        "overall",
+		Language:        "中文",
+		MajorFunctionCN: "登录功能",
+		TestResult:      "NR",
 	})
 
 	// 断言
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.NotZero(t, result.ID)
-	assert.Equal(t, "登录功能", result.MajorFunction)
+	assert.Equal(t, "登录功能", result.MajorFunctionCN)
 	mockProjectService.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)
 }
@@ -368,22 +372,23 @@ func TestUpdateCase_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock GetByID返回用例
+	// Mock GetByCaseID返回用例
 	existingCase := &models.ManualTestCase{
+		CaseID:    "test-uuid-123",
 		ID:        10,
 		ProjectID: 1,
 		CaseType:  "ai",
 	}
-	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
+	mockRepo.On("GetByCaseID", "test-uuid-123").Return(existingCase, nil)
 
-	// Mock UpdateByID
+	// Mock UpdateByCaseID
 	testResult := "Pass"
-	mockRepo.On("UpdateByID", uint(10), map[string]interface{}{
-		"test_result": &testResult,
-	}).Return(nil)
+	mockRepo.On("UpdateByCaseID", "test-uuid-123", mock.MatchedBy(func(updates map[string]interface{}) bool {
+		return updates["test_result"] != nil
+	})).Return(nil)
 
 	// 执行测试
-	err := service.UpdateCase(1, 123, "10", UpdateCaseRequest{
+	err := service.UpdateCase(1, 123, "test-uuid-123", UpdateCaseRequest{
 		TestResult: &testResult,
 	})
 
@@ -406,12 +411,12 @@ func TestUpdateCase_CaseNotFound(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock GetByID返回错误
-	mockRepo.On("GetByID", uint(999)).Return(nil, errors.New("record not found"))
+	// Mock GetByCaseID返回错误
+	mockRepo.On("GetByCaseID", "non-existent-uuid").Return(nil, gorm.ErrRecordNotFound)
 
 	// 执行测试
 	testResult := "Pass"
-	err := service.UpdateCase(1, 123, "999", UpdateCaseRequest{
+	err := service.UpdateCase(1, 123, "non-existent-uuid", UpdateCaseRequest{
 		TestResult: &testResult,
 	})
 
@@ -435,19 +440,26 @@ func TestDeleteCase_AIType_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock GetByID返回AI用例
+	// Mock GetByCaseID返回AI用例
 	existingCase := &models.ManualTestCase{
+		CaseID:    "test-uuid-ai",
 		ID:        10,
 		ProjectID: 1,
 		CaseType:  "ai",
 	}
-	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
+	mockRepo.On("GetByCaseID", "test-uuid-ai").Return(existingCase, nil)
 
-	// Mock DeleteByID
-	mockRepo.On("DeleteByID", uint(10)).Return(nil)
+	// Mock DeleteByCaseID
+	mockRepo.On("DeleteByCaseID", "test-uuid-ai").Return(nil)
+
+	// Mock DecrementOrderAfter
+	mockRepo.On("DecrementOrderAfter", uint(1), "ai", int(10)).Return(nil)
+
+	// Mock ReassignDisplayIDs
+	mockRepo.On("ReassignDisplayIDs", uint(1), "ai").Return(nil)
 
 	// 执行测试
-	err := service.DeleteCase(1, 123, "10")
+	err := service.DeleteCase(1, 123, "test-uuid-ai")
 
 	// 断言
 	assert.NoError(t, err)
@@ -468,29 +480,27 @@ func TestDeleteCase_OverallType_MultiLanguage_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock GetByID返回整体用例
+	// Mock GetByCaseID返回整体用例
 	existingCase := &models.ManualTestCase{
+		CaseID:          "test-uuid-overall",
 		ID:              10,
 		ProjectID:       1,
 		CaseType:        "overall",
 		MajorFunctionCN: "登录功能",
 	}
-	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
+	mockRepo.On("GetByCaseID", "test-uuid-overall").Return(existingCase, nil)
 
-	// Mock GetByCriteria返回3个语言版本
-	relatedCases := []*models.ManualTestCase{
-		{ID: 10, MajorFunctionCN: "登录功能"},
-		{ID: 11, MajorFunctionCN: "登录功能"},
-		{ID: 12, MajorFunctionCN: "登录功能"},
-	}
-	mockRepo.On("GetByCriteria", uint(1), "overall", "登录功能", []string{"中文", "English", "日本語"}).
-		Return(relatedCases, nil)
+	// Mock DeleteByCaseID
+	mockRepo.On("DeleteByCaseID", "test-uuid-overall").Return(nil)
 
-	// Mock DeleteBatch删除3条记录
-	mockRepo.On("DeleteBatch", []string{"10", "11", "12"}).Return(nil)
+	// Mock DecrementOrderAfter
+	mockRepo.On("DecrementOrderAfter", uint(1), "overall", int(10)).Return(nil)
+
+	// Mock ReassignDisplayIDs
+	mockRepo.On("ReassignDisplayIDs", uint(1), "overall").Return(nil)
 
 	// 执行测试
-	err := service.DeleteCase(1, 123, "10")
+	err := service.DeleteCase(1, 123, "test-uuid-overall")
 
 	// 断言
 	assert.NoError(t, err)
@@ -561,7 +571,7 @@ func TestReorderCases_InvalidCaseID(t *testing.T) {
 	// 断言
 	assert.Error(t, err)
 	assert.Nil(t, newIDs)
-	assert.Contains(t, err.Error(), "case_id=999 不属于项目")
+	assert.Contains(t, err.Error(), "case_id 999 does not belong to project")
 	mockProjectService.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)
 }
@@ -578,6 +588,9 @@ func TestCreateCase_AIType_SingleLanguageFields(t *testing.T) {
 
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
+
+	// Mock GetMaxIDByProjectAndType方法
+	mockRepo.On("GetMaxIDByProjectAndType", uint(1), "ai").Return(uint(0), nil)
 
 	// Mock Create方法
 	mockRepo.On("Create", mock.MatchedBy(func(tc *models.ManualTestCase) bool {
@@ -632,6 +645,9 @@ func TestCreateCase_OverallType_MultiLanguageFields(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
+	// Mock GetMaxIDByProjectAndType方法
+	mockRepo.On("GetMaxIDByProjectAndType", uint(1), "overall").Return(uint(0), nil)
+
 	// Mock Create方法
 	mockRepo.On("Create", mock.MatchedBy(func(tc *models.ManualTestCase) bool {
 		// 验证overall用例使用多语言字段
@@ -643,13 +659,12 @@ func TestCreateCase_OverallType_MultiLanguageFields(t *testing.T) {
 
 	// 构造请求(仅填充中文字段)
 	req := CreateCaseRequest{
-		CaseType:   "overall",
-		Language:   "中文",
-		CaseNumber: "AC001",
-		// 多语言字段
-		MajorFunction: "登录模块", // 前端传此字段，后端映射到MajorFunctionCN
-		TestResult:    "",     // 空值应设置为NR
-		Remark:        "整体功能验证",
+		CaseType:        "overall",
+		Language:        "中文",
+		CaseNumber:      "AC001",
+		MajorFunctionCN: "登录模块", // overall用例使用多语言字段
+		TestResult:      "",     // 空值应设置为NR
+		Remark:          "整体功能验证",
 	}
 
 	// 执行测试
@@ -675,6 +690,14 @@ func TestClearAICases_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
+	// Mock GetByProjectAndType返回AI用例列表
+	aiCases := []*models.ManualTestCase{
+		{ID: 1, ProjectID: 1, CaseType: "ai"},
+		{ID: 2, ProjectID: 1, CaseType: "ai"},
+		{ID: 3, ProjectID: 1, CaseType: "ai"},
+	}
+	mockRepo.On("GetByProjectAndType", uint(1), "ai").Return(aiCases, nil)
+
 	// Mock DeleteByCaseType返回nil(成功删除)
 	mockRepo.On("DeleteByCaseType", uint(1), "ai").Return(nil)
 
@@ -683,7 +706,7 @@ func TestClearAICases_Success(t *testing.T) {
 
 	// 断言
 	assert.NoError(t, err)
-	assert.Greater(t, deletedCount, 0)
+	assert.Equal(t, 3, deletedCount)
 	mockProjectService.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)
 }

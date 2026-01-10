@@ -81,6 +81,32 @@ func (m *MockUserRepositoryForUserService) InitAdminUsers() error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepositoryForUserService) FindByApiToken(token string) (*models.User, error) {
+	args := m.Called(token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForUserService) UpdateApiToken(id uint, token string) error {
+	args := m.Called(id, token)
+	return args.Error(0)
+}
+
+func (m *MockUserRepositoryForUserService) FindByIDs(ids []uint) ([]models.User, error) {
+	args := m.Called(ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.User), args.Error(1)
+}
+
+func (m *MockUserRepositoryForUserService) UpdateCurrentProject(id uint, projectID uint) error {
+	args := m.Called(id, projectID)
+	return args.Error(0)
+}
+
 // TestGetUsers_SystemAdmin 测试系统管理员获取所有用户
 func TestGetUsers_SystemAdmin(t *testing.T) {
 	mockRepo := new(MockUserRepositoryForUserService)
@@ -180,11 +206,11 @@ func TestCreateUser_Success(t *testing.T) {
 	assert.Equal(t, "pm002", user.Username)
 	assert.Equal(t, "项目经理王五", user.Nickname)
 	assert.Equal(t, constants.RoleProjectManager, user.Role)
-	
+
 	// 验证密码已加密
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(DefaultPasswordPM))
 	assert.NoError(t, err)
-	
+
 	mockRepo.AssertExpectations(t)
 }
 
@@ -450,11 +476,11 @@ func TestCreateUser_ProjectMemberPassword(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
-	
+
 	// 验证密码是项目成员默认密码
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(DefaultPasswordMember))
 	assert.NoError(t, err)
-	
+
 	mockRepo.AssertExpectations(t)
 }
 

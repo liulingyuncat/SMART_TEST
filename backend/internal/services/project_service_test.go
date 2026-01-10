@@ -6,6 +6,7 @@ import (
 
 	"webtest/internal/constants"
 	"webtest/internal/models"
+	"webtest/internal/repositories"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -39,9 +40,33 @@ func (m *MockProjectRepository) ExistsByName(name string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockProjectRepository) GetByID(id uint) (*models.Project, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Project), args.Error(1)
+}
+
 func (m *MockProjectRepository) DeleteWithCascade(id uint) error {
 	args := m.Called(id)
 	return args.Error(0)
+}
+
+func (m *MockProjectRepository) Update(id uint, updates map[string]interface{}) (*models.Project, error) {
+	args := m.Called(id, updates)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Project), args.Error(1)
+}
+
+func (m *MockProjectRepository) UpdateName(id uint, name string) (*models.Project, error) {
+	args := m.Called(id, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Project), args.Error(1)
 }
 
 // MockProjectMemberRepository Mock项目成员仓储
@@ -83,6 +108,24 @@ func (m *MockProjectMemberRepository) GetProjectMembers(projectID uint) ([]model
 func (m *MockProjectMemberRepository) BatchUpdateMembers(projectID uint, managers []uint, members []uint) error {
 	args := m.Called(projectID, managers, members)
 	return args.Error(0)
+}
+
+func (m *MockProjectMemberRepository) GetMemberRole(projectID uint, userID uint) (string, error) {
+	args := m.Called(projectID, userID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockProjectMemberRepository) IsMemberWithRole(projectID uint, userID uint, role string) (bool, error) {
+	args := m.Called(projectID, userID, role)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockProjectMemberRepository) FindMembersWithUser(projectID uint) ([]repositories.MemberWithUser, error) {
+	args := m.Called(projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]repositories.MemberWithUser), args.Error(1)
 }
 
 // TestProjectService_GetUserProjects 测试获取用户项目列表

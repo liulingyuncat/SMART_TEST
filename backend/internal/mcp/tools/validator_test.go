@@ -57,7 +57,7 @@ func TestSchemaValidator_TypeCheck(t *testing.T) {
 					"name": map[string]interface{}{"type": "string"},
 				},
 			},
-			args:      map[string]interface{}{"name": 123},
+			args:      map[string]interface{}{"name": []string{"not", "a", "string"}},
 			wantError: true,
 		},
 		{

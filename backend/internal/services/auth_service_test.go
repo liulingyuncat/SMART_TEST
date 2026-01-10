@@ -209,5 +209,6 @@ func TestValidateToken(t *testing.T) {
 	// 断言
 	assert.NoError(t, err)
 	assert.NotNil(t, claims)
-	assert.Equal(t, "admin", claims.Subject)
+	assert.Equal(t, "admin", claims.Username)
+	assert.Equal(t, uint(1), claims.UserID)
 }
