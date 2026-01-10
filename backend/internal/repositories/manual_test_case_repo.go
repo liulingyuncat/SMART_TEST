@@ -12,17 +12,17 @@ type ManualTestCaseRepository interface {
 	GetMetadataByProjectID(projectID uint, caseType string) (*models.ManualTestCase, error)
 	UpdateMetadata(projectID uint, caseType string, metadata map[string]interface{}) error
 	CreateDefaultMetadata(projectID uint, caseType string) error
-	GetCasesByType(projectID uint, caseType string, offset int, limit int) ([]*models.ManualTestCase, int64, error)
+	GetCasesByType(projectID uint, caseType string, offset int, limit int, caseGroup string) ([]*models.ManualTestCase, int64, error)
 
 	// CRUD方法 - 使用CaseID(UUID)作为主键
 	Create(testCase *models.ManualTestCase) error
-	GetByCaseID(caseID string) (*models.ManualTestCase, error)          // 改用CaseID(UUID)
-	UpdateByCaseID(caseID string, updates map[string]interface{}) error // 改用CaseID(UUID)
-	DeleteByCaseID(caseID string) error                                 // 改用CaseID(UUID)
+	GetByCaseID(caseID string) (*models.ManualTestCase, error)                 // 改用CaseID(UUID)
+	UpdateByCaseID(caseID string, updates map[string]interface{}) error        // 改用CaseID(UUID)
+	DeleteByCaseID(caseID string) error                                        // 改用CaseID(UUID)
+	DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error // 级联删除用例集的所有用例
 
 	// 批量操作方法
 	CreateBatch(testCases []*models.ManualTestCase) error
-	GetByCriteria(projectID uint, caseType string, majorFunction string, languages []string) ([]*models.ManualTestCase, error)
 	DeleteBatch(caseIDs []string) error // 改用CaseID(UUID)
 	GetByProjectAndType(projectID uint, caseType string) ([]*models.ManualTestCase, error)
 	BatchUpdateIDs(caseIDMap map[uint]uint) error      // ID重排：更新显示序号（用于重新排序按钮）
@@ -38,6 +38,9 @@ type ManualTestCaseRepository interface {
 	IncrementOrderAfter(projectID uint, caseType string, afterOrder int) error // 将指定位置后的display_order加1
 	DecrementOrderAfter(projectID uint, caseType string, afterOrder int) error // 将指定位置后的display_order减1
 	ReassignDisplayIDs(projectID uint, caseType string) error                  // 重新分配id字段(1,2,3...)
+
+	// 新增：根据groupID获取case_group的名称
+	GetCaseGroupName(projectID uint, groupID uint) (string, error) // 根据case_groups表的ID获取group_name
 }
 
 type manualTestCaseRepository struct {
@@ -89,7 +92,6 @@ func (r *manualTestCaseRepository) CreateDefaultMetadata(projectID uint, caseTyp
 	testCase := models.ManualTestCase{
 		ProjectID:   projectID,
 		CaseType:    caseType,
-		Language:    "中文",
 		TestVersion: "",
 		TestEnv:     "",
 		TestDate:    "",
@@ -105,12 +107,17 @@ func (r *manualTestCaseRepository) CreateDefaultMetadata(projectID uint, caseTyp
 }
 
 // GetCasesByType 根据用例类型获取用例列表(分页)
-func (r *manualTestCaseRepository) GetCasesByType(projectID uint, caseType string, offset int, limit int) ([]*models.ManualTestCase, int64, error) {
+func (r *manualTestCaseRepository) GetCasesByType(projectID uint, caseType string, offset int, limit int, caseGroup string) ([]*models.ManualTestCase, int64, error) {
 	var cases []*models.ManualTestCase
 	var total int64
 
 	// 查询条件（不再按语言筛选）
 	query := r.db.Where("project_id = ? AND case_type = ?", projectID, caseType)
+
+	// 如果提供了 caseGroup 参数，添加过滤条件
+	if caseGroup != "" {
+		query = query.Where("case_group = ?", caseGroup)
+	}
 
 	// 统计总数
 	if err := query.Model(&models.ManualTestCase{}).Count(&total).Error; err != nil {
@@ -161,9 +168,9 @@ func (r *manualTestCaseRepository) UpdateByCaseID(caseID string, updates map[str
 	return nil
 }
 
-// DeleteByCaseID 软删除用例记录（通过CaseID）
+// DeleteByCaseID 硬删除用例记录（通过CaseID）
 func (r *manualTestCaseRepository) DeleteByCaseID(caseID string) error {
-	err := r.db.Where("case_id = ?", caseID).Delete(&models.ManualTestCase{}).Error
+	err := r.db.Unscoped().Where("case_id = ?", caseID).Delete(&models.ManualTestCase{}).Error
 	if err != nil {
 		return fmt.Errorf("delete test case %s: %w", caseID, err)
 	}
@@ -182,26 +189,10 @@ func (r *manualTestCaseRepository) CreateBatch(testCases []*models.ManualTestCas
 	})
 }
 
-// GetByCriteria 多条件查询用例,支持按项目、类型、功能名、语言列表筛选
-func (r *manualTestCaseRepository) GetByCriteria(projectID uint, caseType string, majorFunction string, languages []string) ([]*models.ManualTestCase, error) {
-	var cases []*models.ManualTestCase
-	query := r.db.Where("project_id = ? AND case_type = ? AND major_function = ?", projectID, caseType, majorFunction)
-
-	if len(languages) > 0 {
-		query = query.Where("language IN ?", languages)
-	}
-
-	err := query.Find(&cases).Error
-	if err != nil {
-		return nil, fmt.Errorf("get cases by criteria: %w", err)
-	}
-	return cases, nil
-}
-
-// DeleteBatch 批量软删除用例（通过CaseID）,使用事务保证原子性
+// DeleteBatch 批量硬删除用例（通过CaseID）,使用事务保证原子性
 func (r *manualTestCaseRepository) DeleteBatch(caseIDs []string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		err := tx.Where("case_id IN ?", caseIDs).Delete(&models.ManualTestCase{}).Error
+		err := tx.Unscoped().Where("case_id IN ?", caseIDs).Delete(&models.ManualTestCase{}).Error
 		if err != nil {
 			return fmt.Errorf("delete batch test cases: %w", err)
 		}
@@ -344,4 +335,36 @@ func (r *manualTestCaseRepository) ReassignDisplayIDs(projectID uint, caseType s
 		}
 		return nil
 	})
+}
+
+// GetCaseGroupName 根据case_groups表的ID获取group_name
+func (r *manualTestCaseRepository) GetCaseGroupName(projectID uint, groupID uint) (string, error) {
+	// 需要查询case_groups表，因此需要定义一个简单的结构体
+	type CaseGroup struct {
+		GroupName string
+	}
+
+	var cg CaseGroup
+	err := r.db.Table("case_groups").
+		Select("group_name").
+		Where("id = ? AND project_id = ? AND deleted_at IS NULL", groupID, projectID).
+		First(&cg).Error
+
+	if err != nil {
+		return "", fmt.Errorf("get case group name: %w", err)
+	}
+
+	return cg.GroupName, nil
+}
+
+// DeleteByCaseGroup 删除指定用例集的所有用例(硬删除)
+func (r *manualTestCaseRepository) DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error {
+	result := r.db.Unscoped().Where("project_id = ? AND case_type = ? AND case_group = ?", projectID, caseType, caseGroup).
+		Delete(&models.ManualTestCase{})
+
+	if result.Error != nil {
+		return fmt.Errorf("delete manual cases by case_group %s: %w", caseGroup, result.Error)
+	}
+
+	return nil
 }
