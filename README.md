@@ -23,6 +23,37 @@ docker pull ghcr.io/liulingyuncat/smart_test:latest
 docker-compose up -d
 ```
 
+#### 环境变量配置
+
+默认配置会使用以下默认值（生产环境请修改）：
+
+| 变量 | 默认值 | 说明 | 修改方式 |
+|------|--------|------|----------|
+| `DB_PASSWORD` | `webtest_default_pass_change_me` | 数据库密码 | 创建 `.env` 文件设置 |
+| `JWT_SECRET` | `default_jwt_secret_please_change_in_production` | JWT 签名密钥 | 创建 `.env` 文件设置 |
+| `MCP_AUTH_TOKEN` | `default_mcp_token_change_me` | MCP 服务认证令牌 | 创建 `.env` 文件设置 |
+
+**生产环境配置步骤**：
+
+```bash
+# 1. 创建 .env 文件
+cat > .env << 'EOF'
+DB_PASSWORD=your_secure_database_password_here
+JWT_SECRET=your_random_jwt_secret_key_here_at_least_32_chars
+MCP_AUTH_TOKEN=your_mcp_authentication_token_here
+EOF
+
+# 2. 生成强密码（可选）
+openssl rand -base64 32  # 用于 JWT_SECRET
+openssl rand -hex 16     # 用于 DB_PASSWORD
+openssl rand -base64 24  # 用于 MCP_AUTH_TOKEN
+
+# 3. 启动服务
+docker-compose up -d
+```
+
+> ⚠️ **安全提示**: 默认值仅用于快速测试，生产环境必须修改为强密码！
+
 详见: [Docker 使用指南](./DOCKER.md) | [GitHub Packages 部署指南](./GITHUB_PACKAGES_DEPLOYMENT.md)
 
 ## 技术栈

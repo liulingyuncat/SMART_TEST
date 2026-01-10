@@ -71,10 +71,47 @@ volumes:
 启动服务：
 
 ```bash
+# 使用默认配置（测试环境）
+docker-compose up -d
+
+# 生产环境（推荐创建 .env 文件）
+cat > .env << 'EOF'
+DB_PASSWORD=your_secure_password
+JWT_SECRET=your_jwt_secret_at_least_32_chars
+MCP_AUTH_TOKEN=your_mcp_token
+EOF
+
 docker-compose up -d
 ```
 
 ## 🔧 环境变量配置
+
+### Docker Compose 环境变量
+
+| 变量 | 说明 | 默认值 | 生产环境建议 |
+|------|------|--------|------------|
+| `DB_PASSWORD` | 数据库密码 | `webtest_default_pass_change_me` | 使用强随机密码 |
+| `JWT_SECRET` | JWT 签名密钥 | `default_jwt_secret_please_change_in_production` | 至少 32 字符随机字符串 |
+| `MCP_AUTH_TOKEN` | MCP 服务认证令牌 | `default_mcp_token_change_me` | 随机生成的令牌 |
+| `TZ` | 时区 | `Asia/Shanghai` | 根据实际需要 |
+| `DB_TYPE` | 数据库类型 | `postgres` | - |
+| `PORT` | HTTP 端口 | `8443` | - |
+| `MCP_PORT` | MCP 服务端口 | `16410` | - |
+
+**生成强密码示例**：
+
+```bash
+# 生成 JWT Secret (32+ 字符)
+openssl rand -base64 32
+
+# 生成数据库密码
+openssl rand -hex 16
+
+# 生成 MCP Token
+openssl rand -base64 24
+```
+
+### 单机部署环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
