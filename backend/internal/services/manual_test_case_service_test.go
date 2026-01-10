@@ -170,6 +170,11 @@ func (m *MockManualTestCaseRepository) GetCaseGroupName(projectID uint, groupID 
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockManualTestCaseRepository) GetMaxID(projectID uint, caseType string) (uint, error) {
+	args := m.Called(projectID, caseType)
+	return uint(args.Int(0)), args.Error(1)
+}
+
 // MockProjectService 模拟ProjectService
 type MockProjectService struct {
 	mock.Mock
@@ -480,7 +485,7 @@ func TestDeleteCase_OverallType_MultiLanguage_Success(t *testing.T) {
 	mockRepo.On("DeleteBatch", []string{"10", "11", "12"}).Return(nil)
 
 	// 执行测试
-	err := service.DeleteCase(1, 123, 10)
+	err := service.DeleteCase(1, 123, "10")
 
 	// 断言
 	assert.NoError(t, err)

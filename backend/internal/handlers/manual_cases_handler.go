@@ -231,7 +231,7 @@ func (h *ManualCasesHandler) UpdateCase(c *gin.Context) {
 	// 调用服务（caseID现在是UUID字符串）
 	err = h.service.UpdateCase(uint(projectID), userID, caseID, req)
 	if err != nil {
-		log.Printf("[Case Update Failed] user_id=%d, project_id=%d, case_id=%d, error=%v", userID, projectID, caseID, err)
+		log.Printf("[Case Update Failed] user_id=%d, project_id=%d, case_id=%s, error=%v", userID, projectID, caseID, err)
 		if err.Error() == "无项目访问权限" || err.Error() == "用例不属于当前项目" {
 			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
 			return
@@ -244,7 +244,7 @@ func (h *ManualCasesHandler) UpdateCase(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Case Update] user_id=%d, project_id=%d, case_id=%d", userID, projectID, caseID)
+	log.Printf("[Case Update] user_id=%d, project_id=%d, case_id=%s", userID, projectID, caseID)
 	utils.MessageResponse(c, http.StatusOK, "用例更新成功")
 }
 
@@ -277,7 +277,7 @@ func (h *ManualCasesHandler) DeleteCase(c *gin.Context) {
 	// 调用服务（caseID现在是UUID字符串）
 	err = h.service.DeleteCase(uint(projectID), userID, caseID)
 	if err != nil {
-		log.Printf("[Case Delete Failed] user_id=%d, project_id=%d, case_id=%d, error=%v", userID, projectID, caseID, err)
+		log.Printf("[Case Delete Failed] user_id=%d, project_id=%d, case_id=%s, error=%v", userID, projectID, caseID, err)
 		if err.Error() == "无项目访问权限" || err.Error() == "用例不属于当前项目" {
 			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
 			return
@@ -290,7 +290,7 @@ func (h *ManualCasesHandler) DeleteCase(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Case Delete] user_id=%d, project_id=%d, case_id=%d", userID, projectID, caseID)
+	log.Printf("[Case Delete] user_id=%d, project_id=%d, case_id=%s", userID, projectID, caseID)
 	utils.MessageResponse(c, http.StatusOK, "用例删除成功")
 }
 

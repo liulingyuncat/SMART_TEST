@@ -515,7 +515,7 @@ func (h *AutoCasesHandler) BatchSaveVersion(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Auto Batch Save Version Success] user_id=%d, project_id=%d, version_id=%d",
+	log.Printf("[Auto Batch Save Version Success] user_id=%d, project_id=%d, version_id=%s",
 		userID, projectID, versionInfo.VersionID)
 	utils.SuccessResponse(c, versionInfo)
 }
