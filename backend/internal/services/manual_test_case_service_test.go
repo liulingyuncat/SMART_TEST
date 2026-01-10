@@ -109,11 +109,8 @@ func (m *MockManualTestCaseRepository) DeleteByCaseType(projectID uint, caseType
 	return args.Error(0)
 }
 
-func (m *MockManualTestCaseRepository) BatchUpdateIDsByCaseID(updates []struct {
-	CaseID string
-	NewID  uint
-}) error {
-	args := m.Called(updates)
+func (m *MockManualTestCaseRepository) BatchUpdateIDsByCaseID(caseIDs []string) error {
+	args := m.Called(caseIDs)
 	return args.Error(0)
 }
 
@@ -205,12 +202,12 @@ func (m *MockProjectService) GetByID(projectID uint, userID uint) (*models.Proje
 	return args.Get(0).(*models.Project), args.String(1), args.Error(2)
 }
 
-func (m *MockProjectService) GetProjectMembers(projectID uint) ([]models.User, error) {
-	args := m.Called(projectID)
+func (m *MockProjectService) GetProjectMembers(projectID uint, userID uint) (*ProjectMembersResponse, error) {
+	args := m.Called(projectID, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]models.User), args.Error(1)
+	return args.Get(0).(*ProjectMembersResponse), args.Error(1)
 }
 
 // 测试用例: CreateCase - AI用例创建(正常流程)
@@ -259,21 +256,18 @@ func TestCreateCase_OverallType_MultiLanguage_Success(t *testing.T) {
 	// 权限校验返回true
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(true, nil)
 
-	// Mock CreateBatch方法,期望创建3条记录
+	// Mock CreateBatch方法,期望创建1条记录(Language字段已移除)
 	mockRepo.On("CreateBatch", mock.MatchedBy(func(cases []*models.ManualTestCase) bool {
-		if len(cases) != 3 {
+		if len(cases) != 1 {
 			return false
 		}
-		// 验证三个语言版本
-		langs := make(map[string]bool)
+		// 验证业务字段一致
 		for _, c := range cases {
-			langs[c.Language] = true
-			// 验证业务字段一致
-			if c.MajorFunction != "登录功能" || c.ProjectID != 1 {
+			if c.MajorFunctionCN != "登录功能" || c.ProjectID != 1 {
 				return false
 			}
 		}
-		return langs["中文"] && langs["English"] && langs["日本語"]
+		return true
 	})).Return(nil)
 
 	// 执行测试
