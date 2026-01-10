@@ -1,0 +1,74 @@
+# Git 相关
+.git
+.gitignore
+.gitattributes
+
+# 文档
+*.md
+!README.md
+docs/
+
+# 测试和脚本
+*.ps1
+*.bat
+*.sh
+!docker-entrypoint.sh
+e2e/
+test_*.ps1
+call_*.ps1
+check_*.ps1
+diagnose_*.ps1
+
+# 构建产物
+backend/*.exe
+backend/*.log
+backend/bin/
+backend/build/
+backend/server
+backend/mcp-server
+backend/*.db
+backend/*.db-*
+backend/node_modules/
+
+# 前端
+frontend/node_modules/
+frontend/build/
+frontend/.env*
+
+# IDE
+.vscode/
+.idea/
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+*.backup_*
+*.txt
+!backend/internal/mcp/prompts/*.txt
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志
+*.log
+
+# 证书（运行时自动生成）
+backend/certs/*.key
+backend/certs/*.pfx
+backend/certs/*.crt
+
+# 存储文件
+backend/storage/
+storage/
+
+# 镜像文件
+image/
+
+# SQL脚本
+*.sql
+
+# Playwright MCP
+.playwright-mcp/
