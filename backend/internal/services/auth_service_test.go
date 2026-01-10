@@ -57,6 +57,12 @@ func (m *MockUserRepository) UpdateApiToken(id uint, token string) error {
 	args := m.Called(id, token)
 	return args.Error(0)
 }
+
+func (m *MockUserRepository) UpdateCurrentProject(id uint, projectID uint) error {
+	args := m.Called(id, projectID)
+	return args.Error(0)
+}
+
 func (m *MockUserRepository) Create(user *models.User) error {
 	args := m.Called(user)
 	return args.Error(0)

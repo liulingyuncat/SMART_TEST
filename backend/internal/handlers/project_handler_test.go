@@ -70,6 +70,22 @@ func (m *MockProjectService) GetProjectMembers(projectID uint, userID uint) (*se
 	return args.Get(0).(*services.ProjectMembersResponse), args.Error(1)
 }
 
+func (m *MockProjectService) UpdateProjectMembers(projectID uint, managers []uint, members []uint, currentUserID uint) (*services.ProjectMembersResponse, error) {
+	args := m.Called(projectID, managers, members, currentUserID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*services.ProjectMembersResponse), args.Error(1)
+}
+
+func (m *MockProjectService) UpdateProjectMetadata(projectID uint, updates map[string]interface{}, userID uint, role string) (*models.Project, error) {
+	args := m.Called(projectID, updates, userID, role)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Project), args.Error(1)
+}
+
 // setupTestRouter 创建测试路由
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)

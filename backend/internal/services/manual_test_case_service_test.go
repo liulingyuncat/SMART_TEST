@@ -32,8 +32,8 @@ func (m *MockManualTestCaseRepository) CreateDefaultMetadata(projectID uint, cas
 	return args.Error(0)
 }
 
-func (m *MockManualTestCaseRepository) GetCasesByType(projectID uint, caseType string, offset int, limit int) ([]*models.ManualTestCase, int64, error) {
-	args := m.Called(projectID, caseType, offset, limit)
+func (m *MockManualTestCaseRepository) GetCasesByType(projectID uint, caseType string, offset int, limit int, caseGroup string) ([]*models.ManualTestCase, int64, error) {
+	args := m.Called(projectID, caseType, offset, limit, caseGroup)
 	if args.Get(0) == nil {
 		return nil, 0, args.Error(2)
 	}
@@ -163,6 +163,11 @@ func (m *MockManualTestCaseRepository) DeleteByCaseGroup(projectID uint, caseTyp
 func (m *MockManualTestCaseRepository) DecrementOrderAfter(projectID uint, caseType string, afterOrder int) error {
 	args := m.Called(projectID, caseType, afterOrder)
 	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) GetCaseGroupName(projectID uint, groupID uint) (string, error) {
+	args := m.Called(projectID, groupID)
+	return args.String(0), args.Error(1)
 }
 
 // MockProjectService 模拟ProjectService
@@ -396,7 +401,7 @@ func TestUpdateCase_CaseNotFound(t *testing.T) {
 
 	// 执行测试
 	testResult := "Pass"
-	err := service.UpdateCase(1, 123, 999, UpdateCaseRequest{
+	err := service.UpdateCase(1, 123, "999", UpdateCaseRequest{
 		TestResult: &testResult,
 	})
 
@@ -425,7 +430,6 @@ func TestDeleteCase_AIType_Success(t *testing.T) {
 		ID:        10,
 		ProjectID: 1,
 		CaseType:  "ai",
-		Language:  "中文",
 	}
 	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
 
@@ -433,7 +437,7 @@ func TestDeleteCase_AIType_Success(t *testing.T) {
 	mockRepo.On("DeleteByID", uint(10)).Return(nil)
 
 	// 执行测试
-	err := service.DeleteCase(1, 123, 10)
+	err := service.DeleteCase(1, 123, "10")
 
 	// 断言
 	assert.NoError(t, err)
@@ -456,25 +460,24 @@ func TestDeleteCase_OverallType_MultiLanguage_Success(t *testing.T) {
 
 	// Mock GetByID返回整体用例
 	existingCase := &models.ManualTestCase{
-		ID:            10,
-		ProjectID:     1,
-		CaseType:      "overall",
-		Language:      "中文",
-		MajorFunction: "登录功能",
+		ID:              10,
+		ProjectID:       1,
+		CaseType:        "overall",
+		MajorFunctionCN: "登录功能",
 	}
 	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
 
 	// Mock GetByCriteria返回3个语言版本
 	relatedCases := []*models.ManualTestCase{
-		{ID: 10, Language: "中文", MajorFunction: "登录功能"},
-		{ID: 11, Language: "English", MajorFunction: "登录功能"},
-		{ID: 12, Language: "日本語", MajorFunction: "登录功能"},
+		{ID: 10, MajorFunctionCN: "登录功能"},
+		{ID: 11, MajorFunctionCN: "登录功能"},
+		{ID: 12, MajorFunctionCN: "登录功能"},
 	}
 	mockRepo.On("GetByCriteria", uint(1), "overall", "登录功能", []string{"中文", "English", "日本語"}).
 		Return(relatedCases, nil)
 
 	// Mock DeleteBatch删除3条记录
-	mockRepo.On("DeleteBatch", []uint{10, 11, 12}).Return(nil)
+	mockRepo.On("DeleteBatch", []string{"10", "11", "12"}).Return(nil)
 
 	// 执行测试
 	err := service.DeleteCase(1, 123, 10)
