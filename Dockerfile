@@ -83,8 +83,8 @@ COPY backend/config/mcp-server.yaml ./config/mcp-server.yaml
 # 复制系统提示词
 COPY backend/internal/mcp/prompts ./internal/mcp/prompts
 
-# 复制 TLS 证书
-COPY backend/certs ./certs
+# 创建证书目录（证书将在启动时自动生成）
+RUN mkdir -p ./certs
 
 # 复制启动脚本
 COPY docker-entrypoint.sh ./docker-entrypoint.sh

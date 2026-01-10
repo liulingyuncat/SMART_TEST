@@ -12,6 +12,21 @@ set -e
 SERVER_PID=""
 MCP_PID=""
 
+# 自动生成 TLS 证书（如果不存在）
+generate_certs() {
+    if [ ! -f "/app/certs/server.crt" ] || [ ! -f "/app/certs/server.key" ]; then
+        echo "[entrypoint] Generating self-signed TLS certificates..."
+        openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout /app/certs/server.key \
+            -out /app/certs/server.crt \
+            -days 365 \
+            -subj "/C=CN/ST=Beijing/L=Beijing/O=SmartTest/CN=localhost"
+        echo "[entrypoint] TLS certificates generated successfully"
+    else
+        echo "[entrypoint] Using existing TLS certificates"
+    fi
+}
+
 # 信号处理函数 - 优雅关闭所有子进程
 cleanup() {
     echo "[entrypoint] Received shutdown signal, stopping services..."
@@ -37,6 +52,10 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGQUIT
 
 echo "[entrypoint] Starting SMART_TEST services..."
+
+# 生成证书
+generate_certs
+
 echo "[entrypoint] Database type: ${DB_TYPE:-sqlite}"
 
 # 启动 Web 服务（后台运行）
