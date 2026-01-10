@@ -12,7 +12,8 @@ type AutoTestCase struct {
 	CaseID    string `gorm:"type:varchar(36);primaryKey" json:"case_id"`  // UUID主键
 	ID        uint   `gorm:"not null;index:idx_atc_display_id" json:"id"` // 显示序号(可重排,用于前端展示)
 	ProjectID uint   `gorm:"not null;index:idx_atc_project" json:"project_id"`
-	CaseType  string `gorm:"type:varchar(20);default:'role1';index:idx_atc_type" json:"case_type"` // role1/role2/role3/role4
+	CaseType  string `gorm:"type:varchar(20);default:'role1';index:idx_atc_type" json:"case_type"` // role1/role2/role3/role4/web
+	CaseGroup string `gorm:"type:varchar(100);index:idx_atc_case_group" json:"case_group"`         // 用例集名称(用于web类型)
 
 	// 元数据字段(冗余存储便于导出)
 	TestVersion string `gorm:"type:varchar(50)" json:"test_version"` // 测试版本
@@ -47,6 +48,9 @@ type AutoTestCase struct {
 	ExpectedResultCN string `gorm:"type:text" json:"expected_result_cn"`
 	ExpectedResultJP string `gorm:"type:text" json:"expected_result_jp"`
 	ExpectedResultEN string `gorm:"type:text" json:"expected_result_en"`
+
+	// ======== 可执行脚本 ========
+	ScriptCode string `gorm:"type:text" json:"script_code"` // Playwright脚本代码，用于Web自动化执行
 
 	// 审计字段
 	CreatedAt time.Time      `json:"created_at"`

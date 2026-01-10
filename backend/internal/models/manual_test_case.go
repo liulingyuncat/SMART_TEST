@@ -20,6 +20,7 @@ type ManualTestCase struct {
 	TestDate    string `gorm:"type:varchar(20)" json:"test_date"` // YYYY-MM-DD 格式
 	Executor    string `gorm:"type:varchar(50)" json:"executor"`
 	CaseNumber  string `gorm:"type:varchar(50)" json:"case_number"`
+	CaseGroup   string `gorm:"type:varchar(100);index:idx_mtc_case_group" json:"case_group"` // 用例集名称
 
 	// ======== 单语言字段(AI用例使用) ========
 	MajorFunction  string `gorm:"type:varchar(100);index:idx_mtc_major_func" json:"major_function"` // ai用例使用
@@ -63,7 +64,6 @@ type ManualTestCase struct {
 	// 共用字段
 	TestResult string `gorm:"type:varchar(10);default:'NR'" json:"test_result"` // OK/NG/Block/NR (仅overall/change使用)
 	Remark     string `gorm:"type:text" json:"remark"`
-	Language   string `gorm:"type:varchar(20);default:'中文';index:idx_mtc_language" json:"language"` // 保留用于向后兼容但不再使用
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
