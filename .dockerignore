@@ -29,6 +29,8 @@ backend/mcp-server
 backend/*.db
 backend/*.db-*
 backend/node_modules/
+backend/*_test.go
+backend/**/*_test.go
 
 # 前端
 frontend/node_modules/
