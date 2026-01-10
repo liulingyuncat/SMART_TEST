@@ -46,7 +46,7 @@ jobs:
         run: go mod download
 
       - name: Run go vet
-        run: go vet ./cmd/server ./cmd/mcp ./config
+        run: go vet ./cmd/server ./config
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
