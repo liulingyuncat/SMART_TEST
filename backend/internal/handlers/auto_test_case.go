@@ -124,6 +124,7 @@ func (h *AutoCasesHandler) GetCases(c *gin.Context) {
 
 	// 获取查询参数
 	caseType := c.DefaultQuery("case_type", "role1")
+	caseGroup := c.DefaultQuery("case_group", "") // 用例集过滤参数(可选)
 	pageStr := c.DefaultQuery("page", "1")
 	sizeStr := c.DefaultQuery("size", "50")
 
@@ -131,7 +132,7 @@ func (h *AutoCasesHandler) GetCases(c *gin.Context) {
 	size, _ := strconv.Atoi(sizeStr)
 
 	// 调用服务
-	caseList, err := h.service.GetCases(uint(projectID), userID, caseType, page, size)
+	caseList, err := h.service.GetCases(uint(projectID), userID, caseType, page, size, caseGroup)
 	if err != nil {
 		log.Printf("[Auto Cases Get Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
 		if err.Error() == "无项目访问权限" {
@@ -309,7 +310,7 @@ func (h *AutoCasesHandler) ReorderAllCases(c *gin.Context) {
 
 	// 解析请求体
 	var req struct {
-		CaseType string   `json:"case_type" binding:"required,oneof=role1 role2 role3 role4"`
+		CaseType string   `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web"`
 		CaseIDs  []string `json:"case_ids"` // 可选：指定重排顺序
 	}
 	if err = c.ShouldBindJSON(&req); err != nil {
@@ -360,9 +361,10 @@ func (h *AutoCasesHandler) InsertCase(c *gin.Context) {
 
 	// 解析请求体
 	var req struct {
-		CaseType     string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4"`
+		CaseType     string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web"`
 		Position     string `json:"position" binding:"required,oneof=before after"`
 		TargetCaseID string `json:"target_case_id" binding:"required"`
+		CaseGroup    string `json:"caseGroup"` // 用例集字段（前端使用驼峰命名）
 	}
 	if err = c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
@@ -370,9 +372,9 @@ func (h *AutoCasesHandler) InsertCase(c *gin.Context) {
 	}
 
 	// 调用服务
-	log.Printf("[Auto Insert Case Start] user_id=%d, project_id=%d, type=%s, position=%s, target=%s",
-		userID, projectID, req.CaseType, req.Position, req.TargetCaseID)
-	newCase, err := h.service.InsertCase(uint(projectID), userID, req.CaseType, req.Position, req.TargetCaseID)
+	log.Printf("[Auto Insert Case Start] user_id=%d, project_id=%d, type=%s, position=%s, target=%s, caseGroup=%s",
+		userID, projectID, req.CaseType, req.Position, req.TargetCaseID, req.CaseGroup)
+	newCase, err := h.service.InsertCase(uint(projectID), userID, req.CaseType, req.Position, req.TargetCaseID, req.CaseGroup)
 	if err != nil {
 		log.Printf("[Auto Insert Case Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
 		if err.Error() == "无项目访问权限" {
@@ -407,8 +409,8 @@ func (h *AutoCasesHandler) BatchDeleteCases(c *gin.Context) {
 
 	// 解析请求体
 	var req struct {
-		CaseType string   `json:"case_type" binding:"required,oneof=role1 role2 role3 role4"`
-		CaseIDs  []string `json:"case_ids" binding:"required,min=1"`
+		CaseType string   `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web"`
+		CaseIDs  []string `json:"case_ids" binding:"required,min=1,dive,required"`
 	}
 	if err = c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
@@ -459,7 +461,7 @@ func (h *AutoCasesHandler) ReassignIDs(c *gin.Context) {
 
 	// 绑定请求参数
 	var req struct {
-		CaseType string `json:"caseType" binding:"required,oneof=role1 role2 role3 role4"`
+		CaseType string `json:"caseType" binding:"required,oneof=role1 role2 role3 role4 web"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
@@ -540,8 +542,10 @@ func (h *AutoCasesHandler) GetAutoVersions(c *gin.Context) {
 	if page < 1 {
 		page = 1
 	}
-	if size < 1 || size > 100 {
+	if size < 1 {
 		size = 20
+	} else if size > 100000 {
+		size = 100000
 	}
 
 	log.Printf("[Auto Get Versions] user_id=%d, project_id=%d, page=%d, size=%d", userID, projectID, page, size)
@@ -685,4 +689,103 @@ func (h *AutoCasesHandler) UpdateAutoVersionRemark(c *gin.Context) {
 
 	log.Printf("[Auto Update Version Remark Success] user_id=%d, project_id=%d, version_id=%s", userID, projectID, versionID)
 	utils.SuccessResponse(c, gin.H{"message": "备注已更新"})
+}
+
+// ExportWebTemplate 导出Web用例模版（三语言ZIP包）
+// GET /api/v1/projects/:id/web-cases/template
+func (h *AutoCasesHandler) ExportWebTemplate(c *gin.Context) {
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	log.Printf("[Web Template Export] user_id=%d, project_id=%d", userID, projectID)
+
+	// 调用服务生成ZIP文件
+	zipData, filename, err := h.service.ExportWebTemplate(uint(projectID), userID)
+	if err != nil {
+		log.Printf("[Web Template Export Failed] error=%v", err)
+		if err.Error() == "无项目访问权限" {
+			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "导出失败: "+err.Error())
+		return
+	}
+
+	log.Printf("[Web Template Export Success] user_id=%d, project_id=%d, filename=%s", userID, projectID, filename)
+
+	// 设置响应头
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, "application/zip", zipData)
+}
+
+// ImportWebCases 导入Web用例
+// POST /api/v1/projects/:id/web-cases/import
+func (h *AutoCasesHandler) ImportWebCases(c *gin.Context) {
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 获取上传的文件
+	file, err := c.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "未找到上传文件")
+		return
+	}
+
+	// 获取目标用例集
+	caseGroup := c.PostForm("case_group")
+	if caseGroup == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "用例集名称不能为空")
+		return
+	}
+
+	log.Printf("[Web Cases Import] user_id=%d, project_id=%d, case_group=%s, filename=%s",
+		userID, projectID, caseGroup, file.Filename)
+
+	// 打开文件
+	fileContent, err := file.Open()
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "无法读取文件")
+		return
+	}
+	defer fileContent.Close()
+
+	// 调用服务导入
+	result, err := h.service.ImportWebCases(uint(projectID), userID, caseGroup, fileContent)
+	if err != nil {
+		log.Printf("[Web Cases Import Failed] error=%v", err)
+		if err.Error() == "无项目访问权限" {
+			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "导入失败: "+err.Error())
+		return
+	}
+
+	log.Printf("[Web Cases Import Success] user_id=%d, project_id=%d, insert=%d, update=%d",
+		userID, projectID, result.InsertCount, result.UpdateCount)
+
+	utils.SuccessResponse(c, result)
 }

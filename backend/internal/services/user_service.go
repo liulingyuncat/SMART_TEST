@@ -1,6 +1,8 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"webtest/internal/constants"
 	"webtest/internal/models"
@@ -10,15 +12,19 @@ import (
 )
 
 var (
-	ErrUserExists        = errors.New("username or nickname already exists")
-	ErrNicknameExists    = errors.New("nickname already exists")
-	ErrUserNotFound      = errors.New("user not found")
-	ErrCannotDeleteAdmin = errors.New("cannot delete system admin")
+	ErrUserExists               = errors.New("username or nickname already exists")
+	ErrNicknameExists           = errors.New("nickname already exists")
+	ErrUserNotFound             = errors.New("user not found")
+	ErrCannotDeleteAdmin        = errors.New("cannot delete system admin")
+	ErrCurrentPasswordIncorrect = errors.New("current password is incorrect")
+	ErrNewPasswordSameAsCurrent = errors.New("new password cannot be same as current")
+	ErrTokenGenerationFailed    = errors.New("token generation failed")
+	ErrInvalidApiToken          = errors.New("invalid api token")
 )
 
 const (
-	DefaultPasswordPM     = "admin!123"  // 项目管理员默认密码
-	DefaultPasswordMember = "user!123"   // 项目成员默认密码
+	DefaultPasswordPM     = "admin!123" // 项目管理员默认密码
+	DefaultPasswordMember = "user!123"  // 项目成员默认密码
 )
 
 // UserService 用户服务接口
@@ -33,6 +39,16 @@ type UserService interface {
 	ResetPassword(userID uint) (string, error)
 	CheckUsernameExists(username string) (bool, error)
 	CheckNicknameExists(nickname string) (bool, error)
+	// T22 个人信息查看
+	GetUserByID(userID uint) (*models.User, error)
+	// T23 密码修改与Token功能
+	ChangePassword(userID uint, currentPwd, newPwd string) error
+	GenerateApiToken(userID uint) (string, error)
+	ValidateApiToken(token string) (*models.User, error)
+	HasApiToken(userID uint) (bool, error)
+	// T50 当前项目管理
+	SetCurrentProject(userID uint, projectID uint) error
+	GetCurrentProject(userID uint) (*uint, error)
 }
 
 // userService 用户服务实现
@@ -81,9 +97,24 @@ func (s *userService) GetAllUsers() ([]models.User, error) {
 	return users, nil
 }
 
-// GetProjectMembers 获取所有项目成员（仅project_member角色）- 项目管理员专用
+// GetProjectMembers 获取所有项目成员和项目管理员 - 项目管理员专用
+// 返回 project_manager 和 project_member 角色的用户，用于人员分配
 func (s *userService) GetProjectMembers() ([]models.User, error) {
-	return s.userRepo.FindByRole(constants.RoleProjectMember)
+	// 获取所有用户
+	allUsers, err := s.userRepo.FindAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// 过滤出 project_manager 和 project_member 角色的用户
+	var users []models.User
+	for _, user := range allUsers {
+		if user.Role == constants.RoleProjectManager || user.Role == constants.RoleProjectMember {
+			users = append(users, user)
+		}
+	}
+
+	return users, nil
 }
 
 // CreateUser 创建新用户
@@ -227,6 +258,18 @@ func (s *userService) CheckNicknameExists(nickname string) (bool, error) {
 	return user != nil, nil
 }
 
+// GetUserByID 根据用户ID获取用户信息 - T22 个人信息查看
+func (s *userService) GetUserByID(userID uint) (*models.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	return user, nil
+}
+
 // getDefaultPassword 根据角色获取默认密码
 func (s *userService) getDefaultPassword(role string) string {
 	if role == constants.RoleProjectManager {
@@ -235,3 +278,106 @@ func (s *userService) getDefaultPassword(role string) string {
 	return DefaultPasswordMember
 }
 
+// ChangePassword 修改用户密码 - T23 密码修改功能
+func (s *userService) ChangePassword(userID uint, currentPwd, newPwd string) error {
+	// 获取用户信息
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	// 验证当前密码
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPwd)); err != nil {
+		return ErrCurrentPasswordIncorrect
+	}
+
+	// 检查新密码是否与旧密码相同
+	if currentPwd == newPwd {
+		return ErrNewPasswordSameAsCurrent
+	}
+
+	// 加密新密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// 更新密码
+	return s.userRepo.UpdatePassword(userID, string(hashedPassword))
+}
+
+// GenerateApiToken 生成新的API Token - T23 Token生成功能
+func (s *userService) GenerateApiToken(userID uint) (string, error) {
+	// 检查用户是否存在
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", ErrUserNotFound
+	}
+
+	// 生成32字节随机数据，编码为64字符hex字符串
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", ErrTokenGenerationFailed
+	}
+	token := hex.EncodeToString(tokenBytes)
+
+	// 保存Token到数据库
+	if err := s.userRepo.UpdateApiToken(userID, token); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// ValidateApiToken 验证API Token有效性 - T23 Token认证
+func (s *userService) ValidateApiToken(token string) (*models.User, error) {
+	if token == "" {
+		return nil, ErrInvalidApiToken
+	}
+
+	user, err := s.userRepo.FindByApiToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrInvalidApiToken
+	}
+
+	return user, nil
+}
+
+// HasApiToken 检查用户是否已有Token - T23 Token状态查询
+func (s *userService) HasApiToken(userID uint) (bool, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return false, err
+	}
+	if user == nil {
+		return false, ErrUserNotFound
+	}
+
+	return user.ApiToken != nil && *user.ApiToken != "", nil
+}
+
+// SetCurrentProject 设置用户的当前项目 - T50
+func (s *userService) SetCurrentProject(userID uint, projectID uint) error {
+	return s.userRepo.UpdateCurrentProject(userID, projectID)
+}
+
+// GetCurrentProject 获取用户的当前项目 - T50
+func (s *userService) GetCurrentProject(userID uint) (*uint, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	return user.CurrentProjectID, nil
+}

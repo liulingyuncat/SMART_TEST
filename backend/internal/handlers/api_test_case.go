@@ -27,7 +27,7 @@ func NewApiTestCaseHandler(service services.ApiTestCaseService) *ApiTestCaseHand
 }
 
 // GetCases 获取用例列表
-// GET /api/v1/projects/:id/api-cases?case_type=role1&page=1&size=50
+// GET /api/v1/projects/:id/api-cases?case_type=role1&case_group=xxx&page=1&size=50
 func (h *ApiTestCaseHandler) GetCases(c *gin.Context) {
 	projectIDStr := c.Param("id")
 	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
@@ -43,13 +43,14 @@ func (h *ApiTestCaseHandler) GetCases(c *gin.Context) {
 	}
 	userID := userIDVal.(uint)
 
-	caseType := c.DefaultQuery("case_type", "role1")
+	caseType := c.DefaultQuery("case_type", "api")
+	caseGroup := c.Query("case_group") // 用例集筛选参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "50"))
 
-	cases, total, err := h.service.GetCases(uint(projectID), userID, caseType, page, size)
+	cases, total, err := h.service.GetCasesByGroup(uint(projectID), userID, caseType, caseGroup, page, size)
 	if err != nil {
-		log.Printf("[API Cases Get Failed] user=%d, project=%d, error=%v", userID, projectID, err)
+		log.Printf("[API Cases Get Failed] user=%d, project=%d, case_group=%s, error=%v", userID, projectID, caseGroup, err)
 		if err.Error() == "无项目访问权限" {
 			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
 			return
@@ -58,7 +59,7 @@ func (h *ApiTestCaseHandler) GetCases(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[API Cases Get] user=%d, project=%d, type=%s, total=%d", userID, projectID, caseType, total)
+	log.Printf("[API Cases Get] user=%d, project=%d, type=%s, case_group=%s, total=%d", userID, projectID, caseType, caseGroup, total)
 	utils.SuccessResponse(c, gin.H{
 		"cases": cases,
 		"total": total,
@@ -86,6 +87,7 @@ func (h *ApiTestCaseHandler) CreateCase(c *gin.Context) {
 
 	var req struct {
 		CaseType   string `json:"case_type"`
+		CaseGroup  string `json:"case_group"`
 		Method     string `json:"method"`
 		TestResult string `json:"test_result"`
 	}
@@ -98,6 +100,7 @@ func (h *ApiTestCaseHandler) CreateCase(c *gin.Context) {
 	newCase := &models.ApiTestCase{
 		ProjectID:    uint(projectID),
 		CaseType:     req.CaseType,
+		CaseGroup:    req.CaseGroup,
 		Method:       req.Method,
 		TestResult:   req.TestResult,
 		DisplayOrder: 1, // 默认为1,后续会重新分配
@@ -140,11 +143,20 @@ func (h *ApiTestCaseHandler) InsertCase(c *gin.Context) {
 		CaseType     string                 `json:"case_type"`
 		Position     string                 `json:"position"`
 		TargetCaseID string                 `json:"target_case_id"`
+		CaseGroup    string                 `json:"case_group"`
 		CaseData     map[string]interface{} `json:"case_data"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
 		return
+	}
+
+	// 如果请求中包含case_group，添加到case_data中
+	if req.CaseGroup != "" {
+		if req.CaseData == nil {
+			req.CaseData = make(map[string]interface{})
+		}
+		req.CaseData["case_group"] = req.CaseGroup
 	}
 
 	newCase, err := h.service.InsertCase(uint(projectID), userID, req.CaseType, req.Position, req.TargetCaseID, req.CaseData)
@@ -330,12 +342,9 @@ func (h *ApiTestCaseHandler) SaveVersion(c *gin.Context) {
 
 	log.Printf("[API Version Save] user=%d, project=%d, version_id=%s", userID, projectID, version.ID)
 	utils.SuccessResponse(c, gin.H{
-		"version_id":     version.ID,
-		"filename_role1": version.FilenameRole1,
-		"filename_role2": version.FilenameRole2,
-		"filename_role3": version.FilenameRole3,
-		"filename_role4": version.FilenameRole4,
-		"created_at":     version.CreatedAt,
+		"version_id":    version.ID,
+		"xlsx_filename": version.XlsxFilename,
+		"created_at":    version.CreatedAt,
 	})
 }
 
@@ -422,43 +431,60 @@ func (h *ApiTestCaseHandler) DownloadVersion(c *gin.Context) {
 		return
 	}
 
-	// 生成ZIP文件
 	storageDir := filepath.Join("storage", "versions", "api-cases")
-	buf := new(bytes.Buffer)
-	zipWriter := zip.NewWriter(buf)
 
-	filenames := []string{
-		targetVersion.FilenameRole1,
-		targetVersion.FilenameRole2,
-		targetVersion.FilenameRole3,
-		targetVersion.FilenameRole4,
-	}
-
-	for _, filename := range filenames {
-		if filename == "" {
-			continue
-		}
-		filePath := filepath.Join(storageDir, filename)
+	// 新版本：直接下载XLSX文件
+	if targetVersion.XlsxFilename != "" {
+		filePath := filepath.Join(storageDir, targetVersion.XlsxFilename)
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Printf("[API Version Download] 读取文件失败: %s, error=%v", filename, err)
-			continue
+			log.Printf("[API Version Download] 读取XLSX文件失败: %s, error=%v", targetVersion.XlsxFilename, err)
+			utils.ErrorResponse(c, http.StatusInternalServerError, "读取文件失败")
+			return
 		}
 
-		fw, err := zipWriter.Create(filename)
-		if err != nil {
-			continue
+		// 设置响应头
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", targetVersion.XlsxFilename))
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content)
+	} else {
+		// 兼容旧版本：生成ZIP文件包含CSV文件
+		buf := new(bytes.Buffer)
+		zipWriter := zip.NewWriter(buf)
+
+		filenames := []string{
+			targetVersion.FilenameRole1,
+			targetVersion.FilenameRole2,
+			targetVersion.FilenameRole3,
+			targetVersion.FilenameRole4,
 		}
-		fw.Write(content)
+
+		for _, filename := range filenames {
+			if filename == "" {
+				continue
+			}
+			filePath := filepath.Join(storageDir, filename)
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				log.Printf("[API Version Download] 读取文件失败: %s, error=%v", filename, err)
+				continue
+			}
+
+			fw, err := zipWriter.Create(filename)
+			if err != nil {
+				continue
+			}
+			fw.Write(content)
+		}
+
+		zipWriter.Close()
+
+		// 设置响应头
+		zipFilename := fmt.Sprintf("%s.zip", versionID)
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", zipFilename))
+		c.Header("Content-Type", "application/zip")
+		c.Data(http.StatusOK, "application/zip", buf.Bytes())
 	}
-
-	zipWriter.Close()
-
-	// 设置响应头
-	zipFilename := fmt.Sprintf("%s.zip", versionID)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", zipFilename))
-	c.Header("Content-Type", "application/zip")
-	c.Data(http.StatusOK, "application/zip", buf.Bytes())
 
 	log.Printf("[API Version Download] user=%d, project=%d, version_id=%s", userID, projectID, versionID)
 }
@@ -553,4 +579,97 @@ func (h *ApiTestCaseHandler) UpdateVersionRemark(c *gin.Context) {
 
 	log.Printf("[API Version Remark Update] user=%d, project=%d, version_id=%s", userID, projectID, versionID)
 	utils.MessageResponse(c, http.StatusOK, "备注更新成功")
+}
+
+// ExportTemplate 导出API用例模版
+// GET /api/v1/projects/:id/api-cases/template
+func (h *ApiTestCaseHandler) ExportTemplate(c *gin.Context) {
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	// 导出空模版（无数据）
+	data, filename, err := h.service.ExportApiTemplate(uint(projectID))
+	if err != nil {
+		log.Printf("[API Template Export Failed] project=%d, error=%v", projectID, err)
+		utils.ErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("导出模版失败: %v", err))
+		return
+	}
+
+	log.Printf("[API Template Export] user=%d, project=%d, filename=%s", userIDVal, projectID, filename)
+
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+}
+
+// ImportCases 导入API用例
+// POST /api/v1/projects/:id/api-cases/import
+func (h *ApiTestCaseHandler) ImportCases(c *gin.Context) {
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 获取case_group参数
+	caseGroup := c.PostForm("case_group")
+	if caseGroup == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请选择用例集")
+		return
+	}
+
+	// 获取上传文件
+	file, err := c.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请选择要导入的文件")
+		return
+	}
+
+	// 读取文件内容
+	fileReader, err := file.Open()
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "读取文件失败")
+		return
+	}
+	defer fileReader.Close()
+
+	fileData := make([]byte, file.Size)
+	_, err = fileReader.Read(fileData)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "读取文件内容失败")
+		return
+	}
+
+	// 调用service导入
+	insertCount, updateCount, err := h.service.ImportApiCases(uint(projectID), userID, caseGroup, fileData)
+	if err != nil {
+		log.Printf("[API Cases Import Failed] user=%d, project=%d, case_group=%s, error=%v", userID, projectID, caseGroup, err)
+		utils.ErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("导入失败: %v", err))
+		return
+	}
+
+	log.Printf("[API Cases Import] user=%d, project=%d, case_group=%s, insert=%d, update=%d", userID, projectID, caseGroup, insertCount, updateCount)
+	utils.SuccessResponse(c, gin.H{
+		"message":      "导入成功",
+		"insert_count": insertCount,
+		"update_count": updateCount,
+	})
 }

@@ -18,9 +18,11 @@ type AutoTestCaseRepository interface {
 	GetByCaseID(caseID string) (*models.AutoTestCase, error)
 	UpdateByCaseID(caseID string, updates map[string]interface{}) error
 	DeleteByCaseID(caseID string) error
+	DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error
 
 	// 分页查询
 	GetCasesByType(projectID uint, caseType string, offset int, limit int) ([]*models.AutoTestCase, int64, error)
+	GetCasesByTypeAndGroup(projectID uint, caseType string, caseGroup string, offset int, limit int) ([]*models.AutoTestCase, int64, error)
 
 	// 批量操作
 	GetByProjectAndType(projectID uint, caseType string) ([]*models.AutoTestCase, error)
@@ -108,9 +110,9 @@ func (r *autoTestCaseRepository) UpdateByCaseID(caseID string, updates map[strin
 	return nil
 }
 
-// DeleteByCaseID 软删除用例记录(通过CaseID)
+// DeleteByCaseID 硬删除用例记录(通过CaseID)
 func (r *autoTestCaseRepository) DeleteByCaseID(caseID string) error {
-	err := r.db.Where("case_id = ?", caseID).Delete(&models.AutoTestCase{}).Error
+	err := r.db.Unscoped().Where("case_id = ?", caseID).Delete(&models.AutoTestCase{}).Error
 	if err != nil {
 		return fmt.Errorf("delete auto test case %s: %w", caseID, err)
 	}
@@ -138,6 +140,60 @@ func (r *autoTestCaseRepository) GetCasesByType(projectID uint, caseType string,
 
 	if err != nil {
 		return nil, 0, fmt.Errorf("get auto cases by type: %w", err)
+	}
+
+	return cases, total, nil
+}
+
+// GetCasesByTypeAndGroup 根据用例类型和用例集获取用例列表(分页)
+// caseGroup: 可以是用例集名称或用例集ID
+func (r *autoTestCaseRepository) GetCasesByTypeAndGroup(projectID uint, caseType string, caseGroup string, offset int, limit int) ([]*models.AutoTestCase, int64, error) {
+	var cases []*models.AutoTestCase
+	var total int64
+
+	// 查询条件：项目ID、用例类型、用例集名称或ID
+	query := r.db.Where("project_id = ? AND case_type = ?", projectID, caseType)
+
+	// 支持按用例集名称或ID查询
+	// 先尝试作为ID查询(用于group_id参数)，如果查询结果为空则按名称查询
+	var caseGroupID uint
+	fmt.Sscanf(caseGroup, "%d", &caseGroupID)
+
+	if caseGroupID > 0 {
+		// 按用例集ID查询：先从case_groups表获取名称，再按名称过滤
+		var groupName string
+		result := r.db.Where("id = ? AND project_id = ?", caseGroupID, projectID).
+			Model(&models.CaseGroup{}).Pluck("group_name", &groupName)
+
+		if result.Error != nil {
+			// 如果按ID查询失败，按ID字符串查询
+			query = query.Where("case_group = ?", caseGroup)
+		} else if groupName != "" {
+			// 成功获取到名称，使用名称过滤
+			query = query.Where("case_group = ?", groupName)
+		} else {
+			// 用例集不存在（ID对应的group_name为空），不添加额外过滤
+			// 这种情况下返回空结果
+			return cases, 0, nil
+		}
+	} else {
+		// 按用例集名称查询
+		query = query.Where("case_group = ?", caseGroup)
+	}
+
+	// 统计总数
+	if err := query.Model(&models.AutoTestCase{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count auto cases by type and group: %w", err)
+	}
+
+	// 查询数据(按id升序排序)
+	err := query.Order("id ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&cases).Error
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("get auto cases by type and group: %w", err)
 	}
 
 	return cases, total, nil
@@ -247,4 +303,16 @@ func (r *autoTestCaseRepository) ReassignDisplayIDs(projectID uint, caseType str
 		}
 		return nil
 	})
+}
+
+// DeleteByCaseGroup 删除指定用例集的所有用例(硬删除)
+func (r *autoTestCaseRepository) DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error {
+	result := r.db.Unscoped().Where("project_id = ? AND case_type = ? AND case_group = ?", projectID, caseType, caseGroup).
+		Delete(&models.AutoTestCase{})
+
+	if result.Error != nil {
+		return fmt.Errorf("delete cases by case_group %s: %w", caseGroup, result.Error)
+	}
+
+	return nil
 }

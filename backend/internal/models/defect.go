@@ -94,7 +94,7 @@ func IsValidDefectSeverity(severity string) bool {
 // Defect 缺陷模型
 type Defect struct {
 	ID                string `gorm:"type:varchar(36);primaryKey" json:"id"`                                         // UUID主键
-	DefectID          string `gorm:"type:varchar(20);uniqueIndex:idx_defects_defect_id;not null" json:"defect_id"`  // 显示ID（DEF-XXXXXX）
+	DefectID          string `gorm:"type:varchar(20);uniqueIndex:idx_defects_defect_id;not null" json:"defect_id"`  // 显示ID（XXXXXX）
 	ProjectID         uint   `gorm:"not null;index:idx_defects_project_status" json:"project_id"`                   // 所属项目ID
 	Title             string `gorm:"type:varchar(200);not null" json:"title"`                                       // 缺陷标题
 	Subject           string `gorm:"type:varchar(100)" json:"subject"`                                              // 主题分类
@@ -105,6 +105,8 @@ type Defect struct {
 	Frequency         string `gorm:"type:varchar(10)" json:"frequency"`                                             // 复现频率
 	DetectedInRelease string `gorm:"type:varchar(50)" json:"detected_in_release"`                                   // 发现版本
 	Phase             string `gorm:"type:varchar(100)" json:"phase"`                                                // 测试阶段
+	CaseID            string `gorm:"type:varchar(50)" json:"case_id"`                                               // 关联的Case ID
+	Assignee          string `gorm:"type:varchar(100)" json:"assignee"`                                             // 指派人
 	Status            string `gorm:"type:varchar(20);default:'New';index:idx_defects_project_status" json:"status"` // 状态
 	CreatedBy         uint   `gorm:"not null" json:"created_by"`                                                    // 创建人ID
 	UpdatedBy         uint   `json:"updated_by"`                                                                    // 更新人ID
@@ -160,8 +162,11 @@ type DefectCreateRequest struct {
 	Severity          string `json:"severity"`
 	Frequency         string `json:"frequency"`
 	DetectedInRelease string `json:"detected_in_release"`
-	PhaseID           *uint  `json:"phase_id"` // 阶段ID
-	Phase             string `json:"phase"`    // 兼容直接传名称
+	PhaseID           *uint  `json:"phase_id"`   // 阶段ID
+	Phase             string `json:"phase"`      // 兼容直接传名称
+	CaseID            string `json:"case_id"`    // 关联的Case ID
+	Status            string `json:"status"`     // 状态（导入时使用）
+	CreatedAt         string `json:"created_at"` // 创建时间（导入时使用，格式：YYYY-MM-DD）
 }
 
 // DefectUpdateRequest 更新缺陷请求
@@ -177,6 +182,8 @@ type DefectUpdateRequest struct {
 	DetectedInRelease *string `json:"detected_in_release"`
 	PhaseID           *uint   `json:"phase_id"` // 阶段ID
 	Phase             *string `json:"phase"`    // 兼容直接传名称
+	CaseID            *string `json:"case_id"`  // 关联的Case ID
+	Assignee          *string `json:"assignee"`
 	Status            *string `json:"status"`
 }
 

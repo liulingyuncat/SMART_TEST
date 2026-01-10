@@ -97,7 +97,7 @@ func (r *executionCaseResultRepository) BatchUpsert(results []*models.ExecutionC
 			"test_result",
 			"bug_id",
 			"remark",
-			// AI Web/API 字段
+			// AI Web 字段
 			"screen_cn",
 			"screen_jp",
 			"screen_en",
@@ -124,6 +124,13 @@ func (r *executionCaseResultRepository) BatchUpsert(results []*models.ExecutionC
 			"expected_result_cn",
 			"expected_result_jp",
 			"expected_result_en",
+			// API 用例特有字段
+			"screen",
+			"url",
+			"header",
+			"method",
+			"body",
+			"response",
 			"updated_by",
 			"updated_at",
 		}),
@@ -136,17 +143,35 @@ func (r *executionCaseResultRepository) BatchUpsert(results []*models.ExecutionC
 }
 
 // UpdateResult 更新单条记录的字段
+// 先查询记录再更新，以确保 GORM 钩子能正确验证
 func (r *executionCaseResultRepository) UpdateResult(id uint, updates map[string]interface{}) error {
-	result := r.db.Model(&models.ExecutionCaseResult{}).
-		Where("id = ?", id).
-		Updates(updates)
-
-	if result.Error != nil {
-		return fmt.Errorf("update result %d: %w", id, result.Error)
+	// 先查询现有记录
+	var existingResult models.ExecutionCaseResult
+	if err := r.db.First(&existingResult, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return gorm.ErrRecordNotFound
+		}
+		return fmt.Errorf("find result %d: %w", id, err)
 	}
 
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	// 应用更新到现有记录
+	if testResult, ok := updates["test_result"].(string); ok {
+		existingResult.TestResult = testResult
+	}
+	if remark, ok := updates["remark"].(string); ok {
+		existingResult.Remark = remark
+	}
+	if bugID, ok := updates["bug_id"].(string); ok {
+		existingResult.BugID = bugID
+	}
+	if updatedBy, ok := updates["updated_by"].(uint); ok {
+		existingResult.UpdatedBy = updatedBy
+	}
+
+	// 保存更新（会触发 BeforeUpdate 钩子进行验证）
+	result := r.db.Save(&existingResult)
+	if result.Error != nil {
+		return fmt.Errorf("update result %d: %w", id, result.Error)
 	}
 
 	return nil

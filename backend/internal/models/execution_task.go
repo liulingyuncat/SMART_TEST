@@ -14,6 +14,9 @@ type ExecutionTask struct {
 	TaskName        string         `gorm:"type:varchar(50);not null" json:"task_name" validate:"required,min=1,max=50"`
 	ExecutionType   string         `gorm:"type:varchar(20);not null" json:"execution_type" validate:"required,oneof=manual automation api"`
 	TaskStatus      string         `gorm:"type:varchar(20);not null;default:pending;index:idx_tet_status" json:"task_status" validate:"omitempty,oneof=pending in_progress completed"`
+	CaseGroupID     uint           `gorm:"type:int;default:0;index:idx_tet_case_group" json:"case_group_id"` // 关联的用例集ID
+	CaseGroupName   string         `gorm:"type:varchar(100)" json:"case_group_name"`                         // 关联的用例集名称
+	DisplayLanguage string         `gorm:"type:varchar(10);default:'cn'" json:"display_language"`            // 显示语言(cn/jp/en/all)
 	StartDate       *time.Time     `gorm:"type:date" json:"start_date" validate:"omitempty"`
 	EndDate         *time.Time     `gorm:"type:date" json:"end_date" validate:"omitempty,gtefield=StartDate"`
 	TestVersion     string         `gorm:"type:varchar(50)" json:"test_version" validate:"omitempty,max=50"`

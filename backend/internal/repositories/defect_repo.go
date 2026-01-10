@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"log"
 	"webtest/internal/models"
 
 	"gorm.io/gorm"
@@ -22,7 +23,9 @@ type DefectRepository interface {
 
 	// 辅助方法
 	GetMaxDefectSeq(projectID uint) (int, error)
+	GenerateNextDefectID(projectID uint) (string, error)
 	GetByProjectID(projectID uint) ([]*models.Defect, error)
+	CleanupDuplicateDefects(projectID uint, defectID string) error
 	GetDB() *gorm.DB
 }
 
@@ -79,9 +82,9 @@ func (r *defectRepository) Update(id string, updates map[string]interface{}) err
 	return nil
 }
 
-// Delete 软删除缺陷
+// Delete 硬删除缺陷
 func (r *defectRepository) Delete(id string) error {
-	result := r.db.Where("id = ?", id).Delete(&models.Defect{})
+	result := r.db.Unscoped().Where("id = ?", id).Delete(&models.Defect{})
 	if result.Error != nil {
 		return fmt.Errorf("delete defect %s: %w", id, result.Error)
 	}
@@ -164,12 +167,12 @@ func (r *defectRepository) GetStatusCounts(projectID uint) (map[string]int64, er
 	return counts, nil
 }
 
-// GetMaxDefectSeq 获取项目最大缺陷序号
+// GetMaxDefectSeq 获取全局最大缺陷序号（包括已删除的记录，用于ID生成的递增）
+// 查询整个数据库的最大ID，所有Bug共享一份ID序列
 func (r *defectRepository) GetMaxDefectSeq(projectID uint) (int, error) {
 	var maxSeq int
 	err := r.db.Model(&models.Defect{}).
-		Select("COALESCE(MAX(CAST(SUBSTR(defect_id, 5) AS INTEGER)), 0)").
-		Where("project_id = ?", projectID).
+		Select("COALESCE(MAX(CAST(defect_id AS INTEGER)), 0)").
 		Scan(&maxSeq).Error
 
 	if err != nil {
@@ -177,6 +180,39 @@ func (r *defectRepository) GetMaxDefectSeq(projectID uint) (int, error) {
 	}
 
 	return maxSeq, nil
+}
+
+// GenerateNextDefectID 原子性地生成下一个缺陷ID（用事务保证一致性）
+// 查询整个数据库的最大ID（不限于项目），所有Bug共享一份ID序列
+// 包括所有记录（包括软删除）的最大值，确保ID永远不会重复
+func (r *defectRepository) GenerateNextDefectID(projectID uint) (string, error) {
+	var nextSeq int
+
+	err := r.db.Transaction(func(txn *gorm.DB) error {
+		var maxSeq int
+		// 在事务中读取最大值（包括软删除的记录）
+		// 使用 Unscoped() 确保包含软删除的记录
+		// 直接用 CAST(defect_id AS INTEGER) 转换，不用 NULLIF
+		// 注意：这里不限制 project_id，查询的是整个数据库的最大ID
+		result := txn.Unscoped().Model(&models.Defect{}).
+			Select("COALESCE(MAX(CAST(defect_id AS INTEGER)), 0)").
+			Scan(&maxSeq)
+
+		if result.Error != nil {
+			log.Printf("[GenerateNextDefectID] Error querying max defect_id: %v", result.Error)
+			return result.Error
+		}
+
+		nextSeq = maxSeq + 1
+		log.Printf("[GenerateNextDefectID] project_id=%d, global maxSeq=%d, nextSeq=%d", projectID, maxSeq, nextSeq)
+		return nil
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("generate next defect id: %w", err)
+	}
+
+	return fmt.Sprintf("%06d", nextSeq), nil
 }
 
 // GetByProjectID 获取项目所有缺陷（用于导出）
@@ -196,4 +232,33 @@ func (r *defectRepository) GetByProjectID(projectID uint) ([]*models.Defect, err
 // GetDB 获取数据库实例
 func (r *defectRepository) GetDB() *gorm.DB {
 	return r.db
+}
+
+// CleanupDuplicateDefects 删除指定项目中重复的 defect_id（保留最早的，删除后创建的）
+func (r *defectRepository) CleanupDuplicateDefects(projectID uint, defectID string) error {
+	// 查找所有相同 defect_id 的记录
+	var defects []models.Defect
+	err := r.db.Unscoped().
+		Where("project_id = ? AND defect_id = ?", projectID, defectID).
+		Order("created_at ASC").
+		Find(&defects).Error
+
+	if err != nil {
+		return fmt.Errorf("query duplicate defects: %w", err)
+	}
+
+	// 如果有多条记录，删除除了第一条之外的所有记录
+	if len(defects) > 1 {
+		log.Printf("[CleanupDuplicateDefects] Found %d duplicate defect_id=%s in project %d, deleting %d records",
+			len(defects), defectID, projectID, len(defects)-1)
+
+		// 保留第一条（最早的），删除其他
+		for i := 1; i < len(defects); i++ {
+			if err := r.db.Unscoped().Delete(&defects[i]).Error; err != nil {
+				log.Printf("[CleanupDuplicateDefects] Failed to delete duplicate defect: %v", err)
+			}
+		}
+	}
+
+	return nil
 }

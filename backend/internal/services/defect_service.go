@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"webtest/internal/models"
 	"webtest/internal/repositories"
 
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -28,9 +30,11 @@ type DefectService interface {
 	List(projectID uint, status, keyword string, page, size int) (*models.DefectListResponse, error)
 
 	// 导入导出
-	GenerateTemplate() ([]byte, error)
+	GenerateTemplate(format string) ([]byte, error)
+	ImportWithFormat(projectID uint, userID uint, reader io.Reader, isXLSX bool) (*models.ImportResult, error)
 	Import(projectID uint, userID uint, reader io.Reader) (*models.ImportResult, error)
 	Export(projectID uint) ([]byte, error)
+	ExportWithFormat(projectID uint, format string) ([]byte, error)
 }
 
 type defectService struct {
@@ -44,21 +48,20 @@ func NewDefectService(repo repositories.DefectRepository) DefectService {
 
 // generateDefectID 生成缺陷显示ID
 func (s *defectService) generateDefectID(projectID uint) (string, error) {
-	maxSeq, err := s.repo.GetMaxDefectSeq(projectID)
-	if err != nil {
-		return "", fmt.Errorf("get max defect seq: %w", err)
+	// 使用原子性方法生成缺陷ID，确保在并发场景下不会重复
+	return s.repo.GenerateNextDefectID(projectID)
+}
+
+// decodeHTMLEntities 解码HTML实体（处理&quot;、&#39;等）
+func decodeHTMLEntities(text string) string {
+	if text == "" {
+		return text
 	}
-	return fmt.Sprintf("DEF-%06d", maxSeq+1), nil
+	return html.UnescapeString(text)
 }
 
 // Create 创建缺陷
 func (s *defectService) Create(projectID uint, userID uint, req *models.DefectCreateRequest) (*models.Defect, error) {
-	// 生成DefectID
-	defectID, err := s.generateDefectID(projectID)
-	if err != nil {
-		return nil, err
-	}
-
 	// 验证优先级
 	if req.Priority != "" && !models.IsValidDefectPriority(req.Priority) {
 		return nil, errors.New("invalid priority value")
@@ -93,6 +96,18 @@ func (s *defectService) Create(projectID uint, userID uint, req *models.DefectCr
 		}
 	}
 
+	// 生成DefectID（原子性）
+	defectID, err := s.generateDefectID(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("generate defect id: %w", err)
+	}
+
+	// 处理状态：如果提供了有效状态则使用，否则默认New
+	status := string(models.DefectStatusNew)
+	if req.Status != "" && models.IsValidDefectStatus(req.Status) {
+		status = req.Status
+	}
+
 	defect := &models.Defect{
 		DefectID:          defectID,
 		ProjectID:         projectID,
@@ -105,16 +120,26 @@ func (s *defectService) Create(projectID uint, userID uint, req *models.DefectCr
 		Frequency:         req.Frequency,
 		DetectedInRelease: req.DetectedInRelease,
 		Phase:             phase,
-		Status:            string(models.DefectStatusNew),
+		CaseID:            req.CaseID,
+		Status:            status,
 		CreatedBy:         userID,
 		UpdatedBy:         userID,
 	}
 
-	if err := s.repo.Create(defect); err != nil {
+	// 处理CreatedAt：如果提供了有效日期则使用
+	if req.CreatedAt != "" {
+		if parsedTime, err := time.Parse("2006-01-02", req.CreatedAt); err == nil {
+			defect.CreatedAt = parsedTime
+		} else if parsedTime, err := time.Parse(time.RFC3339, req.CreatedAt); err == nil {
+			defect.CreatedAt = parsedTime
+		}
+	}
+
+	if err = s.repo.Create(defect); err != nil {
 		return nil, fmt.Errorf("create defect: %w", err)
 	}
 
-	log.Printf("[Defect Create] user_id=%d, project_id=%d, defect_id=%s", userID, projectID, defectID)
+	log.Printf("[Defect Create] user_id=%d, project_id=%d, defect_id=%s", userID, projectID, defect.DefectID)
 	return defect, nil
 }
 
@@ -215,6 +240,12 @@ func (s *defectService) Update(id string, userID uint, req *models.DefectUpdateR
 	} else if req.Phase != nil {
 		updates["phase"] = *req.Phase
 	}
+	if req.CaseID != nil {
+		updates["case_id"] = *req.CaseID
+	}
+	if req.Assignee != nil {
+		updates["assignee"] = *req.Assignee
+	}
 	if req.Status != nil {
 		if !models.IsValidDefectStatus(*req.Status) {
 			return errors.New("invalid status value")
@@ -266,8 +297,10 @@ func (s *defectService) List(projectID uint, status, keyword string, page, size 
 	if page < 1 {
 		page = 1
 	}
-	if size < 1 || size > 100 {
+	if size < 1 {
 		size = 50
+	} else if size > 100000 {
+		size = 100000
 	}
 
 	// 验证状态
@@ -310,8 +343,17 @@ var csvHeaders = []string{
 	"Status", "Created At",
 }
 
-// GenerateTemplate 生成CSV导入模板
-func (s *defectService) GenerateTemplate() ([]byte, error) {
+// GenerateTemplate 生成导入模板（支持CSV和XLSX格式）
+func (s *defectService) GenerateTemplate(format string) ([]byte, error) {
+	if format == "xlsx" {
+		return s.generateXLSXTemplate()
+	}
+	// 默认返回CSV
+	return s.generateCSVTemplate()
+}
+
+// generateCSVTemplate 生成CSV模板
+func (s *defectService) generateCSVTemplate() ([]byte, error) {
 	var buf bytes.Buffer
 
 	// 添加UTF-8 BOM头，确保Excel正确识别编码
@@ -368,7 +410,251 @@ func (s *defectService) GenerateTemplate() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Import 导入缺陷
+// generateXLSXTemplate 生成XLSX模板（极简版）
+func (s *defectService) generateXLSXTemplate() ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	// 获取默认工作表
+	sheetName := f.GetSheetName(0)
+
+	// 写入表头
+	for col, header := range csvHeaders {
+		cell := fmt.Sprintf("%s1", string(rune('A'+col)))
+		f.SetCellValue(sheetName, cell, header)
+	}
+
+	// 写入说明行
+	instructions := []string{
+		"(Required)",               // Title - 必填
+		"(Optional)",               // Subject - 可选，模块名称
+		"(Optional)",               // Description - 可选
+		"(Optional)",               // Recovery Method - 可选
+		"(A/B/C/D)",                // Priority - 必须是A/B/C/D之一
+		"(A/B/C/D)",                // Severity - 必须是A/B/C/D之一
+		"(Optional, e.g., 100%)",   // Frequency - 可选
+		"(Optional, e.g., v1.0.0)", // Detected In Release - 可选
+		"(Optional)",               // Phase - 可选，阶段名称
+		"(Optional: New/Active/Resolved/Closed, default: New)", // Status - 可选
+		"(Auto-generated or YYYY-MM-DD)",                       // Created At - 自动生成或指定日期
+	}
+	for col, instr := range instructions {
+		cell := fmt.Sprintf("%s2", string(rune('A'+col)))
+		f.SetCellValue(sheetName, cell, instr)
+	}
+
+	// 写入示例数据
+	example := []string{
+		"登录页面无法输入用户名",      // Title
+		"登录模块",             // Subject
+		"用户无法在用户名输入框中输入内容", // Description
+		"刷新页面后重试",          // Recovery Method
+		"A",                // Priority (必须是A/B/C/D)
+		"B",                // Severity (必须是A/B/C/D)
+		"100%",             // Frequency
+		"v1.0.0",           // Detected In Release
+		"系统测试",             // Phase
+		"New",              // Status (可选：New/Active/Resolved/Closed)
+		"2025-12-03",       // Created At
+	}
+	for col, value := range example {
+		cell := fmt.Sprintf("%s3", string(rune('A'+col)))
+		f.SetCellValue(sheetName, cell, value)
+	}
+
+	// 保存到缓冲区
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, fmt.Errorf("write xlsx: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// ImportWithFormat 根据格式导入缺陷
+func (s *defectService) ImportWithFormat(projectID uint, userID uint, reader io.Reader, isXLSX bool) (*models.ImportResult, error) {
+	if isXLSX {
+		return s.importXLSX(projectID, userID, reader)
+	}
+	return s.Import(projectID, userID, reader)
+}
+
+// importXLSX 直接导入 XLSX 文件
+func (s *defectService) importXLSX(projectID uint, userID uint, reader io.Reader) (*models.ImportResult, error) {
+	// 读取 XLSX 文件
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("read xlsx file: %w", err)
+	}
+
+	// 打开 XLSX 文件
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("open xlsx file: %w", err)
+	}
+	defer f.Close()
+
+	// 获取第一个工作表
+	sheetName := f.GetSheetName(0)
+
+	// 获取所有行
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from xlsx: %w", err)
+	}
+
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("xlsx file is empty")
+	}
+
+	// 清理重复的 defect_id（防止主键冲突）
+	s.repo.CleanupDuplicateDefects(projectID, "000001")
+	log.Printf("[Defect Import XLSX] Cleaned up duplicate defect IDs before importing")
+
+	// 直接处理 XLSX 数据（跳过表头和说明行）
+	headers := rows[0]
+	log.Printf("[Defect Import XLSX DEBUG] XLSX file loaded. Total rows: %d. Headers: %v", len(rows), headers)
+
+	result := &models.ImportResult{
+		SuccessCount: 0,
+		FailCount:    0,
+		Errors:       []models.ImportError{},
+	}
+
+	// 检测说明行：如果第2行包含 "(Required)" 或 "(Optional)" 则认为存在说明行
+	startRowIdx := 1 // 默认从第2行(索引1)开始处理数据
+	if len(rows) > 1 {
+		secondRow := rows[1]
+		isDescriptionRow := false
+		for _, cell := range secondRow {
+			cellVal := strings.TrimSpace(cell)
+			if strings.Contains(cellVal, "(Required)") || strings.Contains(cellVal, "(Optional)") ||
+				strings.Contains(cellVal, "(Auto-generated)") {
+				isDescriptionRow = true
+				break
+			}
+		}
+		if isDescriptionRow {
+			startRowIdx = 2 // 如果有说明行，从第3行(索引2)开始
+			log.Printf("[Defect Import XLSX DEBUG] Description row detected at row 2. Starting data processing from row 3")
+		} else {
+			log.Printf("[Defect Import XLSX DEBUG] No description row detected. Starting data processing from row 2")
+		}
+	}
+
+	// 遍历数据行
+	for rowIdx := startRowIdx; rowIdx < len(rows); rowIdx++ {
+		row := rows[rowIdx]
+		excelRowNum := rowIdx + 1
+		dataRowNum := rowIdx - startRowIdx + 1
+
+		// 检查是否为空行
+		isEmpty := true
+		for _, cell := range row {
+			if strings.TrimSpace(cell) != "" {
+				isEmpty = false
+				break
+			}
+		}
+		if isEmpty {
+			log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) SKIPPED: empty row", dataRowNum, excelRowNum)
+			continue
+		}
+
+		// 将行数据映射到缺陷请求
+		req := &models.DefectCreateRequest{}
+		var defectID string
+
+		// 映射列
+		for colIdx, header := range headers {
+			var value string
+			if colIdx < len(row) {
+				value = strings.TrimSpace(row[colIdx])
+				// 解码HTML实体
+				value = decodeHTMLEntities(value)
+			}
+
+			switch strings.TrimSpace(header) {
+			case "Defect ID":
+				defectID = value
+			case "Title":
+				req.Title = value
+			case "Subject":
+				req.Subject = value
+			case "Description":
+				req.Description = value
+			case "Recovery Method":
+				req.RecoveryMethod = value
+			case "Priority":
+				if value != "" && models.IsValidDefectPriority(value) {
+					req.Priority = value
+				}
+			case "Severity":
+				if value != "" && models.IsValidDefectSeverity(value) {
+					req.Severity = value
+				}
+			case "Frequency":
+				req.Frequency = value
+			case "Detected In Release":
+				req.DetectedInRelease = value
+			case "Phase":
+				req.Phase = value
+			case "Status":
+				req.Status = value
+			case "Created At":
+				req.CreatedAt = value
+			}
+		}
+
+		// 验证必填字段
+		if strings.TrimSpace(req.Title) == "" {
+			log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) SKIPPED: empty Title", dataRowNum, excelRowNum)
+			continue
+		}
+
+		// 如果有Defect ID，尝试更新已有缺陷
+		if defectID != "" {
+			existingDefect, err := s.repo.GetByDefectID(defectID)
+			if err == nil && existingDefect != nil {
+				// 找到已有缺陷，进行更新
+				updateReq := &models.DefectUpdateRequest{
+					Title:             &req.Title,
+					Subject:           &req.Subject,
+					Description:       &req.Description,
+					RecoveryMethod:    &req.RecoveryMethod,
+					Priority:          &req.Priority,
+					Severity:          &req.Severity,
+					Frequency:         &req.Frequency,
+					DetectedInRelease: &req.DetectedInRelease,
+					Phase:             &req.Phase,
+					Status:            &req.Status,
+				}
+				err := s.Update(existingDefect.ID, userID, updateReq)
+				if err != nil {
+					log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) UPDATE FAILED: Defect ID=%s, error=%v", dataRowNum, excelRowNum, defectID, err)
+					continue
+				}
+				log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) UPDATED: Defect ID=%s", dataRowNum, excelRowNum, defectID)
+				result.SuccessCount++
+				continue
+			}
+		}
+
+		// 创建新缺陷
+		_, err := s.Create(projectID, userID, req)
+		if err != nil {
+			log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) CREATE FAILED: %v", dataRowNum, excelRowNum, err)
+			continue
+		}
+		log.Printf("[Defect Import XLSX DEBUG] Row %d (Excel row %d) CREATED", dataRowNum, excelRowNum)
+		result.SuccessCount++
+	}
+
+	log.Printf("[Defect Import XLSX] ===== COMPLETE ===== success=%d", result.SuccessCount)
+	return result, nil
+}
+
+// Import 导入缺陷（CSV格式 - 支持有无说明行）
 func (s *defectService) Import(projectID uint, userID uint, reader io.Reader) (*models.ImportResult, error) {
 	// 读取所有内容以检测和移除BOM
 	data, err := io.ReadAll(reader)
@@ -379,200 +665,189 @@ func (s *defectService) Import(projectID uint, userID uint, reader io.Reader) (*
 	// 检测并移除UTF-8 BOM (EF BB BF)
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
 		data = data[3:]
-		log.Printf("[Defect Import] UTF-8 BOM detected and removed")
+		log.Printf("[Defect Import CSV] UTF-8 BOM removed")
 	}
 
-	// 创建CSV读取器
+	// 创建CSV读取器并读取所有行
 	csvReader := csv.NewReader(bytes.NewReader(data))
-
-	// 读取表头
-	headers, err := csvReader.Read()
+	allRows, err := csvReader.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("read csv header: %w", err)
+		return nil, fmt.Errorf("read csv file: %w", err)
 	}
 
-	// 清理表头（移除可能的BOM残留）
-	if len(headers) > 0 {
-		headers[0] = strings.TrimPrefix(headers[0], "\ufeff") // 移除UTF-8 BOM字符
-	}
-
-	// 验证表头
-	if len(headers) < len(csvHeaders) {
-		return nil, errors.New("csv format error: insufficient columns")
+	if len(allRows) == 0 {
+		return nil, errors.New("csv file is empty")
 	}
 
 	result := &models.ImportResult{
 		Errors: make([]models.ImportError, 0),
 	}
 
-	rowNum := 1 // 表头为第1行，数据从第2行开始
+	// 第1行是表头
+	headers := allRows[0]
+	if len(headers) > 0 {
+		headers[0] = strings.TrimPrefix(headers[0], "\ufeff")
+	}
 
-	for {
-		rowNum++
-		record, err := csvReader.Read()
-		if err == io.EOF {
-			break
+	// 验证表头
+	if len(headers) < len(csvHeaders) {
+		return nil, errors.New("csv format error: insufficient columns")
+	}
+	log.Printf("[Defect Import CSV DEBUG] Headers validated, starting to process data rows")
+
+	// 清理重复的 defect_id（防止主键冲突）
+	s.repo.CleanupDuplicateDefects(projectID, "000001")
+	log.Printf("[Defect Import CSV] Cleaned up duplicate defect IDs before importing")
+
+	// 确定数据行起始位置 - 智能检测是否有说明行
+	dataStartIdx := 1 // 默认从第2行(索引1)开始
+	if len(allRows) > 1 {
+		isDescriptionRow := false
+		for _, cell := range allRows[1] {
+			cellVal := strings.TrimSpace(cell)
+			if strings.Contains(cellVal, "(Required)") || strings.Contains(cellVal, "(Optional)") ||
+				strings.Contains(cellVal, "(Auto-generated)") {
+				isDescriptionRow = true
+				break
+			}
 		}
-		if err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, models.ImportError{
-				Row:    rowNum,
-				Reason: fmt.Sprintf("read row error: %v", err),
-			})
-			continue
+		if isDescriptionRow {
+			dataStartIdx = 2
+			log.Printf("[Defect Import CSV DEBUG] Description row detected - starting from row 3")
+		} else {
+			log.Printf("[Defect Import CSV DEBUG] No description row - starting from row 2")
+		}
+	}
+
+	// 检查是否有Defect ID列（导出文件会有）
+	hasDefectIDColumn := false
+	if len(headers) > 0 && strings.TrimSpace(headers[0]) == "Defect ID" {
+		hasDefectIDColumn = true
+		log.Printf("[Defect Import CSV DEBUG] Defect ID column detected - will support update")
+	}
+
+	// 处理数据行
+	for rowIdx := dataStartIdx; rowIdx < len(allRows); rowIdx++ {
+		record := allRows[rowIdx]
+		excelRowNum := rowIdx + 1
+		dataRowNum := rowIdx - dataStartIdx + 1
+
+		// 解析Defect ID（如果存在）
+		var defectID string
+		titleIdx := 0
+		if hasDefectIDColumn {
+			if len(record) > 0 {
+				defectID = strings.TrimSpace(record[0])
+			}
+			titleIdx = 1
 		}
 
 		// 验证必填字段
-		if len(record) < 1 || strings.TrimSpace(record[0]) == "" {
-			result.FailCount++
-			result.Errors = append(result.Errors, models.ImportError{
-				Row:    rowNum,
-				Reason: "Title is required",
-			})
+		if len(record) <= titleIdx || strings.TrimSpace(record[titleIdx]) == "" {
+			log.Printf("[Defect Import CSV DEBUG] Row %d (Excel row %d) SKIPPED: empty Title", dataRowNum, excelRowNum)
 			continue
 		}
 
 		// 构建创建请求
 		req := &models.DefectCreateRequest{
-			Title: strings.TrimSpace(record[0]),
+			Title: decodeHTMLEntities(strings.TrimSpace(record[titleIdx])),
 		}
 
-		if len(record) > 1 {
-			req.Subject = strings.TrimSpace(record[1])
+		if len(record) > titleIdx+1 {
+			req.Subject = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+1]))
 		}
-		if len(record) > 2 {
-			req.Description = strings.TrimSpace(record[2])
+		if len(record) > titleIdx+2 {
+			req.Description = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+2]))
 		}
-		if len(record) > 3 {
-			req.RecoveryMethod = strings.TrimSpace(record[3])
+		if len(record) > titleIdx+3 {
+			req.RecoveryMethod = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+3]))
 		}
-		if len(record) > 4 {
-			priority := strings.TrimSpace(record[4])
-			if priority != "" && !models.IsValidDefectPriority(priority) {
-				result.FailCount++
-				result.Errors = append(result.Errors, models.ImportError{
-					Row:    rowNum,
-					Reason: "Invalid Priority value",
-				})
-				continue
+		if len(record) > titleIdx+4 {
+			priority := strings.TrimSpace(record[titleIdx+4])
+			if priority != "" && models.IsValidDefectPriority(priority) {
+				req.Priority = priority
 			}
-			req.Priority = priority
 		}
-		if len(record) > 5 {
-			severity := strings.TrimSpace(record[5])
-			if severity != "" && !models.IsValidDefectSeverity(severity) {
-				result.FailCount++
-				result.Errors = append(result.Errors, models.ImportError{
-					Row:    rowNum,
-					Reason: "Invalid Severity value",
-				})
-				continue
+		if len(record) > titleIdx+5 {
+			severity := strings.TrimSpace(record[titleIdx+5])
+			if severity != "" && models.IsValidDefectSeverity(severity) {
+				req.Severity = severity
 			}
-			req.Severity = severity
 		}
-		if len(record) > 6 {
-			req.Frequency = strings.TrimSpace(record[6])
+		if len(record) > titleIdx+6 {
+			req.Frequency = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+6]))
 		}
-		if len(record) > 7 {
-			req.DetectedInRelease = strings.TrimSpace(record[7])
+		if len(record) > titleIdx+7 {
+			req.DetectedInRelease = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+7]))
 		}
-		if len(record) > 8 {
-			req.Phase = strings.TrimSpace(record[8])
+		if len(record) > titleIdx+8 {
+			req.Phase = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+8]))
+		}
+		if len(record) > titleIdx+9 {
+			req.Status = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+9]))
+		}
+		if len(record) > titleIdx+10 {
+			req.CreatedAt = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+10]))
 		}
 
-		// 解析 Status（可选，默认为 New）
-		statusStr := ""
-		if len(record) > 9 {
-			statusStr = strings.TrimSpace(record[9])
-			if statusStr != "" && statusStr != "(Optional)" {
-				if !models.IsValidDefectStatus(statusStr) {
-					result.FailCount++
-					result.Errors = append(result.Errors, models.ImportError{
-						Row:    rowNum,
-						Reason: fmt.Sprintf("Invalid Status value: %s (expected: New/Active/Resolved/Closed)", statusStr),
-					})
+		// 如果有Defect ID，尝试更新已有缺陷
+		if defectID != "" {
+			existingDefect, err := s.repo.GetByDefectID(defectID)
+			if err == nil && existingDefect != nil {
+				// 找到已有缺陷，进行更新
+				updateReq := &models.DefectUpdateRequest{
+					Title:             &req.Title,
+					Subject:           &req.Subject,
+					Description:       &req.Description,
+					RecoveryMethod:    &req.RecoveryMethod,
+					Priority:          &req.Priority,
+					Severity:          &req.Severity,
+					Frequency:         &req.Frequency,
+					DetectedInRelease: &req.DetectedInRelease,
+					Phase:             &req.Phase,
+					Status:            &req.Status,
+				}
+				err := s.Update(existingDefect.ID, userID, updateReq)
+				if err != nil {
+					log.Printf("[Defect Import CSV DEBUG] Row %d (Excel row %d) UPDATE FAILED: Defect ID=%s, error=%v", dataRowNum, excelRowNum, defectID, err)
 					continue
 				}
+				log.Printf("[Defect Import CSV DEBUG] Row %d (Excel row %d) UPDATED: Defect ID=%s", dataRowNum, excelRowNum, defectID)
+				result.SuccessCount++
+				continue
 			}
 		}
 
-		// 解析创建日期（支持多种格式）
-		var createdAt time.Time
-		var importCreatedBy uint = userID // 默认使用导入用户
-
-		if len(record) > 10 {
-			createdAtStr := strings.TrimSpace(record[10])
-			if createdAtStr != "" && createdAtStr != "(Auto-generated)" {
-				// 尝试多种日期格式
-				formats := []string{
-					"2006-01-02 15:04:05",
-					"2006-01-02 15:04",
-					"2006-01-02",
-					"2006/01/02 15:04:05",
-					"2006/01/02 15:04",
-					"2006/01/02",
-				}
-
-				parsed := false
-				for _, format := range formats {
-					if t, err := time.Parse(format, createdAtStr); err == nil {
-						createdAt = t
-						parsed = true
-						break
-					}
-				}
-
-				if !parsed {
-					result.FailCount++
-					result.Errors = append(result.Errors, models.ImportError{
-						Row:    rowNum,
-						Reason: fmt.Sprintf("Invalid date format: %s (expected: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD)", createdAtStr),
-					})
-					continue
-				}
-			}
-		}
-
-		// 创建缺陷（使用导入用户ID作为创建人）
-		defect, err := s.Create(projectID, importCreatedBy, req)
+		// 创建新缺陷
+		_, err := s.Create(projectID, userID, req)
 		if err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, models.ImportError{
-				Row:    rowNum,
-				Reason: err.Error(),
-			})
+			log.Printf("[Defect Import CSV DEBUG] Row %d (Excel row %d) CREATE FAILED: %v", dataRowNum, excelRowNum, err)
 			continue
 		}
 
-		// 如果CSV提供了 Status，更新数据库中的 status
-		if statusStr != "" && statusStr != "(Optional)" {
-			if err := s.repo.GetDB().Model(&models.Defect{}).
-				Where("id = ?", defect.ID).
-				Update("status", statusStr).Error; err != nil {
-				log.Printf("[Defect Import] Failed to update status for defect %s: %v", defect.DefectID, err)
-			}
-		}
-
-		// 如果CSV提供了创建日期，更新数据库中的created_at
-		if !createdAt.IsZero() {
-			if err := s.repo.GetDB().Model(&models.Defect{}).
-				Where("id = ?", defect.ID).
-				Update("created_at", createdAt).Error; err != nil {
-				log.Printf("[Defect Import] Failed to update created_at for defect %s: %v", defect.DefectID, err)
-			}
-		}
-
+		log.Printf("[Defect Import CSV DEBUG] Row %d (Excel row %d) CREATED", dataRowNum, excelRowNum)
 		result.SuccessCount++
 	}
 
-	log.Printf("[Defect Import] user_id=%d, project_id=%d, success=%d, fail=%d",
-		userID, projectID, result.SuccessCount, result.FailCount)
-
+	log.Printf("[Defect Import CSV] ===== COMPLETE ===== success=%d", result.SuccessCount)
 	return result, nil
 }
 
-// Export 导出缺陷
+// Export 导出缺陷（默认CSV格式）
 func (s *defectService) Export(projectID uint) ([]byte, error) {
+	return s.ExportWithFormat(projectID, "csv")
+}
+
+// ExportWithFormat 导出缺陷（支持CSV和XLSX格式）
+func (s *defectService) ExportWithFormat(projectID uint, format string) ([]byte, error) {
+	if format == "xlsx" {
+		return s.exportXLSX(projectID)
+	}
+	return s.exportCSV(projectID)
+}
+
+// exportCSV 导出CSV格式
+func (s *defectService) exportCSV(projectID uint) ([]byte, error) {
 	defects, err := s.repo.GetByProjectID(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("get defects: %w", err)
@@ -650,6 +925,96 @@ func (s *defectService) Export(projectID uint) ([]byte, error) {
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		return nil, fmt.Errorf("flush csv writer: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// exportXLSX 导出XLSX格式
+func (s *defectService) exportXLSX(projectID uint) ([]byte, error) {
+	defects, err := s.repo.GetByProjectID(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get defects: %w", err)
+	}
+
+	// 获取所有创建人ID
+	creatorIDs := make(map[uint]bool)
+	for _, defect := range defects {
+		creatorIDs[defect.CreatedBy] = true
+	}
+
+	// 批量查询创建人信息
+	var users []models.User
+	userIDList := make([]uint, 0, len(creatorIDs))
+	for id := range creatorIDs {
+		userIDList = append(userIDList, id)
+	}
+	if len(userIDList) > 0 {
+		if err := s.repo.GetDB().Where("id IN ?", userIDList).Find(&users).Error; err != nil {
+			return nil, fmt.Errorf("get creators: %w", err)
+		}
+	}
+
+	// 构建用户ID到昵称的映射
+	userMap := make(map[uint]string)
+	for _, user := range users {
+		userMap[user.ID] = user.Nickname
+	}
+
+	// 创建XLSX文件
+	f := excelize.NewFile()
+	sheetName := "Defects"
+	f.SetSheetName("Sheet1", sheetName)
+
+	// 写入表头
+	headers := []string{"Defect ID", "Title", "Subject", "Description", "Recovery Method",
+		"Priority", "Severity", "Frequency", "Detected In Release", "Phase",
+		"Status", "Created At", "Created By"}
+
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheetName, cell, header)
+	}
+
+	// 写入数据
+	for rowIndex, defect := range defects {
+		row := rowIndex + 2 // 从第2行开始（第1行是表头）
+
+		// 格式化创建时间
+		createdAt := defect.CreatedAt.Format("2006-01-02 15:04:05")
+
+		// 获取创建人昵称
+		createdBy := userMap[defect.CreatedBy]
+		if createdBy == "" {
+			createdBy = fmt.Sprintf("User#%d", defect.CreatedBy)
+		}
+
+		data := []interface{}{
+			defect.DefectID,
+			defect.Title,
+			defect.Subject,
+			defect.Description,
+			defect.RecoveryMethod,
+			defect.Priority,
+			defect.Severity,
+			defect.Frequency,
+			defect.DetectedInRelease,
+			defect.Phase,
+			defect.Status,
+			createdAt,
+			createdBy,
+		}
+
+		for colIndex, value := range data {
+			cell, _ := excelize.CoordinatesToCellName(colIndex+1, row)
+			f.SetCellValue(sheetName, cell, value)
+		}
+	}
+
+	// 将文件写入内存
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, fmt.Errorf("write xlsx: %w", err)
 	}
 
 	return buf.Bytes(), nil

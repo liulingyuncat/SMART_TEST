@@ -1,16 +1,19 @@
 package services
 
 import (
-	"encoding/csv"
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"webtest/internal/models"
 	"webtest/internal/repositories"
 
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -18,6 +21,7 @@ import (
 type ApiTestCaseService interface {
 	// 用例管理
 	GetCases(projectID uint, userID uint, caseType string, page int, size int) ([]*models.ApiTestCase, int64, error)
+	GetCasesByGroup(projectID uint, userID uint, caseType string, caseGroup string, page int, size int) ([]*models.ApiTestCase, int64, error)
 	CreateCase(projectID uint, userID uint, testCase *models.ApiTestCase) (*models.ApiTestCase, error)
 	InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string, caseData map[string]interface{}) (*models.ApiTestCase, error)
 	DeleteCase(projectID uint, userID uint, caseID string) error
@@ -29,6 +33,10 @@ type ApiTestCaseService interface {
 	GetVersions(projectID uint, userID uint, page int, size int) ([]*models.ApiTestCaseVersion, int64, error)
 	DeleteVersion(projectID uint, userID uint, versionID string) error
 	UpdateVersionRemark(projectID uint, userID uint, versionID string, remark string) error
+
+	// 模版与导入导出
+	ExportApiTemplate(projectID uint) ([]byte, string, error)
+	ImportApiCases(projectID uint, userID uint, caseGroup string, fileData []byte) (insertCount int, updateCount int, err error)
 }
 
 type apiTestCaseService struct {
@@ -62,6 +70,38 @@ func (s *apiTestCaseService) GetCases(projectID uint, userID uint, caseType stri
 	cases, total, err := s.repo.List(projectID, caseType, offset, size)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list api cases: %w", err)
+	}
+
+	return cases, total, nil
+}
+
+// GetCasesByGroup 按用例集分页查询用例列表
+func (s *apiTestCaseService) GetCasesByGroup(projectID uint, userID uint, caseType string, caseGroup string, page int, size int) ([]*models.ApiTestCase, int64, error) {
+	// 权限校验
+	isMember, err := s.projectService.IsProjectMember(projectID, userID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("check project membership: %w", err)
+	}
+	if !isMember {
+		return nil, 0, errors.New("无项目访问权限")
+	}
+
+	// 计算offset
+	offset := (page - 1) * size
+
+	// 如果没有指定用例集，使用原始List方法
+	if caseGroup == "" {
+		cases, total, err := s.repo.List(projectID, caseType, offset, size)
+		if err != nil {
+			return nil, 0, fmt.Errorf("list api cases: %w", err)
+		}
+		return cases, total, nil
+	}
+
+	// 按用例集筛选查询数据(按display_order排序)
+	cases, total, err := s.repo.ListByGroup(projectID, caseType, caseGroup, offset, size)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list api cases by group: %w", err)
 	}
 
 	return cases, total, nil
@@ -110,6 +150,11 @@ func (s *apiTestCaseService) CreateCase(projectID uint, userID uint, testCase *m
 
 // InsertCase 插入用例(指定位置)
 func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string, caseData map[string]interface{}) (*models.ApiTestCase, error) {
+	// 如果caseType为空，使用目标用例的caseType或默认值"api"
+	if caseType == "" {
+		caseType = "api" // 默认值
+	}
+
 	// 权限校验
 	isMember, err := s.projectService.IsProjectMember(projectID, userID)
 	if err != nil {
@@ -128,6 +173,24 @@ func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType st
 		return nil, fmt.Errorf("get target case: %w", err)
 	}
 
+	// 如果caseType是默认值，优先使用目标用例的caseType
+	if caseType == "api" && targetCase.CaseType != "" {
+		caseType = targetCase.CaseType
+	}
+
+	// 提取case_group（用于筛选同一用例集内的用例）
+	caseGroup := ""
+	if cg, ok := caseData["case_group"].(string); ok {
+		caseGroup = cg
+	}
+	// 如果没有传入case_group，使用目标用例的case_group
+	if caseGroup == "" {
+		caseGroup = targetCase.CaseGroup
+	}
+
+	log.Printf("[InsertCase] caseType=%s, targetCase.ID=%s, targetCase.DisplayOrder=%d, position=%s, caseGroup=%s",
+		caseType, targetCase.ID, targetCase.DisplayOrder, position, caseGroup)
+
 	// 计算新用例的display_order
 	var newOrder int
 	if position == "before" {
@@ -136,13 +199,15 @@ func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType st
 		newOrder = targetCase.DisplayOrder + 1
 	}
 
-	// 调整现有用例的display_order
+	log.Printf("[InsertCase] newOrder=%d, will IncrementOrderAfter afterOrder=%d", newOrder, targetCase.DisplayOrder-1)
+
+	// 调整现有用例的display_order（只影响同一用例集）
 	if position == "before" {
-		if err := s.repo.IncrementOrderAfter(projectID, caseType, targetCase.DisplayOrder-1); err != nil {
+		if err := s.repo.IncrementOrderAfter(projectID, caseType, caseGroup, targetCase.DisplayOrder-1); err != nil {
 			return nil, fmt.Errorf("increment order: %w", err)
 		}
 	} else {
-		if err := s.repo.IncrementOrderAfter(projectID, caseType, targetCase.DisplayOrder); err != nil {
+		if err := s.repo.IncrementOrderAfter(projectID, caseType, caseGroup, targetCase.DisplayOrder); err != nil {
 			return nil, fmt.Errorf("increment order: %w", err)
 		}
 	}
@@ -151,12 +216,13 @@ func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType st
 	newCase := &models.ApiTestCase{
 		ProjectID:    projectID,
 		CaseType:     caseType,
+		CaseGroup:    caseGroup, // 设置用例集
 		DisplayOrder: newOrder,
 		TestResult:   "NR",
 		Method:       "GET",
 	}
 
-	// 填充caseData字段
+	// 填充caseData字段（case_group已在上面设置）
 	if caseNumber, ok := caseData["case_number"].(string); ok {
 		newCase.CaseNumber = caseNumber
 	}
@@ -178,6 +244,9 @@ func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType st
 	if response, ok := caseData["response"].(string); ok {
 		newCase.Response = response
 	}
+	if scriptCode, ok := caseData["script_code"].(string); ok {
+		newCase.ScriptCode = scriptCode
+	}
 	if testResult, ok := caseData["test_result"].(string); ok {
 		newCase.TestResult = testResult
 	}
@@ -195,8 +264,8 @@ func (s *apiTestCaseService) InsertCase(projectID uint, userID uint, caseType st
 		return nil, fmt.Errorf("create new case: %w", err)
 	}
 
-	// 重新分配display_order
-	if err := s.repo.ReassignDisplayOrders(projectID, caseType); err != nil {
+	// 重新分配display_order（只影响同一用例集）
+	if err := s.repo.ReassignDisplayOrders(projectID, caseType, caseGroup); err != nil {
 		return nil, fmt.Errorf("reassign display orders: %w", err)
 	}
 
@@ -223,16 +292,17 @@ func (s *apiTestCaseService) DeleteCase(projectID uint, userID uint, caseID stri
 		return errors.New("无权限删除该用例")
 	}
 
-	// 获取用例类型用于后续重排序
+	// 获取用例类型和用例集用于后续重排序
 	caseType := existingCase.CaseType
+	caseGroup := existingCase.CaseGroup
 
 	// 删除用例
 	if err := s.repo.Delete(caseID); err != nil {
 		return fmt.Errorf("delete case: %w", err)
 	}
 
-	// 重新分配display_order
-	if err := s.repo.ReassignDisplayOrders(projectID, caseType); err != nil {
+	// 重新分配display_order（只影响同一用例集）
+	if err := s.repo.ReassignDisplayOrders(projectID, caseType, caseGroup); err != nil {
 		return fmt.Errorf("reassign display orders: %w", err)
 	}
 
@@ -262,8 +332,8 @@ func (s *apiTestCaseService) BatchDeleteCases(projectID uint, userID uint, caseT
 		}
 	}
 
-	// 重新分配display_order
-	if err := s.repo.ReassignDisplayOrders(projectID, caseType); err != nil {
+	// 重新分配display_order（批量删除时传空字符串重排所有case_type的用例）
+	if err := s.repo.ReassignDisplayOrders(projectID, caseType, ""); err != nil {
 		return deletedCount, failedCaseIDs, fmt.Errorf("reassign display orders: %w", err)
 	}
 
@@ -291,7 +361,7 @@ func (s *apiTestCaseService) UpdateCase(projectID uint, userID uint, caseID stri
 
 // ========== 版本管理 ==========
 
-// SaveVersion 保存版本(生成4个CSV文件)
+// SaveVersion 保存版本(生成XLSX文件，每个用例集一个sheet)
 func (s *apiTestCaseService) SaveVersion(projectID uint, userID uint, remark string) (*models.ApiTestCaseVersion, error) {
 	// 权限校验
 	isMember, err := s.projectService.IsProjectMember(projectID, userID)
@@ -317,71 +387,94 @@ func (s *apiTestCaseService) SaveVersion(projectID uint, userID uint, remark str
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
 
-	// 生成四个CSV文件
-	roleTypes := []string{"role1", "role2", "role3", "role4"}
-	filenames := make(map[string]string, 4)
+	// 生成XLSX文件名：项目名_AIAPI_TestCase_时间戳.xlsx
+	xlsxFilename := fmt.Sprintf("%s_AIAPI_TestCase_%s.xlsx", project.Name, timestamp)
+	xlsxPath := filepath.Join(storageDir, xlsxFilename)
 
-	for _, roleType := range roleTypes {
-		// 查询该ROLE的所有用例
-		cases, err := s.repo.GetByProjectAndType(projectID, roleType)
+	// 创建Excel工作簿
+	f := excelize.NewFile()
+
+	// 创建Cover sheet并设置内容
+	coverSheet := "Cover"
+	coverIndex, _ := f.NewSheet(coverSheet)
+	f.SetCellValue(coverSheet, "A1", "API Test Case Version")
+	f.SetCellValue(coverSheet, "A2", fmt.Sprintf("Project: %s", project.Name))
+	f.SetCellValue(coverSheet, "A3", fmt.Sprintf("Generated: %s", time.Now().Format("2006-01-02 15:04:05")))
+	if remark != "" {
+		f.SetCellValue(coverSheet, "A4", fmt.Sprintf("Remark: %s", remark))
+	}
+
+	// 删除默认的Sheet1
+	f.DeleteSheet("Sheet1")
+
+	// 设置Cover为默认激活sheet
+	f.SetActiveSheet(coverIndex)
+
+	// 获取所有用例集
+	caseGroups, err := s.repo.GetCaseGroups(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get case groups: %w", err)
+	}
+
+	// 为每个用例集创建一个sheet
+	for _, groupName := range caseGroups {
+		// 获取该用例集的所有用例
+		cases, err := s.repo.GetByProjectAndGroup(projectID, groupName)
 		if err != nil {
-			return nil, fmt.Errorf("get cases for %s: %w", roleType, err)
+			return nil, fmt.Errorf("get cases for group %s: %w", groupName, err)
 		}
 
-		// 生成CSV文件名
-		upperRole := fmt.Sprintf("ROLE%s", roleType[len(roleType)-1:])
-		filename := fmt.Sprintf("%s_APITestCase_%s_%s.csv", project.Name, upperRole, timestamp)
-		filePath := filepath.Join(storageDir, filename)
-
-		// 创建CSV文件
-		file, err := os.Create(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("create csv file: %w", err)
+		// 跳过空用例集
+		if len(cases) == 0 {
+			continue
 		}
-		defer file.Close()
 
-		// 写入CSV内容
-		writer := csv.NewWriter(file)
-		defer writer.Flush()
+		// 创建sheet（使用用例集名称）
+		sheetName := groupName
+		f.NewSheet(sheetName)
 
-		// 写入表头 (使用英文列名保持与前端一致)
-		header := []string{"No.", "CaseID", "Screen", "URL", "Header", "Method", "Body", "Response", "TestResult", "Remark"}
-		if err := writer.Write(header); err != nil {
-			return nil, fmt.Errorf("write csv header: %w", err)
+		// 写入表头
+		headers := []string{"No.", "Screen", "URL", "Header", "Method", "Body", "Response", "ScriptCode"}
+		for col, header := range headers {
+			cell, _ := excelize.CoordinatesToCellName(col+1, 1)
+			f.SetCellValue(sheetName, cell, header)
 		}
 
 		// 写入数据行
 		for i, c := range cases {
-			row := []string{
-				fmt.Sprintf("%d", i+1), // No.列基于display_order排序后的序号
-				c.CaseNumber,
-				c.Screen,
-				c.URL,
-				c.Header,
-				c.Method,
-				c.Body,
-				c.Response,
-				c.TestResult,
-				c.Remark,
-			}
-			if err := writer.Write(row); err != nil {
-				return nil, fmt.Errorf("write csv row: %w", err)
-			}
+			row := i + 2                                                     // 从第2行开始（第1行是表头）
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)          // No.
+			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), c.Screen)     // Screen
+			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), c.URL)        // URL
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), c.Header)     // Header
+			f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), c.Method)     // Method
+			f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), c.Body)       // Body
+			f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), c.Response)   // Response
+			f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), c.ScriptCode) // ScriptCode
 		}
 
-		// 保存文件名
-		filenames[roleType] = filename
+		// 设置列宽
+		f.SetColWidth(sheetName, "A", "A", 6)  // No.
+		f.SetColWidth(sheetName, "B", "B", 20) // Screen
+		f.SetColWidth(sheetName, "C", "C", 40) // URL
+		f.SetColWidth(sheetName, "D", "D", 30) // Header
+		f.SetColWidth(sheetName, "E", "E", 10) // Method
+		f.SetColWidth(sheetName, "F", "F", 40) // Body
+		f.SetColWidth(sheetName, "G", "G", 40) // Response
+		f.SetColWidth(sheetName, "H", "H", 60) // ScriptCode
+	}
+
+	// 保存Excel文件
+	if err := f.SaveAs(xlsxPath); err != nil {
+		return nil, fmt.Errorf("save xlsx file: %w", err)
 	}
 
 	// 创建版本记录(UUID自动生成)
 	version := &models.ApiTestCaseVersion{
-		ProjectID:     projectID,
-		FilenameRole1: filenames["role1"],
-		FilenameRole2: filenames["role2"],
-		FilenameRole3: filenames["role3"],
-		FilenameRole4: filenames["role4"],
-		Remark:        remark,
-		CreatedBy:     userID,
+		ProjectID:    projectID,
+		XlsxFilename: xlsxFilename,
+		Remark:       remark,
+		CreatedBy:    userID,
 	}
 
 	if err := s.repo.CreateVersion(version); err != nil {
@@ -439,19 +532,24 @@ func (s *apiTestCaseService) DeleteVersion(projectID uint, userID uint, versionI
 		return errors.New("版本不属于该项目")
 	}
 
-	// 删除CSV文件
+	// 删除XLSX文件（优先使用新字段）
 	storageDir := filepath.Join("storage", "versions", "api-cases")
-	filenames := []string{
-		version.FilenameRole1,
-		version.FilenameRole2,
-		version.FilenameRole3,
-		version.FilenameRole4,
-	}
-
-	for _, filename := range filenames {
-		if filename != "" {
-			filePath := filepath.Join(storageDir, filename)
-			os.Remove(filePath) // 忽略删除错误
+	if version.XlsxFilename != "" {
+		filePath := filepath.Join(storageDir, version.XlsxFilename)
+		os.Remove(filePath) // 忽略删除错误
+	} else {
+		// 兼容旧版本的CSV文件
+		filenames := []string{
+			version.FilenameRole1,
+			version.FilenameRole2,
+			version.FilenameRole3,
+			version.FilenameRole4,
+		}
+		for _, filename := range filenames {
+			if filename != "" {
+				filePath := filepath.Join(storageDir, filename)
+				os.Remove(filePath) // 忽略删除错误
+			}
 		}
 	}
 
@@ -494,4 +592,183 @@ func (s *apiTestCaseService) UpdateVersionRemark(projectID uint, userID uint, ve
 	}
 
 	return nil
+}
+
+// ExportApiTemplate 导出API用例模版
+func (s *apiTestCaseService) ExportApiTemplate(projectID uint) ([]byte, string, error) {
+	// 使用excelize创建XLSX工作簿
+	f := excelize.NewFile()
+	sheetName := "API Cases"
+	index, _ := f.NewSheet(sheetName)
+	f.DeleteSheet("Sheet1")
+	f.SetActiveSheet(index)
+
+	// 设置表头（9列）
+	headers := []string{"No.", "Screen", "URL", "Header", "Method", "Body", "Response", "ScriptCode", "UUID"}
+	for i, h := range headers {
+		cell := fmt.Sprintf("%s1", columnName(i))
+		f.SetCellValue(sheetName, cell, h)
+	}
+
+	// 生成文件名（ISO时间戳格式）
+	timestamp := time.Now().Format("20060102T150405")
+	filename := fmt.Sprintf("API_Case_Template_%s.xlsx", timestamp)
+
+	// 保存到buffer
+	var buffer bytes.Buffer
+	if err := f.Write(&buffer); err != nil {
+		return nil, "", fmt.Errorf("write xlsx: %w", err)
+	}
+
+	return buffer.Bytes(), filename, nil
+}
+
+// ImportApiCases 导入API用例
+func (s *apiTestCaseService) ImportApiCases(projectID uint, userID uint, caseGroup string, fileData []byte) (insertCount int, updateCount int, err error) {
+	// 使用excelize解析XLSX
+	f, err := excelize.OpenReader(bytes.NewReader(fileData))
+	if err != nil {
+		return 0, 0, fmt.Errorf("open xlsx: %w", err)
+	}
+	defer f.Close()
+
+	// 获取第一个sheet
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return 0, 0, errors.New("文件中没有工作表")
+	}
+	sheetName := sheets[0]
+
+	// 读取所有行
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get rows: %w", err)
+	}
+
+	if len(rows) <= 1 {
+		return 0, 0, errors.New("文件中没有数据")
+	}
+
+	// 解析表头，识别字段对应的列索引
+	headerRow := rows[0]
+	colIndex := make(map[string]int)
+
+	// 字段名称映射（支持中英文和多种写法）
+	fieldMappings := map[string][]string{
+		"no":       {"no", "no.", "序号", "编号"},
+		"screen":   {"screen", "画面", "模块", "功能"},
+		"url":      {"url", "接口", "地址", "接口地址", "api"},
+		"header":   {"header", "headers", "请求头", "头部"},
+		"method":   {"method", "方法", "请求方法", "http方法"},
+		"body":     {"body", "请求体", "请求内容", "参数"},
+		"response": {"response", "响应", "预期响应", "期望结果", "返回"},
+		"uuid":     {"uuid", "id", "用例id", "唯一标识"},
+	}
+
+	// 遍历表头，匹配字段
+	for colIdx, header := range headerRow {
+		headerLower := strings.ToLower(strings.TrimSpace(header))
+		for field, aliases := range fieldMappings {
+			for _, alias := range aliases {
+				if headerLower == alias || strings.Contains(headerLower, alias) {
+					if _, exists := colIndex[field]; !exists {
+						colIndex[field] = colIdx
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// 辅助函数：安全获取列值
+	getColValue := func(row []string, field string) string {
+		if idx, exists := colIndex[field]; exists && idx < len(row) {
+			return strings.TrimSpace(row[idx])
+		}
+		return ""
+	}
+
+	// 跳过表头，处理数据行
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) == 0 {
+			continue // 跳过空行
+		}
+
+		// 根据表头识别的列索引获取数据
+		uuid := getColValue(row, "uuid")
+		screen := getColValue(row, "screen")
+		url := getColValue(row, "url")
+		header := getColValue(row, "header")
+		method := getColValue(row, "method")
+		body := getColValue(row, "body")
+		response := getColValue(row, "response")
+		remark := "" // Remark列已删除，默认为空
+
+		// 如果所有关键字段都为空，跳过该行
+		if screen == "" && url == "" && method == "" && body == "" && response == "" {
+			continue
+		}
+
+		// 根据UUID判断是UPDATE还是INSERT
+		if uuid != "" {
+			// UPDATE：根据UUID查找用例
+			existingCase, err := s.repo.GetByID(uuid)
+			if err == nil && existingCase != nil && existingCase.ProjectID == projectID {
+				// 更新用例
+				updates := map[string]interface{}{
+					"screen":     screen,
+					"url":        url,
+					"header":     header,
+					"method":     method,
+					"body":       body,
+					"response":   response,
+					"remark":     remark,
+					"case_group": caseGroup,
+				}
+				if err := s.repo.Update(uuid, updates); err != nil {
+					return insertCount, updateCount, fmt.Errorf("update case: %w", err)
+				}
+				updateCount++
+			} else {
+				// UUID不存在或不属于该项目，视为INSERT
+				newCase := &models.ApiTestCase{
+					ProjectID: projectID,
+					CaseType:  "api", // API用例默认类型
+					CaseGroup: caseGroup,
+					Screen:    screen,
+					URL:       url,
+					Header:    header,
+					Method:    method,
+					Body:      body,
+					Response:  response,
+					Remark:    remark,
+				}
+				if err := s.repo.Create(newCase); err != nil {
+					return insertCount, updateCount, fmt.Errorf("create case: %w", err)
+				}
+				insertCount++
+			}
+		} else {
+			// INSERT：没有UUID，创建新用例
+			newCase := &models.ApiTestCase{
+				ProjectID: projectID,
+				CaseType:  "api", // API用例默认类型
+				CaseGroup: caseGroup,
+				Screen:    screen,
+				URL:       url,
+				Header:    header,
+				Method:    method,
+				Body:      body,
+				Response:  response,
+				Remark:    remark,
+			}
+			if err := s.repo.Create(newCase); err != nil {
+				return insertCount, updateCount, fmt.Errorf("create case: %w", err)
+			}
+			insertCount++
+		}
+	}
+
+	return insertCount, updateCount, nil
 }

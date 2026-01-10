@@ -10,6 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// UpdateMembersRequest 批量更新成员请求
+type UpdateMembersRequest struct {
+	Managers []uint `json:"managers" binding:"required"`
+	Members  []uint `json:"members"`
+}
+
 // ProjectHandler 项目处理器接口
 type ProjectHandler interface {
 	GetProjects(c *gin.Context)
@@ -17,6 +23,8 @@ type ProjectHandler interface {
 	UpdateProject(c *gin.Context)
 	DeleteProject(c *gin.Context)
 	GetProjectByID(c *gin.Context)
+	GetProjectMembers(c *gin.Context)
+	UpdateProjectMembers(c *gin.Context)
 }
 
 // projectHandler 项目处理器实现
@@ -275,5 +283,121 @@ func (h *projectHandler) GetProjectByID(c *gin.Context) {
 	}
 
 	log.Printf("[GetProjectByID] Success: project_id=%d, user_id=%d, role=%s", projectID, userID, userRole)
+	utils.ResponseSuccess(c, response)
+}
+
+// GetProjectMembers 获取项目成员列表
+func (h *projectHandler) GetProjectMembers(c *gin.Context) {
+	// 1. 解析项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		log.Printf("[GetProjectMembers] Invalid project ID: id=%s, error=%v", projectIDStr, err)
+		utils.ResponseError(c, 400, "无效的项目ID")
+		return
+	}
+
+	// 2. 获取当前用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ResponseError(c, 401, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	log.Printf("[GetProjectMembers] Request: project_id=%d, user_id=%d", projectID, userID)
+
+	// 3. 调用Service层查询项目成员
+	response, err := h.projectService.GetProjectMembers(uint(projectID), userID)
+	if err != nil {
+		// 根据错误类型返回不同的HTTP状态码
+		if errors.Is(err, services.ErrPermissionDenied) {
+			log.Printf("[GetProjectMembers] Permission denied: project_id=%d, user_id=%d", projectID, userID)
+			utils.ResponseError(c, 403, "无权限访问此项目")
+			return
+		}
+		if errors.Is(err, services.ErrProjectNotFound) {
+			log.Printf("[GetProjectMembers] Project not found: project_id=%d", projectID)
+			utils.ResponseError(c, 404, "项目不存在")
+			return
+		}
+		// 其他错误
+		log.Printf("[GetProjectMembers] Error: project_id=%d, error=%v", projectID, err)
+		utils.ResponseError(c, 500, "查询项目成员失败")
+		return
+	}
+
+	log.Printf("[GetProjectMembers] Success: project_id=%d, managers=%d, members=%d",
+		projectID, len(response.Managers), len(response.Members))
+	utils.ResponseSuccess(c, response)
+}
+
+// UpdateProjectMembers 批量更新项目成员
+func (h *projectHandler) UpdateProjectMembers(c *gin.Context) {
+	// 1. 解析项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		log.Printf("[UpdateProjectMembers] Invalid project ID: id=%s, error=%v", projectIDStr, err)
+		utils.ResponseError(c, 400, "无效的项目ID")
+		return
+	}
+
+	// 2. 解析请求体
+	var req UpdateMembersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[UpdateProjectMembers] Invalid request body: error=%v", err)
+		utils.ResponseError(c, 400, "请求参数无效")
+		return
+	}
+
+	// 3. 获取当前用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ResponseError(c, 401, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	log.Printf("[UpdateProjectMembers] Request: project_id=%d, user_id=%d, managers=%v, members=%v",
+		projectID, userID, req.Managers, req.Members)
+
+	// 4. 调用Service层
+	response, err := h.projectService.UpdateProjectMembers(uint(projectID), req.Managers, req.Members, userID)
+	if err != nil {
+		// 根据错误类型返回对应HTTP状态码
+		if errors.Is(err, services.ErrSelfRemovalForbidden) {
+			log.Printf("[UpdateProjectMembers] Self removal attempt: project_id=%d, user_id=%d", projectID, userID)
+			utils.ResponseError(c, 400, "当前登录管理员不可移出项目")
+			return
+		}
+		if errors.Is(err, services.ErrInvalidUserIDs) {
+			log.Printf("[UpdateProjectMembers] Invalid user IDs: project_id=%d", projectID)
+			utils.ResponseError(c, 400, "存在无效的用户ID")
+			return
+		}
+		if errors.Is(err, services.ErrRoleMismatch) {
+			log.Printf("[UpdateProjectMembers] Role mismatch: project_id=%d", projectID)
+			utils.ResponseError(c, 400, "用户角色不匹配")
+			return
+		}
+		if errors.Is(err, services.ErrPermissionDenied) {
+			log.Printf("[UpdateProjectMembers] Permission denied: project_id=%d, user_id=%d", projectID, userID)
+			utils.ResponseError(c, 403, "无权限访问此项目")
+			return
+		}
+		if errors.Is(err, services.ErrProjectNotFound) {
+			log.Printf("[UpdateProjectMembers] Project not found: project_id=%d", projectID)
+			utils.ResponseError(c, 404, "项目不存在")
+			return
+		}
+		// 其他错误
+		log.Printf("[UpdateProjectMembers] Error: project_id=%d, error=%v", projectID, err)
+		utils.ResponseError(c, 500, "更新项目成员失败")
+		return
+	}
+
+	log.Printf("[UpdateProjectMembers] Success: project_id=%d, managers=%d, members=%d",
+		projectID, len(response.Managers), len(response.Members))
 	utils.ResponseSuccess(c, response)
 }

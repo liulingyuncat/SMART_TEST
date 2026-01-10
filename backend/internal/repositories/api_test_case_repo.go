@@ -17,13 +17,18 @@ type ApiTestCaseRepository interface {
 
 	// 分页查询
 	List(projectID uint, caseType string, offset int, limit int) ([]*models.ApiTestCase, int64, error)
+	// 按用例集筛选的分页查询
+	ListByGroup(projectID uint, caseType string, caseGroup string, offset int, limit int) ([]*models.ApiTestCase, int64, error)
 
 	// 批量操作
 	GetByProjectAndType(projectID uint, caseType string) ([]*models.ApiTestCase, error)
+	GetCaseGroups(projectID uint) ([]string, error)
+	GetByProjectAndGroup(projectID uint, caseGroup string) ([]*models.ApiTestCase, error)
+	DeleteByCaseGroup(projectID uint, caseGroup string) error // 硬删除指定用例集的所有用例
 
 	// 插入/删除后的排序辅助方法
-	IncrementOrderAfter(projectID uint, caseType string, afterOrder int) error
-	ReassignDisplayOrders(projectID uint, caseType string) error
+	IncrementOrderAfter(projectID uint, caseType string, caseGroup string, afterOrder int) error
+	ReassignDisplayOrders(projectID uint, caseType string, caseGroup string) error
 
 	// 版本管理
 	CreateVersion(version *models.ApiTestCaseVersion) error
@@ -106,6 +111,31 @@ func (r *apiTestCaseRepository) List(projectID uint, caseType string, offset int
 	return cases, total, nil
 }
 
+// ListByGroup 按用例集筛选的分页查询(按display_order升序)
+func (r *apiTestCaseRepository) ListByGroup(projectID uint, caseType string, caseGroup string, offset int, limit int) ([]*models.ApiTestCase, int64, error) {
+	var cases []*models.ApiTestCase
+	var total int64
+
+	query := r.db.Where("project_id = ? AND case_type = ? AND case_group = ?", projectID, caseType, caseGroup)
+
+	// 统计总数
+	if err := query.Model(&models.ApiTestCase{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count api cases by group: %w", err)
+	}
+
+	// 查询数据(按display_order升序)
+	err := query.Order("display_order ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&cases).Error
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("list api cases by group: %w", err)
+	}
+
+	return cases, total, nil
+}
+
 // GetByProjectAndType 查询所有用例(按display_order升序)
 func (r *apiTestCaseRepository) GetByProjectAndType(projectID uint, caseType string) ([]*models.ApiTestCase, error) {
 	var cases []*models.ApiTestCase
@@ -118,25 +148,61 @@ func (r *apiTestCaseRepository) GetByProjectAndType(projectID uint, caseType str
 	return cases, nil
 }
 
-// IncrementOrderAfter 批量更新display_order+1
-func (r *apiTestCaseRepository) IncrementOrderAfter(projectID uint, caseType string, afterOrder int) error {
-	err := r.db.Exec(
-		"UPDATE api_test_cases SET display_order = display_order + 1 WHERE project_id = ? AND case_type = ? AND display_order > ?",
-		projectID, caseType, afterOrder,
-	).Error
+// GetCaseGroups 获取项目的所有用例集名称(去重)
+func (r *apiTestCaseRepository) GetCaseGroups(projectID uint) ([]string, error) {
+	var groups []string
+	err := r.db.Model(&models.ApiTestCase{}).
+		Where("project_id = ? AND case_group != ''", projectID).
+		Distinct("case_group").
+		Pluck("case_group", &groups).Error
+	if err != nil {
+		return nil, fmt.Errorf("get case groups: %w", err)
+	}
+	return groups, nil
+}
+
+// GetByProjectAndGroup 查询指定用例集的所有用例(按display_order升序)
+func (r *apiTestCaseRepository) GetByProjectAndGroup(projectID uint, caseGroup string) ([]*models.ApiTestCase, error) {
+	var cases []*models.ApiTestCase
+	err := r.db.Where("project_id = ? AND case_group = ?", projectID, caseGroup).
+		Order("display_order ASC").
+		Find(&cases).Error
+	if err != nil {
+		return nil, fmt.Errorf("get api cases by group: %w", err)
+	}
+	return cases, nil
+}
+
+// IncrementOrderAfter 批量更新display_order+1 (按case_group筛选)
+func (r *apiTestCaseRepository) IncrementOrderAfter(projectID uint, caseType string, caseGroup string, afterOrder int) error {
+	query := "UPDATE api_test_cases SET display_order = display_order + 1 WHERE project_id = ? AND case_type = ? AND display_order > ?"
+	args := []interface{}{projectID, caseType, afterOrder}
+
+	// 如果指定了case_group，添加筛选条件
+	if caseGroup != "" {
+		query += " AND case_group = ?"
+		args = append(args, caseGroup)
+	}
+
+	err := r.db.Exec(query, args...).Error
 	if err != nil {
 		return fmt.Errorf("increment display_order after %d: %w", afterOrder, err)
 	}
 	return nil
 }
 
-// ReassignDisplayOrders 重新分配display_order为1,2,3...
-func (r *apiTestCaseRepository) ReassignDisplayOrders(projectID uint, caseType string) error {
-	// 查询所有用例,按display_order排序
+// ReassignDisplayOrders 重新分配display_order为1,2,3... (按case_group筛选)
+func (r *apiTestCaseRepository) ReassignDisplayOrders(projectID uint, caseType string, caseGroup string) error {
+	// 查询用例,按display_order排序
 	var cases []*models.ApiTestCase
-	err := r.db.Where("project_id = ? AND case_type = ?", projectID, caseType).
-		Order("display_order ASC").
-		Find(&cases).Error
+	query := r.db.Where("project_id = ? AND case_type = ?", projectID, caseType)
+
+	// 如果指定了case_group，添加筛选条件
+	if caseGroup != "" {
+		query = query.Where("case_group = ?", caseGroup)
+	}
+
+	err := query.Order("display_order ASC").Find(&cases).Error
 	if err != nil {
 		return fmt.Errorf("query cases for reassign: %w", err)
 	}
@@ -201,9 +267,9 @@ func (r *apiTestCaseRepository) ListVersions(projectID uint, offset int, limit i
 	return versions, total, nil
 }
 
-// DeleteVersion 删除版本记录
+// DeleteVersion 删除版本记录(硬删除)
 func (r *apiTestCaseRepository) DeleteVersion(versionID string) error {
-	err := r.db.Where("id = ?", versionID).Delete(&models.ApiTestCaseVersion{}).Error
+	err := r.db.Unscoped().Where("id = ?", versionID).Delete(&models.ApiTestCaseVersion{}).Error
 	if err != nil {
 		return fmt.Errorf("delete api version %s: %w", versionID, err)
 	}
@@ -217,6 +283,17 @@ func (r *apiTestCaseRepository) UpdateVersionRemark(versionID string, remark str
 		Update("remark", remark).Error
 	if err != nil {
 		return fmt.Errorf("update version remark %s: %w", versionID, err)
+	}
+	return nil
+}
+
+// DeleteByCaseGroup 硬删除指定用例集的所有用例
+func (r *apiTestCaseRepository) DeleteByCaseGroup(projectID uint, caseGroup string) error {
+	result := r.db.Unscoped().
+		Where("project_id = ? AND case_group = ?", projectID, caseGroup).
+		Delete(&models.ApiTestCase{})
+	if result.Error != nil {
+		return fmt.Errorf("delete api cases by case_group %s: %w", caseGroup, result.Error)
 	}
 	return nil
 }

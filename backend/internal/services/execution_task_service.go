@@ -23,6 +23,9 @@ type UpdateTaskRequest struct {
 	TaskName        *string    `json:"task_name" binding:"omitempty,min=1,max=50"`
 	ExecutionType   *string    `json:"execution_type" binding:"omitempty,oneof=manual automation api"`
 	TaskStatus      *string    `json:"task_status" binding:"omitempty,oneof=pending in_progress completed"`
+	CaseGroupID     *uint      `json:"case_group_id"`                               // 关联的用例集ID
+	CaseGroupName   *string    `json:"case_group_name" binding:"omitempty,max=100"` // 关联的用例集名称
+	DisplayLanguage *string    `json:"display_language" binding:"omitempty,max=10"` // 显示语言(cn/jp/en/all)
 	StartDate       *time.Time `json:"start_date"`
 	EndDate         *time.Time `json:"end_date"`
 	TestVersion     *string    `json:"test_version" binding:"omitempty,max=50"`
@@ -42,17 +45,20 @@ type ExecutionTaskService interface {
 
 type executionTaskService struct {
 	repo        repositories.ExecutionTaskRepository
-	projectRepo repositories.ProjectRepository // 用于权限验证
+	projectRepo repositories.ProjectRepository             // 用于权限验证
+	ecrRepo     repositories.ExecutionCaseResultRepository // 用于级联删除
 }
 
 // NewExecutionTaskService 创建任务服务实例
 func NewExecutionTaskService(
 	repo repositories.ExecutionTaskRepository,
 	projectRepo repositories.ProjectRepository,
+	ecrRepo repositories.ExecutionCaseResultRepository,
 ) ExecutionTaskService {
 	return &executionTaskService{
 		repo:        repo,
 		projectRepo: projectRepo,
+		ecrRepo:     ecrRepo,
 	}
 }
 
@@ -157,6 +163,15 @@ func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID 
 	if req.TaskStatus != nil {
 		updates["task_status"] = *req.TaskStatus
 	}
+	if req.CaseGroupID != nil {
+		updates["case_group_id"] = *req.CaseGroupID
+	}
+	if req.CaseGroupName != nil {
+		updates["case_group_name"] = *req.CaseGroupName
+	}
+	if req.DisplayLanguage != nil {
+		updates["display_language"] = *req.DisplayLanguage
+	}
 	if req.StartDate != nil {
 		updates["start_date"] = *req.StartDate
 	}
@@ -194,7 +209,7 @@ func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID 
 	return updatedTask, nil
 }
 
-// DeleteTask 删除任务(软删除)
+// DeleteTask 删除任务(硬删除，级联删除相关数据)
 func (s *executionTaskService) DeleteTask(projectID uint, userID uint, taskUUID string) error {
 	// 1. 验证任务存在且属于该项目
 	task, err := s.repo.GetByUUID(taskUUID)
@@ -209,10 +224,16 @@ func (s *executionTaskService) DeleteTask(projectID uint, userID uint, taskUUID 
 		return errors.New("任务不属于该项目")
 	}
 
-	// 2. 执行软删除
-	err = s.repo.SoftDelete(taskUUID, userID)
+	// 2. 级联删除：先删除执行任务的所有执行用例结果（元数据）
+	err = s.ecrRepo.DeleteByTaskUUID(taskUUID)
 	if err != nil {
-		return fmt.Errorf("soft delete task: %w", err)
+		return fmt.Errorf("delete execution case results: %w", err)
+	}
+
+	// 3. 执行硬删除执行任务
+	err = s.repo.Delete(taskUUID)
+	if err != nil {
+		return fmt.Errorf("delete task: %w", err)
 	}
 
 	// 可选: 记录审计日志

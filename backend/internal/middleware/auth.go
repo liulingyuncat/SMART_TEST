@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware 认证中间件
+// AuthMiddleware 认证中间件 - 支持JWT和API Token双模式认证
 func AuthMiddleware(authService services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从请求头获取 Authorization
@@ -43,6 +43,52 @@ func AuthMiddleware(authService services.AuthService) gin.HandlerFunc {
 
 		// 继续处理
 		c.Next()
+	}
+}
+
+// DualAuthMiddleware 双模式认证中间件 - 同时支持JWT和API Token认证
+// 优先检查Authorization头(JWT)，若无则检查X-API-Token头
+func DualAuthMiddleware(authService services.AuthService, userService services.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 优先检查 Authorization 头 (JWT)
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			// JWT认证流程
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString := parts[1]
+				claims, err := authService.ValidateToken(tokenString)
+				if err == nil {
+					// JWT验证成功
+					c.Set("userID", claims.UserID)
+					c.Set("username", claims.Username)
+					c.Set("role", claims.Role)
+					c.Set("authType", "jwt")
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// 检查 X-API-Token 头
+		apiToken := c.GetHeader("X-API-Token")
+		if apiToken != "" {
+			// API Token认证流程
+			user, err := userService.ValidateApiToken(apiToken)
+			if err == nil && user != nil {
+				// API Token验证成功
+				c.Set("userID", user.ID)
+				c.Set("username", user.Username)
+				c.Set("role", user.Role)
+				c.Set("authType", "api_token")
+				c.Next()
+				return
+			}
+		}
+
+		// 两种认证方式都失败
+		utils.ResponseError(c, 401, "authentication required")
+		c.Abort()
 	}
 }
 

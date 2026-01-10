@@ -17,7 +17,7 @@ type ExecutionTaskRepository interface {
 	// CRUD方法
 	Create(task *models.ExecutionTask) error
 	UpdateByUUID(taskUUID string, updates map[string]interface{}) error
-	SoftDelete(taskUUID string, userID uint) error
+	Delete(taskUUID string) error
 
 	// 业务逻辑辅助方法
 	CheckNameUnique(projectID uint, taskName string, excludeUUID string) (bool, error)
@@ -94,14 +94,14 @@ func (r *executionTaskRepository) UpdateByUUID(taskUUID string, updates map[stri
 	return nil
 }
 
-// SoftDelete 软删除任务(设置deleted_at字段)
-func (r *executionTaskRepository) SoftDelete(taskUUID string, userID uint) error {
-	result := r.db.Model(&models.ExecutionTask{}).
+// Delete 删除任务(硬删除)
+func (r *executionTaskRepository) Delete(taskUUID string) error {
+	result := r.db.Unscoped().
 		Where("task_uuid = ?", taskUUID).
-		Update("deleted_at", gorm.Expr("CURRENT_TIMESTAMP"))
+		Delete(&models.ExecutionTask{})
 
 	if result.Error != nil {
-		return fmt.Errorf("soft delete task %s: %w", taskUUID, result.Error)
+		return fmt.Errorf("delete task %s: %w", taskUUID, result.Error)
 	}
 
 	if result.RowsAffected == 0 {

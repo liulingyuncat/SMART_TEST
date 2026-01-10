@@ -9,15 +9,17 @@ import (
 
 // ExecutionCaseResult 测试执行用例结果模型
 type ExecutionCaseResult struct {
-	ID         uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	TaskUUID   string `gorm:"type:varchar(36);not null;uniqueIndex:idx_task_case" json:"task_uuid" validate:"required,uuid4"`
-	CaseID     string `gorm:"type:varchar(36);not null;uniqueIndex:idx_task_case;index:idx_ecr_case_id" json:"case_id" validate:"required"`
-	DisplayID  uint   `gorm:"type:int;not null;default:0" json:"display_id"` // 用例显示ID（序号）
-	CaseNum    string `gorm:"type:varchar(100)" json:"case_num"`             // 用户自定义CaseID
-	CaseType   string `gorm:"type:varchar(20);not null" json:"case_type" validate:"required,oneof=overall acceptance change ai role1 role2 role3 role4 api"`
-	TestResult string `gorm:"type:varchar(10);not null;default:NR;index:idx_ecr_test_result" json:"test_result" validate:"required,oneof=NR OK NG Block"`
-	BugID      string `gorm:"type:varchar(50)" json:"bug_id" validate:"omitempty,max=50"`
-	Remark     string `gorm:"type:text" json:"remark" validate:"omitempty"`
+	ID            uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	TaskUUID      string `gorm:"type:varchar(36);not null;uniqueIndex:idx_task_case" json:"task_uuid" validate:"required,uuid4"`
+	CaseID        string `gorm:"type:varchar(36);not null;uniqueIndex:idx_task_case;index:idx_ecr_case_id" json:"case_id" validate:"required"`
+	DisplayID     uint   `gorm:"type:int;not null;default:0" json:"display_id"` // 用例显示ID（序号）
+	CaseNum       string `gorm:"type:varchar(100)" json:"case_num"`             // 用户自定义CaseID
+	CaseType      string `gorm:"type:varchar(20);not null" json:"case_type" validate:"required,oneof=overall acceptance change ai role1 role2 role3 role4 api"`
+	CaseGroupID   uint   `gorm:"type:int;default:0;index:idx_ecr_group_id" json:"case_group_id"` // 用例集ID
+	CaseGroupName string `gorm:"type:varchar(100)" json:"case_group_name"`                       // 用例集名字
+	TestResult    string `gorm:"type:varchar(10);not null;default:NR;index:idx_ecr_test_result" json:"test_result" validate:"required,oneof=NR OK NG Block"`
+	BugID         string `gorm:"type:varchar(50)" json:"bug_id" validate:"omitempty,max=50"`
+	Remark        string `gorm:"type:text" json:"remark" validate:"omitempty"`
 
 	// 用例内容快照 - 中文
 	ScreenCN         string `gorm:"type:varchar(500)" json:"screen_cn"`
@@ -48,6 +50,16 @@ type ExecutionCaseResult struct {
 	PreconditionEN   string `gorm:"type:text" json:"precondition_en"`
 	TestStepsEN      string `gorm:"type:text" json:"test_steps_en"`
 	ExpectedResultEN string `gorm:"type:text" json:"expected_result_en"`
+
+	// API 用例特有字段
+	Screen       string `gorm:"type:varchar(500)" json:"screen"`
+	URL          string `gorm:"type:text" json:"url"`
+	Header       string `gorm:"type:text" json:"header"`
+	Method       string `gorm:"type:varchar(20)" json:"method"`
+	Body         string `gorm:"type:text" json:"body"`
+	Response     string `gorm:"type:text" json:"response"`
+	ResponseTime string `gorm:"type:varchar(50)" json:"response_time"` // 响应时间
+	ScriptCode   string `gorm:"type:text" json:"script_code"`          // JS脚本代码，用于API测试执行
 
 	UpdatedBy uint           `gorm:"not null" json:"updated_by" validate:"required,min=1"`
 	CreatedAt time.Time      `json:"created_at"`

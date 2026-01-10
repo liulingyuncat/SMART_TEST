@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"strconv"
+	"strings"
+	"time"
 	"webtest/internal/models"
+	"webtest/internal/repositories"
 	"webtest/internal/services"
 	"webtest/internal/utils"
 
@@ -24,12 +28,14 @@ type DefectHandler interface {
 
 type defectHandler struct {
 	defectService services.DefectService
+	projectRepo   repositories.ProjectRepository
 }
 
 // NewDefectHandler 创建缺陷处理器实例
-func NewDefectHandler(defectService services.DefectService) DefectHandler {
+func NewDefectHandler(defectService services.DefectService, projectRepo repositories.ProjectRepository) DefectHandler {
 	return &defectHandler{
 		defectService: defectService,
+		projectRepo:   projectRepo,
 	}
 }
 
@@ -185,22 +191,33 @@ func (h *defectHandler) DeleteDefect(c *gin.Context) {
 	utils.ResponseSuccess(c, gin.H{"message": "defect deleted successfully"})
 }
 
-// ExportTemplate 下载CSV导入模板
-// GET /api/v1/projects/:id/defects/template
+// ExportTemplate 下载导入模板（支持CSV和XLSX格式）
+// GET /api/v1/projects/:id/defects/template?format=csv|xlsx
 func (h *defectHandler) ExportTemplate(c *gin.Context) {
-	data, err := h.defectService.GenerateTemplate()
+	format := c.DefaultQuery("format", "csv")
+	if format != "csv" && format != "xlsx" {
+		format = "csv"
+	}
+
+	data, err := h.defectService.GenerateTemplate(format)
 	if err != nil {
-		log.Printf("[Defect Template Failed] error=%v", err)
+		log.Printf("[Defect Template Failed] format=%s, error=%v", format, err)
 		utils.ResponseError(c, 500, err.Error())
 		return
 	}
 
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", "attachment; filename=defect_template.csv")
-	c.Data(200, "text/csv", data)
+	if format == "xlsx" {
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8")
+		c.Header("Content-Disposition", "attachment; filename=defect_template.xlsx")
+		c.Data(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+	} else {
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		c.Header("Content-Disposition", "attachment; filename=defect_template.csv")
+		c.Data(200, "text/csv", data)
+	}
 }
 
-// ImportDefects 导入缺陷
+// ImportDefects 导入缺陷（支持CSV和XLSX格式）
 // POST /api/v1/projects/:id/defects/import
 func (h *defectHandler) ImportDefects(c *gin.Context) {
 	projectIDStr := c.Param("id")
@@ -230,9 +247,12 @@ func (h *defectHandler) ImportDefects(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// 读取文件内容并检测BOM
-	// 注意：这里直接传递src，在service层会自动处理UTF-8 BOM
-	result, err := h.defectService.Import(uint(projectID), userID, src)
+	// 根据文件扩展名检测格式
+	filename := strings.ToLower(file.Filename)
+	isXLSX := strings.HasSuffix(filename, ".xlsx")
+
+	// 导入缺陷
+	result, err := h.defectService.ImportWithFormat(uint(projectID), userID, src, isXLSX)
 	if err != nil {
 		log.Printf("[Defect Import Failed] project_id=%d, user_id=%d, error=%v", projectID, userID, err)
 		utils.ResponseError(c, 400, err.Error())
@@ -242,8 +262,8 @@ func (h *defectHandler) ImportDefects(c *gin.Context) {
 	utils.ResponseSuccess(c, result)
 }
 
-// ExportDefects 导出缺陷
-// GET /api/v1/projects/:id/defects/export
+// ExportDefects 导出缺陷（支持CSV和XLSX格式）
+// GET /api/v1/projects/:id/defects/export?format=csv|xlsx
 func (h *defectHandler) ExportDefects(c *gin.Context) {
 	projectIDStr := c.Param("id")
 	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
@@ -252,14 +272,39 @@ func (h *defectHandler) ExportDefects(c *gin.Context) {
 		return
 	}
 
-	data, err := h.defectService.Export(uint(projectID))
+	// 获取项目信息
+	project, err := h.projectRepo.GetByID(uint(projectID))
 	if err != nil {
-		log.Printf("[Defect Export Failed] project_id=%d, error=%v", projectID, err)
+		log.Printf("[Defect Export] Failed to get project: project_id=%d, error=%v", projectID, err)
+		utils.ResponseError(c, 500, "project not found")
+		return
+	}
+
+	// 获取导出格式（默认csv）
+	format := c.DefaultQuery("format", "csv")
+	if format != "csv" && format != "xlsx" {
+		format = "csv"
+	}
+
+	data, err := h.defectService.ExportWithFormat(uint(projectID), format)
+	if err != nil {
+		log.Printf("[Defect Export Failed] project_id=%d, format=%s, error=%v", projectID, format, err)
 		utils.ResponseError(c, 500, err.Error())
 		return
 	}
 
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", "attachment; filename=defects_export.csv")
-	c.Data(200, "text/csv", data)
+	// 生成带项目名和时间戳的文件名
+	timestamp := time.Now().Unix()
+	var filename string
+	if format == "xlsx" {
+		filename = fmt.Sprintf("%s_defects_export_%d.xlsx", project.Name, timestamp)
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Data(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+	} else {
+		filename = fmt.Sprintf("%s_defects_export_%d.csv", project.Name, timestamp)
+		c.Header("Content-Type", "text/csv; charset=utf-8")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Data(200, "text/csv", data)
+	}
 }

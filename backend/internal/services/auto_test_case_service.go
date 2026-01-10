@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"webtest/internal/repositories"
 
 	"github.com/google/uuid"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -58,6 +60,7 @@ type AutoCaseDTO struct {
 
 	TestResult string `json:"test_result"`
 	Remark     string `json:"remark"`
+	ScriptCode string `json:"script_code"` // Playwright脚本代码
 }
 
 // AutoCaseListDTO 自动化用例列表DTO
@@ -68,10 +71,19 @@ type AutoCaseListDTO struct {
 	Size  int            `json:"size"`
 }
 
+// ImportResultDTO 导入结果DTO
+type ImportResultDTO struct {
+	InsertCount int `json:"insertCount"`
+	UpdateCount int `json:"updateCount"`
+}
+
 // CreateAutoCaseRequest 创建自动化用例请求
 type CreateAutoCaseRequest struct {
-	CaseType string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4"`
-	CaseNum  string `json:"case_num" binding:"max=50"`
+	CaseType   string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web"`
+	CaseGroup  string `json:"case_group" binding:"max=100"`       // 用例集名称(web类型时使用)
+	GroupID    int    `json:"group_id" binding:"omitempty,min=1"` // 用例集ID(web类型时使用，如果提供则转换为case_group)
+	CaseNum    string `json:"case_num" binding:"max=50"`
+	CaseNumber string `json:"case_number" binding:"max=50"` // 支持case_number字段名(与case_num二选一)
 
 	ScreenCN         string `json:"screen_cn" binding:"max=100"`
 	ScreenJP         string `json:"screen_jp" binding:"max=100"`
@@ -91,11 +103,13 @@ type CreateAutoCaseRequest struct {
 
 	TestResult string `json:"test_result" binding:"omitempty,oneof=OK NG NR"`
 	Remark     string `json:"remark"`
+	ScriptCode string `json:"script_code"` // Playwright脚本代码
 }
 
 // UpdateAutoCaseRequest 更新自动化用例请求
 type UpdateAutoCaseRequest struct {
-	CaseNum *string `json:"case_num,omitempty" binding:"omitempty,max=50"`
+	CaseNum    *string `json:"case_num,omitempty" binding:"omitempty,max=50"`
+	CaseNumber *string `json:"case_number,omitempty" binding:"omitempty,max=50"` // 支持case_number字段名(与case_num二选一)
 
 	ScreenCN       *string `json:"screen_cn,omitempty" binding:"omitempty,max=100"`
 	ScreenJP       *string `json:"screen_jp,omitempty" binding:"omitempty,max=100"`
@@ -116,6 +130,7 @@ type UpdateAutoCaseRequest struct {
 
 	TestResult *string `json:"test_result,omitempty" binding:"omitempty,oneof=OK NG NR"`
 	Remark     *string `json:"remark,omitempty"`
+	ScriptCode *string `json:"script_code,omitempty"` // Playwright脚本代码
 }
 
 // VersionFileInfo 版本文件信息
@@ -154,7 +169,7 @@ type VersionListDTO struct {
 type AutoTestCaseService interface {
 	GetMetadata(projectID uint, userID uint, caseType string) (*AutoMetadataDTO, error)
 	UpdateMetadata(projectID uint, userID uint, caseType string, req UpdateAutoMetadataRequest) error
-	GetCases(projectID uint, userID uint, caseType string, page int, size int) (*AutoCaseListDTO, error)
+	GetCases(projectID uint, userID uint, caseType string, page int, size int, caseGroup string) (*AutoCaseListDTO, error)
 	CreateCase(projectID uint, userID uint, req CreateAutoCaseRequest) (*AutoCaseDTO, error)
 	UpdateCase(projectID uint, userID uint, caseID string, req UpdateAutoCaseRequest) error
 	DeleteCase(projectID uint, userID uint, caseID string) error
@@ -162,7 +177,7 @@ type AutoTestCaseService interface {
 	ReorderByIDs(projectID uint, userID uint, caseType string, caseIDs []string) (int, error)
 
 	// 新增：插入和批量删除方法
-	InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string) (*models.AutoTestCase, error)
+	InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string, caseGroup string) (*models.AutoTestCase, error)
 	BatchDeleteCases(projectID uint, userID uint, caseType string, caseIDs []string) (deletedCount int, failedCaseIDs []string, err error)
 
 	// 新增：重新分配所有ID
@@ -174,20 +189,26 @@ type AutoTestCaseService interface {
 	DownloadVersion(projectID uint, userID uint, versionID string) ([]byte, string, error)
 	DeleteVersion(projectID uint, userID uint, versionID string) error
 	UpdateVersionRemark(projectID uint, userID uint, versionID string, remark string) error
+
+	// Web用例模版和导入
+	ExportWebTemplate(projectID uint, userID uint) ([]byte, string, error)
+	ImportWebCases(projectID uint, userID uint, caseGroup string, fileReader interface{}) (*ImportResultDTO, error)
 }
 
 type autoTestCaseService struct {
 	repo           repositories.AutoTestCaseRepository
 	projectService ProjectService
 	db             *gorm.DB
+	caseGroupRepo  *repositories.CaseGroupRepository
 }
 
 // NewAutoTestCaseService 创建服务实例
-func NewAutoTestCaseService(repo repositories.AutoTestCaseRepository, projectService ProjectService, db *gorm.DB) AutoTestCaseService {
+func NewAutoTestCaseService(repo repositories.AutoTestCaseRepository, projectService ProjectService, db *gorm.DB, caseGroupRepo *repositories.CaseGroupRepository) AutoTestCaseService {
 	return &autoTestCaseService{
 		repo:           repo,
 		projectService: projectService,
 		db:             db,
+		caseGroupRepo:  caseGroupRepo,
 	}
 }
 
@@ -248,7 +269,7 @@ func (s *autoTestCaseService) UpdateMetadata(projectID uint, userID uint, caseTy
 }
 
 // GetCases 获取用例列表
-func (s *autoTestCaseService) GetCases(projectID uint, userID uint, caseType string, page int, size int) (*AutoCaseListDTO, error) {
+func (s *autoTestCaseService) GetCases(projectID uint, userID uint, caseType string, page int, size int, caseGroup string) (*AutoCaseListDTO, error) {
 	// 验证用户权限
 	isMember, err := s.projectService.IsProjectMember(projectID, userID)
 	if err != nil {
@@ -262,12 +283,22 @@ func (s *autoTestCaseService) GetCases(projectID uint, userID uint, caseType str
 	if page < 1 {
 		page = 1
 	}
-	if size < 1 || size > 100 {
+	if size < 1 {
 		size = 50
+	} else if size > 100000 {
+		size = 100000
 	}
 
 	offset := (page - 1) * size
-	cases, total, err := s.repo.GetCasesByType(projectID, caseType, offset, size)
+
+	// 如果caseType为web且指定了caseGroup，则按用例集过滤
+	var cases []*models.AutoTestCase
+	var total int64
+	if caseType == "web" && caseGroup != "" {
+		cases, total, err = s.repo.GetCasesByTypeAndGroup(projectID, caseType, caseGroup, offset, size)
+	} else {
+		cases, total, err = s.repo.GetCasesByType(projectID, caseType, offset, size)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -296,6 +327,7 @@ func (s *autoTestCaseService) GetCases(projectID uint, userID uint, caseType str
 			ExpectedResultEN: c.ExpectedResultEN,
 			TestResult:       c.TestResult,
 			Remark:           c.Remark,
+			ScriptCode:       c.ScriptCode,
 		})
 	}
 
@@ -318,6 +350,14 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 		return nil, errors.New("无项目访问权限")
 	}
 
+	// 如果提供了GroupID，则查询对应的用例集名称
+	if req.GroupID > 0 {
+		var caseGroup *models.CaseGroup
+		if err := s.db.Where("id = ? AND project_id = ?", req.GroupID, projectID).First(&caseGroup).Error; err == nil && caseGroup != nil {
+			req.CaseGroup = caseGroup.GroupName
+		}
+	}
+
 	// 设置默认测试结果
 	if req.TestResult == "" {
 		req.TestResult = "NR"
@@ -329,11 +369,18 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 		return nil, fmt.Errorf("get max id: %w", err)
 	}
 
+	// 处理case_number字段：优先使用case_number，如果为空则使用case_num
+	caseNumber := req.CaseNumber
+	if caseNumber == "" {
+		caseNumber = req.CaseNum
+	}
+
 	testCase := &models.AutoTestCase{
 		ID:               maxID + 1,
 		ProjectID:        projectID,
 		CaseType:         req.CaseType,
-		CaseNumber:       req.CaseNum,
+		CaseGroup:        req.CaseGroup,
+		CaseNumber:       caseNumber,
 		ScreenCN:         req.ScreenCN,
 		ScreenJP:         req.ScreenJP,
 		ScreenEN:         req.ScreenEN,
@@ -351,6 +398,7 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 		ExpectedResultEN: req.ExpectedResultEN,
 		TestResult:       req.TestResult,
 		Remark:           req.Remark,
+		ScriptCode:       req.ScriptCode,
 	}
 
 	if err := s.repo.Create(testCase); err != nil {
@@ -381,6 +429,7 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 		ExpectedResultEN: testCase.ExpectedResultEN,
 		TestResult:       testCase.TestResult,
 		Remark:           testCase.Remark,
+		ScriptCode:       testCase.ScriptCode,
 	}, nil
 }
 
@@ -410,8 +459,11 @@ func (s *autoTestCaseService) UpdateCase(projectID uint, userID uint, caseID str
 
 	// 构建updates map
 	updates := make(map[string]interface{})
-	if req.CaseNum != nil {
-		updates["case_number"] = *req.CaseNum // 数据库字段是case_number，不是case_num
+	// 支持case_number和case_num两种字段名，case_number优先
+	if req.CaseNumber != nil {
+		updates["case_number"] = *req.CaseNumber
+	} else if req.CaseNum != nil {
+		updates["case_number"] = *req.CaseNum // 数据库字段是case_number
 	}
 	if req.ScreenCN != nil {
 		updates["screen_cn"] = *req.ScreenCN
@@ -463,6 +515,9 @@ func (s *autoTestCaseService) UpdateCase(projectID uint, userID uint, caseID str
 	}
 	if req.Remark != nil {
 		updates["remark"] = *req.Remark
+	}
+	if req.ScriptCode != nil {
+		updates["script_code"] = *req.ScriptCode
 	}
 
 	if len(updates) == 0 {
@@ -573,7 +628,7 @@ func (s *autoTestCaseService) ReorderByIDs(projectID uint, userID uint, caseType
 }
 
 // InsertCase 在指定位置插入新用例
-func (s *autoTestCaseService) InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string) (*models.AutoTestCase, error) {
+func (s *autoTestCaseService) InsertCase(projectID uint, userID uint, caseType string, position string, targetCaseID string, caseGroup string) (*models.AutoTestCase, error) {
 	// 权限校验
 	isMember, err := s.projectService.IsProjectMember(projectID, userID)
 	if err != nil {
@@ -618,6 +673,7 @@ func (s *autoTestCaseService) InsertCase(projectID uint, userID uint, caseType s
 		CaseType:   caseType,
 		ID:         uint(newOrder),
 		TestResult: "NR",
+		CaseGroup:  caseGroup, // 设置用例集字段
 	}
 
 	// 保存新用例
@@ -966,8 +1022,8 @@ func (s *autoTestCaseService) DeleteVersion(projectID uint, userID uint, version
 		}
 	}
 
-	// 删除数据库记录
-	if err := s.db.Where("project_id = ? AND version_id = ?", projectID, versionID).
+	// 删除数据库记录(硬删除)
+	if err := s.db.Unscoped().Where("project_id = ? AND version_id = ?", projectID, versionID).
 		Delete(&models.AutoTestCaseVersion{}).Error; err != nil {
 		return fmt.Errorf("delete version records: %w", err)
 	}
@@ -1013,4 +1069,297 @@ func validateFilePath(filePath string) error {
 		return errors.New("invalid file path")
 	}
 	return nil
+}
+
+// ExportWebTemplate 导出Web用例模版（三语言ZIP包）
+func (s *autoTestCaseService) ExportWebTemplate(projectID uint, userID uint) ([]byte, string, error) {
+	// 权限校验
+	isMember, err := s.projectService.IsProjectMember(projectID, userID)
+	if err != nil {
+		return nil, "", fmt.Errorf("check project membership: %w", err)
+	}
+	if !isMember {
+		return nil, "", errors.New("无项目访问权限")
+	}
+
+	// 创建内存中的ZIP文件
+	buf := new(bytes.Buffer)
+	zipWriter := zip.NewWriter(buf)
+
+	// 生成时间戳
+	timestamp := time.Now().Format("2006-01-02T15-04-05")
+
+	// 创建三个语言的Excel模版文件
+	languages := []struct {
+		suffix string
+		name   string
+	}{
+		{"CN", "web_case_CN.xlsx"},
+		{"EN", "web_case_EN.xlsx"},
+		{"JP", "web_case_JP.xlsx"},
+	}
+
+	for _, lang := range languages {
+		// 使用 excelize 创建 Excel 文件
+		f := excelize.NewFile()
+		sheetName := "Sheet1"
+
+		// 设置表头（参考手工测试用例库：No., CaseID, ..., UUID）
+		headers := []string{
+			"No.",
+			"CaseID",
+			"Screen" + lang.suffix,
+			"Function" + lang.suffix,
+			"Precondition" + lang.suffix,
+			"TestStep" + lang.suffix,
+			"Expect" + lang.suffix,
+			"ScriptCode",
+			"UUID",
+		}
+
+		for i, header := range headers {
+			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+			f.SetCellValue(sheetName, cell, header)
+		}
+
+		// 将 Excel 写入内存缓冲区（不要先Close）
+		excelBuf, err := f.WriteToBuffer()
+		if err != nil {
+			f.Close() // 出错时关闭
+			return nil, "", fmt.Errorf("write excel to buffer: %w", err)
+		}
+		f.Close() // 写入后关闭
+
+		// 添加到ZIP
+		writer, err := zipWriter.Create(lang.name)
+		if err != nil {
+			return nil, "", fmt.Errorf("create zip entry: %w", err)
+		}
+
+		if _, err := writer.Write(excelBuf.Bytes()); err != nil {
+			return nil, "", fmt.Errorf("write zip entry: %w", err)
+		}
+	}
+
+	// 关闭ZIP writer
+	if err := zipWriter.Close(); err != nil {
+		return nil, "", fmt.Errorf("close zip writer: %w", err)
+	}
+
+	filename := fmt.Sprintf("Web_Case_Template_%s.zip", timestamp)
+	return buf.Bytes(), filename, nil
+}
+
+// ImportWebCases 导入Web用例
+func (s *autoTestCaseService) ImportWebCases(projectID uint, userID uint, caseGroup string, fileReader interface{}) (*ImportResultDTO, error) {
+	// 权限校验
+	isMember, err := s.projectService.IsProjectMember(projectID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("check project membership: %w", err)
+	}
+	if !isMember {
+		return nil, errors.New("无项目访问权限")
+	}
+
+	// 确保用例集存在，如果不存在则创建
+	if s.caseGroupRepo != nil {
+		_, err := s.caseGroupRepo.CreateIfNotExists(projectID, "web", caseGroup)
+		if err != nil {
+			log.Printf("[ImportWebCases] 创建用例集失败: %v", err)
+			// 不返回错误，继续导入，因为用例集可能已存在
+		} else {
+			log.Printf("[ImportWebCases] 用例集已确保存在: %s", caseGroup)
+		}
+	}
+
+	// 将 fileReader 转换为 io.Reader
+	reader, ok := fileReader.(io.Reader)
+	if !ok {
+		return nil, errors.New("invalid file reader type")
+	}
+
+	// 打开 Excel 文件
+	f, err := excelize.OpenReader(reader)
+	if err != nil {
+		return nil, fmt.Errorf("open excel file: %w", err)
+	}
+	defer f.Close()
+
+	// 获取第一个 sheet
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, errors.New("excel file has no sheets")
+	}
+	sheetName := sheets[0]
+
+	// 读取所有行
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return nil, fmt.Errorf("read excel rows: %w", err)
+	}
+
+	if len(rows) < 2 {
+		return nil, errors.New("excel file has no data rows")
+	}
+
+	// 解析表头，确定列索引
+	header := rows[0]
+	columnMap := make(map[string]int)
+	for i, col := range header {
+		columnMap[col] = i
+	}
+
+	// UUID列是可选的，如果没有UUID列，将自动为所有用例生成新的UUID
+	// CaseID也是可选的业务编号
+
+	// 统计插入和更新数量
+	insertCount := 0
+	updateCount := 0
+
+	// 遍历数据行
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) == 0 {
+			continue
+		}
+
+		// 获取 UUID（主键）
+		caseUUID := ""
+		if idx, ok := columnMap["UUID"]; ok && idx < len(row) {
+			caseUUID = strings.TrimSpace(row[idx])
+		}
+
+		// 如果没有 UUID，生成新的
+		if caseUUID == "" {
+			caseUUID = uuid.New().String()
+		}
+
+		// 获取 CaseID（业务编号，可选）
+		caseNumber := ""
+		if idx, ok := columnMap["CaseID"]; ok && idx < len(row) {
+			caseNumber = strings.TrimSpace(row[idx])
+		}
+
+		// 构建用例对象
+		testCase := &models.AutoTestCase{
+			CaseID:     caseUUID,
+			CaseNumber: caseNumber,
+			ProjectID:  projectID,
+			CaseType:   "web",
+			CaseGroup:  caseGroup,
+		}
+
+		// 从Excel中读取各个字段
+		if idx, ok := columnMap["ScreenCN"]; ok && idx < len(row) {
+			testCase.ScreenCN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ScreenEN"]; ok && idx < len(row) {
+			testCase.ScreenEN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ScreenJP"]; ok && idx < len(row) {
+			testCase.ScreenJP = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["FunctionCN"]; ok && idx < len(row) {
+			testCase.FunctionCN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["FunctionEN"]; ok && idx < len(row) {
+			testCase.FunctionEN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["FunctionJP"]; ok && idx < len(row) {
+			testCase.FunctionJP = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["PreconditionCN"]; ok && idx < len(row) {
+			testCase.PreconditionCN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["PreconditionEN"]; ok && idx < len(row) {
+			testCase.PreconditionEN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["PreconditionJP"]; ok && idx < len(row) {
+			testCase.PreconditionJP = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["TestStepCN"]; ok && idx < len(row) {
+			testCase.TestStepsCN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["TestStepEN"]; ok && idx < len(row) {
+			testCase.TestStepsEN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["TestStepJP"]; ok && idx < len(row) {
+			testCase.TestStepsJP = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ExpectCN"]; ok && idx < len(row) {
+			testCase.ExpectedResultCN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ExpectEN"]; ok && idx < len(row) {
+			testCase.ExpectedResultEN = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ExpectJP"]; ok && idx < len(row) {
+			testCase.ExpectedResultJP = strings.TrimSpace(row[idx])
+		}
+		if idx, ok := columnMap["ScriptCode"]; ok && idx < len(row) {
+			testCase.ScriptCode = strings.TrimSpace(row[idx])
+		}
+
+		// 检查数据库中是否存在该 UUID
+		existingCase, err := s.repo.GetByCaseID(caseUUID)
+
+		if err == gorm.ErrRecordNotFound {
+			// 不存在，插入新记录
+			// 获取该项目和类型的最大 ID
+			maxID, err := s.repo.GetMaxIDByProjectAndType(projectID, "web")
+			if err != nil {
+				log.Printf("[ImportWebCases] Get max ID error: %v", err)
+				maxID = 0
+			}
+			testCase.ID = maxID + 1
+
+			if err := s.repo.Create(testCase); err != nil {
+				log.Printf("[ImportWebCases] Insert case %s error: %v", caseUUID, err)
+				continue
+			}
+			insertCount++
+		} else if err == nil {
+			// 存在，更新记录（保留原有的 ID 和其他审计字段）
+			testCase.ID = existingCase.ID
+			testCase.CreatedAt = existingCase.CreatedAt
+
+			// 准备更新字段
+			updates := map[string]interface{}{
+				"case_number":        testCase.CaseNumber,
+				"case_group":         testCase.CaseGroup,
+				"screen_cn":          testCase.ScreenCN,
+				"screen_en":          testCase.ScreenEN,
+				"screen_jp":          testCase.ScreenJP,
+				"function_cn":        testCase.FunctionCN,
+				"function_en":        testCase.FunctionEN,
+				"function_jp":        testCase.FunctionJP,
+				"precondition_cn":    testCase.PreconditionCN,
+				"precondition_en":    testCase.PreconditionEN,
+				"precondition_jp":    testCase.PreconditionJP,
+				"test_steps_cn":      testCase.TestStepsCN,
+				"test_steps_en":      testCase.TestStepsEN,
+				"test_steps_jp":      testCase.TestStepsJP,
+				"expected_result_cn": testCase.ExpectedResultCN,
+				"expected_result_en": testCase.ExpectedResultEN,
+				"expected_result_jp": testCase.ExpectedResultJP,
+				"script_code":        testCase.ScriptCode,
+			}
+
+			if err := s.repo.UpdateByCaseID(caseUUID, updates); err != nil {
+				log.Printf("[ImportWebCases] Update case %s error: %v", caseUUID, err)
+				continue
+			}
+			updateCount++
+		} else {
+			// 其他错误
+			log.Printf("[ImportWebCases] Query case %s error: %v", caseUUID, err)
+			continue
+		}
+	}
+
+	result := &ImportResultDTO{
+		InsertCount: insertCount,
+		UpdateCount: updateCount,
+	}
+
+	return result, nil
 }

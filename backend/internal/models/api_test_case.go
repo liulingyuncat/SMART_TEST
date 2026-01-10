@@ -31,7 +31,8 @@ type ApiTestCase struct {
 
 	// 基本信息
 	ProjectID uint   `gorm:"not null;index:idx_api_cases_project" json:"project_id"`
-	CaseType  string `gorm:"type:varchar(20);default:'role1';index:idx_api_cases_type" json:"case_type"` // role1/role2/role3/role4
+	CaseType  string `gorm:"type:varchar(20);default:'api';index:idx_api_cases_type" json:"case_type"` // 接口用例类型标识
+	CaseGroup string `gorm:"type:varchar(100);default:'';index:idx_api_cases_group" json:"case_group"` // 用例集名称
 
 	// 用例基本字段
 	CaseNumber string `gorm:"type:varchar(50)" json:"case_number"` // 用例编号(用户自定义)
@@ -43,6 +44,9 @@ type ApiTestCase struct {
 	Method   string `gorm:"type:varchar(10);default:'GET'" json:"method"` // HTTP方法: GET/POST/PUT/DELETE/PATCH
 	Body     string `gorm:"type:text" json:"body"`                        // 请求体(支持多行)
 	Response string `gorm:"type:text" json:"response"`                    // 预期响应(支持多行)
+
+	// 可执行脚本(消除AI幻觉)
+	ScriptCode string `gorm:"type:text" json:"script_code"` // JS脚本代码，S12直接执行此脚本
 
 	// 测试结果
 	TestResult string `gorm:"type:varchar(10);default:'NR';index:idx_api_cases_result" json:"test_result"` // OK/NG/NR
@@ -105,11 +109,14 @@ type ApiTestCaseVersion struct {
 	// 关联信息
 	ProjectID uint `gorm:"not null;index:idx_api_versions_project" json:"project_id"`
 
-	// 四个CSV文件名(每个ROLE一个)
-	FilenameRole1 string `gorm:"type:varchar(255);not null" json:"filename_role1"` // ROLE1文件名
-	FilenameRole2 string `gorm:"type:varchar(255);not null" json:"filename_role2"` // ROLE2文件名
-	FilenameRole3 string `gorm:"type:varchar(255);not null" json:"filename_role3"` // ROLE3文件名
-	FilenameRole4 string `gorm:"type:varchar(255);not null" json:"filename_role4"` // ROLE4文件名
+	// XLSX文件名(包含所有用例集)
+	XlsxFilename string `gorm:"type:varchar(255);not null" json:"xlsx_filename"` // XLSX文件名
+
+	// 兼容旧版本的CSV文件名(废弃,保留用于数据迁移)
+	FilenameRole1 string `gorm:"type:varchar(255);default:''" json:"filename_role1,omitempty"` // ROLE1文件名(已废弃)
+	FilenameRole2 string `gorm:"type:varchar(255);default:''" json:"filename_role2,omitempty"` // ROLE2文件名(已废弃)
+	FilenameRole3 string `gorm:"type:varchar(255);default:''" json:"filename_role3,omitempty"` // ROLE3文件名(已废弃)
+	FilenameRole4 string `gorm:"type:varchar(255);default:''" json:"filename_role4,omitempty"` // ROLE4文件名(已废弃)
 
 	// 版本信息
 	Remark    string `gorm:"type:text" json:"remark"`    // 版本备注(限制500字符,前端校验)

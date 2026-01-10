@@ -13,7 +13,7 @@ type Project struct {
 	Description string         `gorm:"type:text" json:"description"`
 	Status      string         `gorm:"type:varchar(20);default:pending;not null" json:"status"`
 	OwnerID     *int           `gorm:"type:int;index" json:"owner_id"`
-	OwnerName   string         `gorm:"-" json:"owner_name,omitempty"`
+	OwnerName   string         `gorm:"column:owner_name;->" json:"owner_name"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

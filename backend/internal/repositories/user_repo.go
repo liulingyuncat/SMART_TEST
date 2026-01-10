@@ -20,6 +20,13 @@ type UserRepository interface {
 	UpdateNickname(id uint, nickname string) error
 	UpdatePassword(id uint, password string) error
 	Delete(id uint) error
+	// 新增方法 - T21人员分配批量操作
+	FindByIDs(ids []uint) ([]models.User, error)
+	// 新增方法 - T23 API Token功能
+	FindByApiToken(token string) (*models.User, error)
+	UpdateApiToken(id uint, token string) error
+	// 新增方法 - T50 当前项目管理
+	UpdateCurrentProject(id uint, projectID uint) error
 }
 
 // userRepository 用户仓库实现
@@ -94,6 +101,19 @@ func (r *userRepository) InitAdminUsers() error {
 	return nil
 }
 
+// FindByIDs 根据ID列表批量查询用户
+func (r *userRepository) FindByIDs(ids []uint) ([]models.User, error) {
+	var users []models.User
+	if len(ids) == 0 {
+		return users, nil
+	}
+	err := r.db.Where("id IN ? AND deleted_at IS NULL", ids).Find(&users).Error
+	if err != nil {
+		return nil, fmt.Errorf("query users by IDs failed: %w", err)
+	}
+	return users, nil
+}
+
 // FindByID 根据ID查找用户
 func (r *userRepository) FindByID(id uint) (*models.User, error) {
 	var user models.User
@@ -144,11 +164,48 @@ func (r *userRepository) UpdatePassword(id uint, password string) error {
 	return nil
 }
 
-// Delete 软删除用户
+// Delete 删除用户(硬删除)
 func (r *userRepository) Delete(id uint) error {
-	result := r.db.Delete(&models.User{}, id)
+	result := r.db.Unscoped().Delete(&models.User{}, id)
 	if result.Error != nil {
 		return fmt.Errorf("delete user failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+// FindByApiToken 根据API Token查找用户
+func (r *userRepository) FindByApiToken(token string) (*models.User, error) {
+	var user models.User
+	err := r.db.Where("api_token = ? AND deleted_at IS NULL", token).First(&user).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query user by api token failed: %w", err)
+	}
+	return &user, nil
+}
+
+// UpdateApiToken 更新用户的API Token
+func (r *userRepository) UpdateApiToken(id uint, token string) error {
+	result := r.db.Model(&models.User{}).Where("id = ? AND deleted_at IS NULL", id).Update("api_token", token)
+	if result.Error != nil {
+		return fmt.Errorf("update api token failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+// UpdateCurrentProject 更新用户的当前项目 - T50
+func (r *userRepository) UpdateCurrentProject(id uint, projectID uint) error {
+	result := r.db.Model(&models.User{}).Where("id = ? AND deleted_at IS NULL", id).Update("current_project_id", projectID)
+	if result.Error != nil {
+		return fmt.Errorf("update current project failed: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("user not found")

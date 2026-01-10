@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"webtest/internal/constants"
 	"webtest/internal/models"
@@ -12,10 +13,29 @@ import (
 
 // 错误定义
 var (
-	ErrProjectNameExists = errors.New("项目名已存在")
-	ErrProjectNotFound   = errors.New("项目不存在")
-	ErrPermissionDenied  = errors.New("无权限访问此项目")
+	ErrProjectNameExists    = errors.New("项目名已存在")
+	ErrProjectNotFound      = errors.New("项目不存在")
+	ErrPermissionDenied     = errors.New("无权限访问此项目")
+	ErrSelfRemovalForbidden = errors.New("当前登录管理员不可移出项目")
+	ErrInvalidUserIDs       = errors.New("存在无效的用户ID")
+	ErrRoleMismatch         = errors.New("用户角色不匹配")
 )
+
+// MemberInfo 成员信息
+type MemberInfo struct {
+	UserID        uint   `json:"user_id"`
+	Username      string `json:"username"`
+	Nickname      string `json:"nickname"`
+	IsCurrentUser bool   `json:"is_current_user"`
+}
+
+// ProjectMembersResponse 项目成员响应
+type ProjectMembersResponse struct {
+	ProjectID   uint         `json:"project_id"`
+	ProjectName string       `json:"project_name"`
+	Managers    []MemberInfo `json:"managers"`
+	Members     []MemberInfo `json:"members"`
+}
 
 // ProjectService 项目服务接口
 type ProjectService interface {
@@ -26,12 +46,15 @@ type ProjectService interface {
 	UpdateProjectMetadata(projectID uint, updates map[string]interface{}, userID uint, role string) (*models.Project, error)
 	DeleteProject(projectID uint, userID uint, role string) error
 	GetByID(projectID uint, userID uint) (*models.Project, string, error)
+	GetProjectMembers(projectID uint, currentUserID uint) (*ProjectMembersResponse, error)
+	UpdateProjectMembers(projectID uint, managers []uint, members []uint, currentUserID uint) (*ProjectMembersResponse, error)
 }
 
 // projectService 项目服务实现
 type projectService struct {
 	projectRepo repositories.ProjectRepository
 	memberRepo  repositories.ProjectMemberRepository
+	userRepo    repositories.UserRepository
 	db          *gorm.DB
 }
 
@@ -39,11 +62,13 @@ type projectService struct {
 func NewProjectService(
 	projectRepo repositories.ProjectRepository,
 	memberRepo repositories.ProjectMemberRepository,
+	userRepo repositories.UserRepository,
 	db *gorm.DB,
 ) ProjectService {
 	return &projectService{
 		projectRepo: projectRepo,
 		memberRepo:  memberRepo,
+		userRepo:    userRepo,
 		db:          db,
 	}
 }
@@ -85,18 +110,18 @@ func (s *projectService) CreateProject(name string, description string, creatorI
 
 	// 3. 开启事务执行创建项目和添加成员
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// 创建项目
-		if err := s.projectRepo.Create(project); err != nil {
+		// 创建项目 - 使用事务tx
+		if err := tx.Create(project).Error; err != nil {
 			return err
 		}
 
-		// 将创建者添加为项目管理员
+		// 将创建者添加为项目管理员 - 使用事务tx
 		member := &models.ProjectMember{
 			ProjectID: project.ID,
 			UserID:    creatorID,
 			Role:      constants.RoleProjectManager,
 		}
-		if err := s.memberRepo.AddMember(member); err != nil {
+		if err := tx.Create(member).Error; err != nil {
 			return err
 		}
 
@@ -267,4 +292,130 @@ func (s *projectService) UpdateProjectMetadata(projectID uint, updates map[strin
 
 	// 6. 调用 Repository 层更新
 	return s.projectRepo.Update(projectID, updates)
+}
+
+// GetProjectMembers 获取项目成员列表
+func (s *projectService) GetProjectMembers(projectID uint, currentUserID uint) (*ProjectMembersResponse, error) {
+	// 1. 验证项目存在
+	project, err := s.projectRepo.GetByID(projectID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrProjectNotFound
+		}
+		return nil, fmt.Errorf("get project: %w", err)
+	}
+
+	// 2. 验证当前用户是项目成员
+	isMember, err := s.memberRepo.IsMember(projectID, currentUserID)
+	if err != nil {
+		return nil, fmt.Errorf("check membership: %w", err)
+	}
+	if !isMember {
+		return nil, ErrPermissionDenied
+	}
+
+	// 3. 查询项目成员及用户信息
+	membersWithUser, err := s.memberRepo.FindMembersWithUser(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("find members: %w", err)
+	}
+
+	// 4. 分类并标记当前用户
+	response := &ProjectMembersResponse{
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		Managers:    []MemberInfo{},
+		Members:     []MemberInfo{},
+	}
+
+	for _, member := range membersWithUser {
+		memberInfo := MemberInfo{
+			UserID:        member.UserID,
+			Username:      member.Username,
+			Nickname:      member.Nickname,
+			IsCurrentUser: member.UserID == currentUserID,
+		}
+
+		if member.Role == constants.RoleProjectManager {
+			response.Managers = append(response.Managers, memberInfo)
+		} else if member.Role == constants.RoleProjectMember {
+			response.Members = append(response.Members, memberInfo)
+		}
+	}
+
+	return response, nil
+}
+
+// UpdateProjectMembers 批量更新项目成员
+func (s *projectService) UpdateProjectMembers(projectID uint, managers []uint, members []uint, currentUserID uint) (*ProjectMembersResponse, error) {
+	// 1. 验证项目存在
+	_, err := s.projectRepo.GetByID(projectID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrProjectNotFound
+		}
+		return nil, fmt.Errorf("get project: %w", err)
+	}
+
+	// 2. 验证当前用户是项目管理员
+	isManager, err := s.memberRepo.IsMemberWithRole(projectID, currentUserID, constants.RoleProjectManager)
+	if err != nil {
+		return nil, fmt.Errorf("check manager role: %w", err)
+	}
+	if !isManager {
+		return nil, ErrPermissionDenied
+	}
+
+	// 3. 验证当前用户ID必须在managers列表中（自我保护）
+	currentUserInManagers := false
+	for _, uid := range managers {
+		if uid == currentUserID {
+			currentUserInManagers = true
+			break
+		}
+	}
+	if !currentUserInManagers {
+		return nil, ErrSelfRemovalForbidden
+	}
+
+	// 4. 验证所有用户ID有效且角色匹配
+	allUserIDs := append([]uint{}, managers...)
+	allUserIDs = append(allUserIDs, members...)
+	if len(allUserIDs) > 0 {
+		users, err := s.userRepo.FindByIDs(allUserIDs)
+		if err != nil {
+			return nil, fmt.Errorf("find users by IDs: %w", err)
+		}
+
+		// 验证数量匹配
+		if len(users) != len(allUserIDs) {
+			return nil, ErrInvalidUserIDs
+		}
+
+		// 验证角色匹配
+		userRoleMap := make(map[uint]string)
+		for _, user := range users {
+			userRoleMap[user.ID] = user.Role
+		}
+
+		for _, uid := range managers {
+			if role, ok := userRoleMap[uid]; !ok || role != constants.RoleProjectManager {
+				return nil, ErrRoleMismatch
+			}
+		}
+
+		for _, uid := range members {
+			if role, ok := userRoleMap[uid]; !ok || role != constants.RoleProjectMember {
+				return nil, ErrRoleMismatch
+			}
+		}
+	}
+
+	// 5. 调用Repository执行批量更新
+	if err := s.memberRepo.BatchUpdateMembers(projectID, managers, members); err != nil {
+		return nil, fmt.Errorf("batch update members: %w", err)
+	}
+
+	// 6. 查询并返回更新后的成员列表
+	return s.GetProjectMembers(projectID, currentUserID)
 }
