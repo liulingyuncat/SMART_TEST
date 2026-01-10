@@ -41,6 +41,19 @@ func (m *MockProjectService) CreateProject(name string, description string, crea
 	return args.Get(0).(*models.Project), args.Error(1)
 }
 
+func (m *MockProjectService) DeleteProject(projectID uint, userID uint) error {
+	args := m.Called(projectID, userID)
+	return args.Error(0)
+}
+
+func (m *MockProjectService) GetProjectMembers(projectID uint) ([]models.User, error) {
+	args := m.Called(projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.User), args.Error(1)
+}
+
 // setupTestRouter 创建测试路由
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)

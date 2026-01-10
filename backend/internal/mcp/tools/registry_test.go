@@ -24,6 +24,10 @@ func (m *mockHandler) InputSchema() map[string]interface{} {
 	return m.schema
 }
 
+func (m *mockHandler) Annotations() map[string]interface{} {
+	return nil
+}
+
 func (m *mockHandler) Execute(ctx context.Context, args map[string]interface{}) (ToolResult, error) {
 	return NewTextResult("mock result"), nil
 }

@@ -109,6 +109,55 @@ func (m *MockManualTestCaseRepository) DeleteByCaseType(projectID uint, caseType
 	return args.Error(0)
 }
 
+func (m *MockManualTestCaseRepository) BatchUpdateIDsByCaseID(updates []struct {
+	CaseID string
+	NewID  uint
+}) error {
+	args := m.Called(updates)
+	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) GetByCaseID(caseID string) (*models.ManualTestCase, error) {
+	args := m.Called(caseID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ManualTestCase), args.Error(1)
+}
+
+func (m *MockManualTestCaseRepository) UpdateByCaseID(caseID string, updates map[string]interface{}) error {
+	args := m.Called(caseID, updates)
+	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) DeleteByCaseID(caseID string) error {
+	args := m.Called(caseID)
+	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) GetMaxIDByProjectAndType(projectID uint, caseType string) (uint, error) {
+	args := m.Called(projectID, caseType)
+	return uint(args.Int(0)), args.Error(1)
+}
+
+func (m *MockManualTestCaseRepository) GetByProjectAndTypeOrdered(projectID uint, caseType string) ([]*models.ManualTestCase, error) {
+	args := m.Called(projectID, caseType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.ManualTestCase), args.Error(1)
+}
+
+func (m *MockManualTestCaseRepository) ReassignDisplayIDs(projectID uint, caseType string) error {
+	args := m.Called(projectID, caseType)
+	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) DeleteBatchByCaseIDs(caseIDs []string) error {
+	args := m.Called(caseIDs)
+	return args.Error(0)
+}
+
 // MockProjectService 模拟ProjectService
 type MockProjectService struct {
 	mock.Mock
@@ -154,6 +203,14 @@ func (m *MockProjectService) GetByID(projectID uint, userID uint) (*models.Proje
 		return nil, "", args.Error(2)
 	}
 	return args.Get(0).(*models.Project), args.String(1), args.Error(2)
+}
+
+func (m *MockProjectService) GetProjectMembers(projectID uint) ([]models.User, error) {
+	args := m.Called(projectID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.User), args.Error(1)
 }
 
 // 测试用例: CreateCase - AI用例创建(正常流程)

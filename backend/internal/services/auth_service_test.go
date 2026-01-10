@@ -79,6 +79,14 @@ func (m *MockUserRepository) InitAdminUsers() error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) FindByApiToken(token string) (*models.User, error) {
+	args := m.Called(token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
 // TestLogin_Success 测试登录成功场景
 func TestLogin_Success(t *testing.T) {
 	// 准备测试数据
