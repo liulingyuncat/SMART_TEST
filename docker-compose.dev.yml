@@ -1,0 +1,42 @@
+# =============================================================================
+# SMART_TEST (webtest) - Development Docker Compose
+#
+# 开发环境容器编排配置
+# 仅包含 PostgreSQL 数据库，供本地开发使用
+#
+# 使用方法:
+#   docker-compose -f docker-compose.dev.yml up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 开发数据库
+  # ---------------------------------------------------------------------------
+  postgres-dev:
+    image: postgres:16-alpine
+    container_name: webtest-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"   # 暴露端口供本地开发连接
+    environment:
+      - POSTGRES_DB=webtest
+      - POSTGRES_USER=webtest
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-webtest_dev_password}
+      - TZ=Asia/Shanghai
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webtest -d webtest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# -----------------------------------------------------------------------------
+# 数据卷配置
+# -----------------------------------------------------------------------------
+volumes:
+  postgres_dev_data:
+    driver: local

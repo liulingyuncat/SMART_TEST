@@ -58,3 +58,13 @@ backend/*.db.bak
 # 操作系统文件
 Thumbs.db
 Desktop.ini
+
+# Docker 环境配置（敏感信息）
+.env
+!.env.example
+
+# SSL证书和密钥（安全考虑）
+backend/certs/*.key
+backend/certs/*.pfx
+# 保留证书文件以便开发使用
+# backend/certs/*.crt
