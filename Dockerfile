@@ -61,6 +61,8 @@ FROM alpine:3.19
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
+    openssl \
+    wget \
     && rm -rf /var/cache/apk/*
 
 # 设置时区
