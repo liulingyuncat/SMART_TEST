@@ -1,0 +1,21 @@
+# MCP Server Configuration
+# This file contains the default configuration for the MCP server.
+
+server:
+  mode: http           # stdio | http
+  http_addr: ":16410"  # HTTP server address (only used when mode=http)
+  http_path: "/mcp"    # HTTP endpoint path (default: /mcp)
+  log_level: info      # debug | info | warn | error
+  log_format: json     # json | text
+
+backend:
+  base_url: https://localhost:8443
+  timeout: 30s
+  retry_count: 3
+  retry_delay: 1s
+
+auth:
+  token_env: MCP_AUTH_TOKEN    # Environment variable name for JWT token
+  # token_file: /path/to/token  # Alternative: read token from file
+  validate_on_start: false      # Skip validation in dynamic token mode
+  dynamic_token: true           # Enable dynamic token mode to read from request headers

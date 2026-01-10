@@ -24,7 +24,7 @@ func (m *mockHandler) InputSchema() map[string]interface{} {
 	return m.schema
 }
 
-func (m *mockHandler) Annotations() map[string]interface{} {
+func (m *mockHandler) Annotations() *ToolAnnotations {
 	return nil
 }
 

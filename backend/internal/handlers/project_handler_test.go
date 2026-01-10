@@ -41,17 +41,33 @@ func (m *MockProjectService) CreateProject(name string, description string, crea
 	return args.Get(0).(*models.Project), args.Error(1)
 }
 
-func (m *MockProjectService) DeleteProject(projectID uint, userID uint) error {
-	args := m.Called(projectID, userID)
-	return args.Error(0)
-}
-
-func (m *MockProjectService) GetProjectMembers(projectID uint) ([]models.User, error) {
-	args := m.Called(projectID)
+func (m *MockProjectService) UpdateProject(projectID uint, newName string, userID uint, role string) (*models.Project, error) {
+	args := m.Called(projectID, newName, userID, role)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]models.User), args.Error(1)
+	return args.Get(0).(*models.Project), args.Error(1)
+}
+
+func (m *MockProjectService) DeleteProject(projectID uint, userID uint, role string) error {
+	args := m.Called(projectID, userID, role)
+	return args.Error(0)
+}
+
+func (m *MockProjectService) GetByID(projectID uint, userID uint) (*models.Project, string, error) {
+	args := m.Called(projectID, userID)
+	if args.Get(0) == nil {
+		return nil, "", args.Error(2)
+	}
+	return args.Get(0).(*models.Project), args.String(1), args.Error(2)
+}
+
+func (m *MockProjectService) GetProjectMembers(projectID uint, userID uint) (*services.ProjectMembersResponse, error) {
+	args := m.Called(projectID, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*services.ProjectMembersResponse), args.Error(1)
 }
 
 // setupTestRouter 创建测试路由

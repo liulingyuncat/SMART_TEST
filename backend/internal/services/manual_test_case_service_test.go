@@ -86,7 +86,7 @@ func (m *MockManualTestCaseRepository) GetByCriteria(projectID uint, caseType st
 	return args.Get(0).([]*models.ManualTestCase), args.Error(1)
 }
 
-func (m *MockManualTestCaseRepository) DeleteBatch(caseIDs []uint) error {
+func (m *MockManualTestCaseRepository) DeleteBatch(caseIDs []string) error {
 	args := m.Called(caseIDs)
 	return args.Error(0)
 }
@@ -155,6 +155,16 @@ func (m *MockManualTestCaseRepository) DeleteBatchByCaseIDs(caseIDs []string) er
 	return args.Error(0)
 }
 
+func (m *MockManualTestCaseRepository) DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error {
+	args := m.Called(projectID, caseType, caseGroup)
+	return args.Error(0)
+}
+
+func (m *MockManualTestCaseRepository) DecrementOrderAfter(projectID uint, caseType string, afterOrder int) error {
+	args := m.Called(projectID, caseType, afterOrder)
+	return args.Error(0)
+}
+
 // MockProjectService 模拟ProjectService
 type MockProjectService struct {
 	mock.Mock
@@ -208,6 +218,22 @@ func (m *MockProjectService) GetProjectMembers(projectID uint, userID uint) (*Pr
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*ProjectMembersResponse), args.Error(1)
+}
+
+func (m *MockProjectService) UpdateProjectMembers(projectID uint, managers []uint, members []uint, currentUserID uint) (*ProjectMembersResponse, error) {
+	args := m.Called(projectID, managers, members, currentUserID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ProjectMembersResponse), args.Error(1)
+}
+
+func (m *MockProjectService) UpdateProjectMetadata(projectID uint, updates map[string]interface{}, userID uint, role string) (*models.Project, error) {
+	args := m.Called(projectID, updates, userID, role)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Project), args.Error(1)
 }
 
 // 测试用例: CreateCase - AI用例创建(正常流程)
@@ -332,7 +358,6 @@ func TestUpdateCase_Success(t *testing.T) {
 		ID:        10,
 		ProjectID: 1,
 		CaseType:  "ai",
-		Language:  "中文",
 	}
 	mockRepo.On("GetByID", uint(10)).Return(existingCase, nil)
 
@@ -343,7 +368,7 @@ func TestUpdateCase_Success(t *testing.T) {
 	}).Return(nil)
 
 	// 执行测试
-	err := service.UpdateCase(1, 123, 10, UpdateCaseRequest{
+	err := service.UpdateCase(1, 123, "10", UpdateCaseRequest{
 		TestResult: &testResult,
 	})
 

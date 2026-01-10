@@ -53,7 +53,10 @@ func (m *MockUserRepository) FindByRole(role string) ([]models.User, error) {
 	}
 	return args.Get(0).([]models.User), args.Error(1)
 }
-
+func (m *MockUserRepository) UpdateApiToken(id uint, token string) error {
+	args := m.Called(id, token)
+	return args.Error(0)
+}
 func (m *MockUserRepository) Create(user *models.User) error {
 	args := m.Called(user)
 	return args.Error(0)
@@ -85,6 +88,14 @@ func (m *MockUserRepository) FindByApiToken(token string) (*models.User, error) 
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) FindByIDs(ids []uint) ([]models.User, error) {
+	args := m.Called(ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.User), args.Error(1)
 }
 
 // TestLogin_Success 测试登录成功场景
