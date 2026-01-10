@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 	"webtest/internal/models"
 
 	"gorm.io/gorm"
@@ -97,6 +98,8 @@ func (m *MockRawDocumentRepository) GetConvertStatus(id uint) (*models.ConvertSt
 }
 
 func (m *MockRawDocumentRepository) Delete(id uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.docs, id)
 	return nil
 }
@@ -146,6 +149,9 @@ func TestStartConvert_Success(t *testing.T) {
 	if updatedDoc.ConvertStatus != "processing" {
 		t.Errorf("Expected database status 'processing', got '%s'", updatedDoc.ConvertStatus)
 	}
+
+	// 给异步goroutine一点时间完成以避免race detector警告
+	time.Sleep(10 * time.Millisecond)
 }
 
 // 测试用例2: 测试重复转换被拒
