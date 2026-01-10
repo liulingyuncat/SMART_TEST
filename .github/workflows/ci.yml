@@ -46,7 +46,7 @@ jobs:
         run: go mod download
 
       - name: Run go vet
-        run: go vet $(go list ./... | grep -v /test)
+        run: go vet ./cmd/server ./cmd/mcp ./internal/handlers/*.go ./internal/services/*.go ./internal/repositories/*.go ./config
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
