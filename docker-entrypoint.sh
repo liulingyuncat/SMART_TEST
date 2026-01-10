@@ -19,7 +19,7 @@ generate_certs() {
         openssl req -x509 -newkey rsa:4096 -nodes \
             -keyout /app/certs/server.key \
             -out /app/certs/server.crt \
-            -days 365 \
+            -days 7300 \
             -subj "/C=CN/ST=Beijing/L=Beijing/O=SmartTest/CN=localhost"
         echo "[entrypoint] TLS certificates generated successfully"
     else
