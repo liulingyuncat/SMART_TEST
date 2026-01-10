@@ -33,7 +33,9 @@ func (m *MockRawDocumentRepository) GetByID(id uint) (*models.RawDocument, error
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if doc, exists := m.docs[id]; exists {
-		return doc, nil
+		// 返回副本以避免数据竞争
+		docCopy := *doc
+		return &docCopy, nil
 	}
 	return nil, gorm.ErrRecordNotFound
 }
@@ -42,7 +44,9 @@ func (m *MockRawDocumentRepository) FindByID(id uint) (*models.RawDocument, erro
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if doc, exists := m.docs[id]; exists {
-		return doc, nil
+		// 返回副本以避免数据竞争
+		docCopy := *doc
+		return &docCopy, nil
 	}
 	return nil, errors.New("document not found")
 }
@@ -53,7 +57,9 @@ func (m *MockRawDocumentRepository) ListByProjectID(projectID uint) ([]*models.R
 	var result []*models.RawDocument
 	for _, doc := range m.docs {
 		if doc.ProjectID == projectID {
-			result = append(result, doc)
+			// 返回副本以避免数据竞争
+			docCopy := *doc
+			result = append(result, &docCopy)
 		}
 	}
 	return result, nil
