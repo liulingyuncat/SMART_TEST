@@ -106,12 +106,14 @@ docker run -d \
 ## 🏗️ 本地构建镜像
 
 ```bash
-# 构建镜像
+# 构建 amd64 镜像（推荐）
 docker build -t smart-test:local .
 
-# 多架构构建
+# 多架构构建（需要较长时间和稳定网络）
 docker buildx build --platform linux/amd64,linux/arm64 -t smart-test:local .
 ```
+
+> **注意**: 多架构构建可能因网络原因耗时较长，建议本地开发使用单架构构建。
 
 ## 📊 CI/CD 工作流
 
@@ -120,7 +122,20 @@ docker buildx build --platform linux/amd64,linux/arm64 -t smart-test:local .
 1. **推送到 main 分支**
    - 自动运行测试
    - 测试通过后构建并推送镜像
+   - 平台: `linux/amd64`
    - 标签: `latest`, `sha-<commit>`
+
+2. **创建版本标签** (如 `v1.0.0`)
+   - 自动构建并推送版本镜像
+   - 平台: `linux/amd64`
+   - 标签: `v1.0.0`, `1.0.0`, `1.0`, `1`
+
+3. **手动触发**
+   - 通过 GitHub Actions 手动触发
+   - 可选择平台: `amd64`, `arm64`, 或两者
+   - 可自定义标签
+
+### 查看构建状态
 
 2. **创建版本标签** (如 `v1.0.0`)
    - 自动构建并推送版本镜像

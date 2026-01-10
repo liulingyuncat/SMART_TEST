@@ -16,9 +16,16 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
+# 配置 npm 提高网络稳定性
+RUN npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retry-mintimeout 15000 && \
+    npm config set fetch-retries 5 && \
+    npm config set fetch-timeout 60000
+
 # 复制依赖文件并安装
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --production=false --legacy-peer-deps
+RUN npm ci --production=false --legacy-peer-deps || \
+    (echo "First attempt failed, retrying..." && npm ci --production=false --legacy-peer-deps)
 
 # 复制源码并构建
 COPY frontend/ ./

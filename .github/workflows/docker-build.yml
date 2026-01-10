@@ -20,6 +20,15 @@ on:
         description: '自定义镜像标签 (留空使用默认)'
         required: false
         default: 'manual'
+      platforms:
+        description: '构建平台 (amd64, arm64, 或 amd64,arm64)'
+        required: false
+        default: 'linux/amd64'
+        type: choice
+        options:
+          - 'linux/amd64'
+          - 'linux/arm64'
+          - 'linux/amd64,linux/arm64'
   # schedule:
   #   - cron: '0 2 * * 0'  # 每周日凌晨2点
 
@@ -75,11 +84,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event.inputs.platforms || 'linux/amd64' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          no-cache: false
-          platforms: linux/amd64,linux/arm64
+        timeout-minutes: 45
 
       - name: Image digest
         run: echo "Image digest - ${{ steps.meta.outputs.digest }}"
