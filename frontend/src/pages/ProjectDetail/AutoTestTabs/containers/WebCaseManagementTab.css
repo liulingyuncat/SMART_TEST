@@ -1,0 +1,74 @@
+/* Web用例管理Tab容器 - 参考需求管理的左右分栏布局 */
+.web-case-management-tab {
+  display: flex;
+  height: calc(100vh - 140px);
+  background: #f5f5f5;
+  position: relative;
+  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+}
+
+/* 右栏内容区 */
+.web-case-management-tab .right-content-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  overflow: hidden;
+  transition: flex 0.3s;
+}
+
+/* 右栏全宽模式（当左栏收束时） */
+.web-case-management-tab .right-content-panel.full-width {
+  flex: 1;
+}
+
+/* 右栏顶部区域 */
+.web-case-management-tab .right-panel-header {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* LanguageFilter 样式调整 */
+.web-case-management-tab .language-filter {
+  margin: 0;
+}
+
+/* 表格容器 */
+.web-case-management-tab .table-container {
+  flex: 1;
+  overflow: auto;
+  padding: 4px;
+}
+
+/* 表格单元格支持换行 */
+.web-case-management-tab .ant-table-cell {
+  white-space: normal !important;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+/* 空状态提示 */
+.web-case-management-tab .empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 13px;
+  color: #bfbfbf;
+  padding: 20px;
+}
+
+.web-case-management-tab .empty-state-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.3;
+}

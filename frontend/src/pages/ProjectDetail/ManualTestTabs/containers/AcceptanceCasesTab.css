@@ -1,0 +1,7 @@
+.acceptance-cases-tab {
+  padding: 0;
+}
+
+.acceptance-cases-tab .ant-spin-container {
+  min-height: 400px;
+}

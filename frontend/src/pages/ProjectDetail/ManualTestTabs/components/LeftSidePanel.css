@@ -1,0 +1,106 @@
+/* 左侧操作面板 */
+.left-side-panel {
+  width: 200px;
+  min-width: 200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #fafafa;
+  border-right: 1px solid #e8e8e8;
+  padding: 6px;
+  overflow-y: auto;
+  position: relative;
+  transition: width 0.3s ease, min-width 0.3s ease;
+}
+
+/* 收束状态的左侧面板 */
+.left-side-panel.collapsed {
+  width: 48px;
+  min-width: 48px;
+  padding: 8px 0;
+  overflow: visible;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 收束/展开按钮 */
+.left-side-panel .collapse-toggle {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  z-index: 10;
+  color: #999;
+}
+
+.left-side-panel .collapse-toggle:hover {
+  color: #1890ff;
+}
+
+/* 收束状态下的展开按钮 */
+.collapse-toggle-collapsed {
+  position: relative !important;
+  margin: 0 !important;
+  padding: 4px !important;
+  color: #999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.collapse-toggle-collapsed:hover {
+  color: #1890ff !important;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 面板功能区 */
+.left-side-panel .panel-section {
+  margin-bottom: 4px;
+}
+
+/* 功能按钮紧凑样式 */
+.left-side-panel .panel-section .ant-btn {
+  height: 24px;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+/* 区块标题 */
+.left-side-panel .section-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+  margin-top: 2px;
+}
+
+/* 用例一览区域 */
+.left-side-panel .case-list-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 用例列表容器 */
+.left-side-panel .case-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 空提示 */
+.left-side-panel .empty-hint {
+  text-align: center;
+  color: #999;
+  padding: 10px 0;
+  font-size: 12px;
+}
+
+/* 按钮间距调整 */
+.left-side-panel .panel-section .ant-btn {
+  margin-bottom: 8px;
+}
+
+.left-side-panel .panel-section .ant-btn:last-child {
+  margin-bottom: 0;
+}

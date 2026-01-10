@@ -1,0 +1,74 @@
+/* API用例详细信息弹窗 - 全字段可编辑版 */
+
+/* Modal标题 */
+.acd-modal-compact .ant-modal-header {
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 16px;
+}
+
+.acd-modal-compact .ant-modal-title {
+  color: #303133;
+}
+
+.acd-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.acd-modal-compact .ant-modal-close-x {
+  color: #8c8c8c;
+}
+
+.acd-modal-compact .ant-modal-body {
+  padding: 16px 20px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.acd-modal-compact .ant-modal-footer {
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 16px;
+}
+
+.acd-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 表单样式 */
+.acd-form .ant-form-item-label > label {
+  font-size: 12px;
+  color: #8c8c8c;
+  font-weight: 500;
+}
+
+.acd-form .ant-input,
+.acd-form .ant-input-affix-wrapper,
+.acd-form .ant-select-selector {
+  border-radius: 4px;
+}
+
+.acd-form .ant-input:focus,
+.acd-form .ant-input-focused,
+.acd-form .ant-input-affix-wrapper:focus,
+.acd-form .ant-input-affix-wrapper-focused {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+}
+
+/* Script Code 编辑区域特殊样式 */
+.acd-form textarea[style*="background-color: rgb(30, 30, 30)"] {
+  border: 1px solid #3c3c3c !important;
+  border-radius: 4px;
+}
+
+.acd-form textarea[style*="background-color: rgb(30, 30, 30)"]:focus {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+}

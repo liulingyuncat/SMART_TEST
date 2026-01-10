@@ -1,0 +1,31 @@
+.ai-report-left-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #fff;
+}
+
+.create-button {
+  margin-bottom: 16px;
+}
+
+.reports-container {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #f0f0f0;
+  border-radius: 2px;
+}
+
+.panel-title {
+  padding: 12px 16px;
+  font-weight: 600;
+  background-color: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.error-message {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 8px;
+}

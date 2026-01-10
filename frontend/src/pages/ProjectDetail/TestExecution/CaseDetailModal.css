@@ -1,0 +1,159 @@
+/* 用例详细信息弹窗 - 紧凑简洁版 */
+
+/* Modal标题 - 不使用蓝色背景 */
+.cd-modal-compact .ant-modal-header {
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 16px;
+}
+
+.cd-modal-compact .ant-modal-title {
+  color: #303133;
+}
+
+.cd-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.cd-lang-tag {
+  background: #e6f7ff;
+  color: #1890ff;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.cd-modal-compact .ant-modal-close-x {
+  color: #8c8c8c;
+}
+
+.cd-modal-compact .ant-modal-body {
+  padding: 12px 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.cd-modal-compact .ant-modal-footer {
+  border-top: 1px solid #f0f0f0;
+  padding: 8px 16px;
+}
+
+.cd-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 内容区域 */
+.cd-content {
+  font-size: 13px;
+}
+
+/* 单行字段 */
+.cd-field-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.cd-field-label {
+  color: #8c8c8c;
+  font-size: 12px;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.cd-field-value {
+  color: #303133;
+  word-break: break-word;
+  flex: 1;
+}
+
+.cd-field-value.empty {
+  color: #bfbfbf;
+}
+
+.cd-field-value.code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  background: #f6f8fa;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* 多行字段 - 自适应高度 */
+.cd-multiline-field {
+  margin-bottom: 6px;
+}
+
+.cd-multiline-field .cd-field-label {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.cd-multiline-value {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: #303133;
+  font-size: 12px;
+}
+
+.cd-multiline-value.code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: #f6f8fa;
+}
+
+/* 执行信息区域 */
+.cd-exec-section {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f0f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 4px;
+}
+
+.cd-exec-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1890ff;
+  margin-bottom: 8px;
+}
+
+.cd-edit-hint {
+  font-size: 11px;
+  color: #8c8c8c;
+  font-weight: normal;
+  margin-left: 6px;
+}
+
+.cd-exec-form .ant-form-item-label > label {
+  font-size: 12px;
+  color: #606266;
+}
+
+.cd-exec-form .ant-form-item {
+  margin-bottom: 6px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .cd-modal-compact .ant-modal-body {
+    padding: 10px 12px;
+  }
+  
+  .cd-field-label {
+    min-width: 70px;
+  }
+}

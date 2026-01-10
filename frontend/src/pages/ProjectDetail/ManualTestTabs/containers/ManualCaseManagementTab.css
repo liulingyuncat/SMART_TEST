@@ -1,0 +1,59 @@
+/* 手工用例管理Tab容器 - 左右分栏布局 */
+.manual-case-management-tab {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  gap: 0;
+}
+
+/* 右栏内容区 */
+.manual-case-management-tab .right-content-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  transition: width 0.3s ease;
+  padding: 2px 4px 4px 4px;
+}
+
+/* 右栏全宽模式（当左栏收束时） */
+.manual-case-management-tab .right-content-panel.full-width {
+  width: 100%;
+}
+
+/* LanguageFilter 样式调整 - T44: 贴顶部 */
+.manual-case-management-tab .language-filter {
+  margin-bottom: 2px;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* T44: 工具栏样式 - 贴近语言选择器 */
+.manual-case-management-tab .toolbar-container {
+  margin-top: 0;
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.manual-case-management-tab .toolbar-container .ant-space-item {
+  display: inline-flex;
+}
+
+.manual-case-management-tab .toolbar-container .ant-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 表格单元格支持换行 */
+.manual-case-management-tab .ant-table-cell {
+  white-space: normal !important;
+  word-break: break-word;
+  word-wrap: break-word;
+}
+
+/* 确保表格内容可以换行显示 */
+.manual-case-management-tab .ant-table-tbody > tr > td {
+  white-space: normal !important;
+  word-break: break-word;
+}

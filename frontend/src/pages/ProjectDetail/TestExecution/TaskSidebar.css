@@ -1,0 +1,39 @@
+.task-sidebar {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+  border-right: 1px solid #f0f0f0;
+}
+
+.task-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.task-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.task-group {
+  margin-bottom: 8px;
+}
+
+.task-group-title {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  margin-bottom: 2px;
+  font-weight: 600;
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.task-group-content {
+  padding: 0 8px;
+}

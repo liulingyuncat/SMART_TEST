@@ -1,0 +1,206 @@
+/* 缺陷详细信息弹窗 - 紧凑简洁版 */
+
+/* Modal 样式 */
+.dd-modal-compact .ant-modal-header {
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 16px;
+}
+
+.dd-modal-compact .ant-modal-title {
+  color: #303133;
+}
+
+.dd-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.dd-modal-compact .ant-modal-close-x {
+  color: #8c8c8c;
+}
+
+.dd-modal-compact .ant-modal-body {
+  padding: 12px 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.dd-modal-compact .ant-modal-footer {
+  border-top: 1px solid #f0f0f0;
+  padding: 8px 16px;
+}
+
+.dd-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 内容区域 */
+.dd-content {
+  font-size: 13px;
+}
+
+/* 缺陷标题/摘要 */
+.dd-summary {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* 状态信息行 */
+.dd-status-row {
+  background: #fafafa;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+/* 单行字段 */
+.dd-field-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.dd-field-label {
+  color: #8c8c8c;
+  font-size: 12px;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.dd-field-value {
+  color: #303133;
+  word-break: break-word;
+  flex: 1;
+}
+
+.dd-field-value.empty {
+  color: #bfbfbf;
+}
+
+/* 多行字段 - 自适应高度 */
+.dd-multiline-field {
+  margin-bottom: 8px;
+  margin-top: 8px;
+}
+
+.dd-multiline-field .dd-field-label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.dd-multiline-value {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: #303133;
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 附件区域 */
+.dd-attachments-section {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+.dd-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.dd-section-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #595959;
+}
+
+.dd-attachment-list {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.dd-no-data {
+  text-align: center;
+  color: #999;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.dd-attachment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e8e8e8;
+}
+
+.dd-attachment-item:last-child {
+  border-bottom: none;
+}
+
+.dd-attachment-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dd-attachment-name {
+  color: #1890ff;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.dd-attachment-name:hover {
+  text-decoration: underline;
+}
+
+.dd-attachment-size {
+  color: #8c8c8c;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.dd-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .dd-modal-compact .ant-modal-body {
+    padding: 10px 12px;
+  }
+  
+  .dd-field-label {
+    min-width: 50px;
+  }
+}

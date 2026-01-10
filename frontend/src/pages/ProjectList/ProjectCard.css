@@ -1,0 +1,72 @@
+.project-card {
+  height: 220px;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.project-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  border-color: #1890ff;
+}
+
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.project-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-name {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.project-card-content {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 48px);
+}
+
+.project-description {
+  flex: 1;
+  color: rgba(0, 0, 0, 0.65);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.project-meta {
+  display: flex;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.project-meta .anticon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+.project-date {
+  margin-left: 2px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .project-card {
+    height: auto;
+    min-height: 180px;
+  }
+}

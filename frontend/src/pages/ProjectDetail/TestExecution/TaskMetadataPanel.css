@@ -1,0 +1,128 @@
+.task-metadata-panel {
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.task-metadata-header {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.task-metadata-form {
+  max-width: 100%;
+}
+
+/* 紧凑显示表单项 */
+.task-metadata-form .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* 统一所有输入框和选择器字体大小为12px */
+.task-metadata-form .ant-input,
+.task-metadata-form .ant-select-selection-item,
+.task-metadata-form .ant-picker-input input,
+.task-metadata-form .ant-picker input {
+  font-size: 12px !important;
+}
+
+/* DatePicker placeholder字体大小 */
+.task-metadata-form .ant-picker-input > input::placeholder {
+  font-size: 12px !important;
+}
+
+/* 标签文字紧凑 */
+.task-metadata-form .ant-form-item-label {
+  padding-bottom: 0;
+}
+
+.task-metadata-form .ant-form-item-label > label {
+  font-size: 12px;
+  height: 24px;
+}
+
+/* 只读模式 - 白色背景 */
+.task-metadata-form .ant-input[disabled],
+.task-metadata-form .ant-select-disabled.ant-select:not(.ant-select-customize-input) .ant-select-selector,
+.task-metadata-form .ant-picker.ant-picker-disabled,
+.task-metadata-form .ant-input[disabled]:hover,
+.task-metadata-form textarea.ant-input[disabled] {
+  color: rgba(0, 0, 0, 0.85);
+  border-color: #f0f0f0;
+  cursor: default;
+}
+
+/* 禁用状态下选择框的文字颜色 */
+.task-metadata-form .ant-select-disabled.ant-select:not(.ant-select-customize-input) .ant-select-selector {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+/* 用例表格容器不产生横向滚动 */
+.selected-cases-section {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* 表格自适应宽度 */
+.selected-cases-section .ant-table-wrapper {
+  width: 100%;
+}
+
+.selected-cases-section .ant-table {
+  width: 100%;
+}
+
+/* 只读模式下的Select组件样式 - 灰色背景 */
+.task-metadata-form .metadata-select-readonly .ant-select-selector,
+.task-metadata-form .ant-select-disabled.metadata-select-readonly .ant-select-selector {
+  background-color: #f5f5f5 !important;
+  color: rgba(0, 0, 0, 0.65) !important;
+  cursor: default !important;
+  border-color: #d9d9d9 !important;
+}
+
+.task-metadata-form .metadata-select-readonly .ant-select-selection-item,
+.task-metadata-form .ant-select-disabled.metadata-select-readonly .ant-select-selection-item {
+  color: rgba(0, 0, 0, 0.65) !important;
+}
+
+/* 只读模式下的DatePicker组件样式 - 灰色背景 */
+.task-metadata-form .metadata-picker-readonly.ant-picker-disabled {
+  background-color: #f5f5f5 !important;
+  border-color: #d9d9d9 !important;
+}
+
+.task-metadata-form .metadata-picker-readonly .ant-picker-input > input {
+  color: rgba(0, 0, 0, 0.65) !important;
+}
+
+/* 单行显示单元格样式 - 用于Web/API表格 */
+.single-line-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 用例详情按钮样式 */
+.selected-cases-section .ant-btn-text:hover {
+  background-color: #e6f7ff;
+}
+
+/* 多行Remark输入框样式 - 用于Manual类型 */
+.selected-cases-section .ant-input-textarea textarea {
+  font-size: 12px;
+}
+
+/* Tooltip内容样式 */
+.ant-tooltip-inner {
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+

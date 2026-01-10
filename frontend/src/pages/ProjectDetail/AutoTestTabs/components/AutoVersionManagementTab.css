@@ -1,0 +1,48 @@
+.auto-version-management {
+  padding: 16px;
+}
+
+.version-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.file-name {
+  font-weight: 500;
+  color: #1890ff;
+  margin-right: 8px;
+}
+
+.file-info {
+  color: #666;
+  font-size: 12px;
+}
+
+.editable-remark {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  min-height: 32px;
+  line-height: 24px;
+  color: #666;
+}
+
+.editable-remark:hover {
+  background-color: #f0f0f0;
+  color: #1890ff;
+}
+
+.editable-remark:empty::before {
+  content: '点击添加备注...';
+  color: #bbb;
+}

@@ -1,0 +1,7 @@
+.auto-test-tab {
+  padding: 4px;
+}
+
+.role1-tab, .role2-tab, .role3-tab, .role4-tab {
+  /* 容器样式复用 ManualTestTabs 的样式 */
+}

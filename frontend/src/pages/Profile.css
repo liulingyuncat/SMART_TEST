@@ -1,0 +1,253 @@
+/* Profile 页面样式 */
+
+.profile-container {
+  padding: 16px;
+  background: #fafafa;
+  min-height: 100%;
+}
+
+/* Tabs 样式 */
+.profile-container .ant-card {
+  margin-bottom: 16px;
+  border-radius: 4px;
+  border: 1px solid #e8e8e8;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.profile-container .ant-card-head {
+  padding: 0 0 12px 0;
+  border-bottom: none;
+  background: none;
+}
+
+.profile-container .ant-card-body {
+  padding: 16px;
+}
+
+.profile-container .ant-card-head-title {
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* 卡片标题样式 */
+.profile-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #1890ff;
+  padding-bottom: 6px;
+  display: inline-block;
+}
+
+/* 信息容器 */
+.profile-info-container {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr 80px 1fr;
+  gap: 10px 16px;
+  font-size: 13px;
+}
+
+.profile-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  max-width: 550px;
+  gap: 24px;
+  transition: background-color 0.2s;
+}
+
+.profile-info-row:hover {
+  background-color: #fafafa;
+}
+
+.profile-info-row:last-child {
+  border-bottom: none;
+}
+
+.profile-info-label {
+  font-weight: 600;
+  color: #000;
+  min-width: 90px;
+  flex-shrink: 0;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.profile-info-value {
+  color: #000;
+  word-break: break-all;
+  flex: 1;
+  max-width: 300px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.profile-info-value-with-action {
+  color: #000;
+  word-break: break-all;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+  flex: 1;
+  max-width: 300px;
+}
+
+/* 安全设置项 */
+.profile-security-item {
+  background: #fafafa;
+  padding: 12px 12px;
+  border-radius: 4px;
+  border: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+
+.profile-security-item:hover {
+  background: #f5f5f5;
+  border-color: #e8e8e8;
+}
+
+.profile-security-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: auto;
+  max-width: 500px;
+  flex: 1;
+}
+
+.profile-security-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #000;
+}
+
+.profile-security-title-with-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: #000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.profile-security-hint {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+}
+
+/* Button 样式 */
+.profile-container .ant-btn-primary {
+  font-size: 13px;
+  height: 28px;
+  line-height: 28px;
+  padding: 0 12px;
+  border-radius: 4px;
+}
+
+.profile-container .ant-btn {
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.profile-action-btn {
+  color: #1890ff !important;
+  padding: 4px 6px;
+  margin: 0;
+  min-width: auto;
+  height: auto;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.profile-action-btn:hover {
+  color: #40a9ff !important;
+  background-color: rgba(24, 144, 255, 0.05) !important;
+}
+
+/* 加载状态 */
+.profile-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.profile-loading-card {
+  padding: 24px;
+}
+
+/* Token 部分样式 */
+.profile-container .token-section {
+  font-size: 13px;
+}
+
+.profile-container .token-description {
+  margin-bottom: 12px;
+  padding: 0;
+  background: none;
+  border-left: none;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.profile-container .token-display {
+  background: #f5f5f5;
+  padding: 8px;
+  border-radius: 2px;
+  margin: 8px 0;
+  word-break: break-all;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.profile-container .token-warning {
+  background: none;
+  border-left: none;
+  padding: 0;
+  margin: 8px 0;
+  border-radius: 0;
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 12px;
+  border-top: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 8px 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .profile-info-grid {
+    grid-template-columns: 70px 1fr;
+    gap: 8px 12px;
+  }
+
+  .profile-security-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .profile-info-grid > div:nth-child(3),
+  .profile-info-grid > div:nth-child(4) {
+    display: none;
+  }
+}

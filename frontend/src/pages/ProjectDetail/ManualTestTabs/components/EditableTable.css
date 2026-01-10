@@ -1,0 +1,45 @@
+.editable-table-container {
+  width: 100%;
+  padding: 4px;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.table-toolbar {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editable-table-container .ant-table {
+  font-size: 13px;
+}
+
+.editable-table-container .ant-table-cell {
+  padding: 4px 8px;
+}
+
+.editable-table-container .ant-input,
+.editable-table-container .ant-input-textarea {
+  font-size: 13px;
+}
+
+.editable-table-container .ant-select {
+  font-size: 13px;
+}
+
+/* 编辑状态的单元格样式 */
+.editable-table-container .ant-table-cell.ant-table-cell-row-hover {
+  background: #f5f5f5;
+}
+
+/* 高亮行样式 */
+.editable-table-container .highlighted-row {
+  background-color: #e6f7ff !important;
+  transition: background-color 0.3s ease;
+}
+
+.editable-table-container .highlighted-row:hover {
+  background-color: #bae7ff !important;
+}

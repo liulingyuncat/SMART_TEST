@@ -1,0 +1,102 @@
+/* UserManage 页面样式 */
+
+.user-manage-container {
+  padding: 8px;
+  background: #fff;
+}
+
+/* Tabs 样式 */
+.user-manage-container .ant-tabs {
+  margin-bottom: 0;
+}
+
+.user-manage-container .ant-tabs-nav {
+  margin-bottom: 4px;
+}
+
+.user-manage-container .ant-tabs-tab {
+  font-size: 15px;
+  padding: 8px 12px;
+}
+
+.user-manage-container .ant-tabs-tab-btn {
+  font-size: 15px;
+  font-size: 13px;
+}
+
+/* Card 样式 */
+.user-manage-card {
+  margin-top: 4px;
+}
+
+.user-manage-card .ant-card-body {
+  padding: 8px;
+}
+
+/* Table 样式 */
+.user-manage-container .ant-table {
+  font-size: 13px;
+}
+
+.user-manage-container .ant-table-thead > tr > th {
+  padding: 8px;
+  font-weight: 600;
+}
+
+.user-manage-container .ant-table-tbody > tr > td {
+  padding: 8px;
+}
+
+/* 人员分配部分样式 */
+.user-manage-container .user-assign-section {
+  margin-top: 0;
+  padding: 8px;
+  background: #fff;
+  border-radius: 2px;
+}
+
+.user-manage-container .user-assign-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.user-manage-container .user-assign-controls label {
+  font-weight: 600;
+  margin-right: 0;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.user-manage-container .user-assign-controls .ant-select {
+  min-width: 250px;
+}
+
+/* Spin 加载状态 */
+.user-manage-container .ant-spin {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+/* Transfer 组件样式 */
+.user-manage-container .ant-transfer {
+  font-size: 13px;
+}
+
+.user-manage-container .ant-transfer-list-header {
+  padding: 6px;
+  font-size: 13px;
+}
+
+.user-manage-container .ant-transfer-list-content {
+  font-size: 13px;
+}
+
+.user-manage-container .ant-transfer-list-body {
+  min-height: 200px;
+}
+

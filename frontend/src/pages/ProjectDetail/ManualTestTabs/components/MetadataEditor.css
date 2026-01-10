@@ -1,0 +1,37 @@
+.metadata-editor {
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 4px;
+}
+
+.metadata-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metadata-field label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.save-indicator.saving {
+  color: #1890ff;
+}
+
+.save-indicator.saved {
+  color: #52c41a;
+}
+
+.save-indicator.failed {
+  color: #ff4d4f;
+}

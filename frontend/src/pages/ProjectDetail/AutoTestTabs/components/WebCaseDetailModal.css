@@ -1,0 +1,37 @@
+/* Web用例详情弹窗样式 - 与ApiCaseDetailModal保持一致 */
+
+.wcd-modal-compact .ant-modal-body {
+  padding: 16px 24px;
+}
+
+.wcd-modal-title {
+  display: flex;
+  align-items: center;
+}
+
+.wcd-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.wcd-form .ant-form-item-label > label {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+/* 脚本代码输入框特殊样式 */
+.wcd-form textarea[name="script_code"] {
+  background-color: #1e1e1e !important;
+  color: #d4d4d4 !important;
+  border: 1px solid #3c3c3c;
+}
+
+.wcd-form textarea[name="script_code"]:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.wcd-form textarea[name="script_code"]::placeholder {
+  color: #808080;
+}

@@ -1,0 +1,7 @@
+.overall-cases-tab {
+  padding: 0;
+}
+
+.overall-cases-tab .ant-spin-container {
+  min-height: 400px;
+}

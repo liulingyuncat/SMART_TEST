@@ -1,0 +1,53 @@
+.project-detail-container {
+  padding: 8px;
+  background: #fff;
+}
+
+.project-detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.project-detail-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.project-detail-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+/* 减少Card的内边距 */
+.project-detail-container .ant-card {
+  margin-top: 4px;
+}
+
+.project-detail-container .ant-card-body {
+  padding: 8px;
+}
+
+/* 减少Tabs的内边距 */
+.project-detail-container .ant-tabs {
+  margin-bottom: 0;
+}
+
+.project-detail-container .ant-tabs-nav {
+  margin-bottom: 4px;
+}
+
+/* Tab文字大小调整 */
+.project-detail-container .ant-tabs-tab {
+  font-size: 15px;
+  padding: 8px 12px;
+}
+
+.project-detail-container .ant-tabs-tab-btn {
+  font-size: 15px;
+  font-size: 13px;
+}

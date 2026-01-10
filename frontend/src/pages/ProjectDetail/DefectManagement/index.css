@@ -1,0 +1,227 @@
+.defect-management-container {
+  padding: 0;
+}
+
+/* 缺陷列表 */
+.defect-list-container {
+  padding: 16px 0;
+}
+
+.defect-list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.defect-list-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.defect-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.defect-filter-row .ant-select {
+  min-width: 140px;
+}
+
+.defect-filter-row .ant-input-search {
+  max-width: 300px;
+}
+
+/* 缺陷表格 */
+.defect-table .defect-id-link {
+  color: #1890ff;
+  cursor: pointer;
+}
+
+.defect-table .defect-id-link:hover {
+  text-decoration: underline;
+}
+
+.defect-summary-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 缺陷详情/编辑模态框 */
+.defect-form-container {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 16px;
+}
+
+.defect-form-container .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.defect-form-container .ant-form-item-label {
+  font-weight: 500;
+}
+
+/* 附件区域 */
+.defect-attachments {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.defect-attachments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.defect-attachments-title {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.defect-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-attachment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+.defect-attachment-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.defect-attachment-name {
+  color: #1890ff;
+  cursor: pointer;
+}
+
+.defect-attachment-name:hover {
+  text-decoration: underline;
+}
+
+.defect-attachment-size {
+  color: #999;
+  font-size: 12px;
+}
+
+.defect-attachment-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 配置管理 */
+.defect-config-container {
+  padding: 16px 0;
+}
+
+.defect-config-section {
+  margin-bottom: 24px;
+}
+
+.defect-config-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.defect-config-section-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.defect-config-table {
+  width: 100%;
+}
+
+/* 统计卡片 */
+.defect-stats-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.defect-stat-card {
+  flex: 1;
+  min-width: 150px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.defect-stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1890ff;
+}
+
+.defect-stat-label {
+  margin-top: 8px;
+  color: #666;
+  font-size: 14px;
+}
+
+/* 导入结果 */
+.import-result {
+  padding: 16px;
+}
+
+.import-result-summary {
+  margin-bottom: 16px;
+}
+
+.import-result-errors {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.import-result-error-item {
+  padding: 4px 0;
+  color: #ff4d4f;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .defect-list-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .defect-filter-row .ant-select,
+  .defect-filter-row .ant-input-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  .defect-stats-row {
+    flex-direction: column;
+  }
+
+  .defect-stat-card {
+    min-width: 100%;
+  }
+}

@@ -1,0 +1,46 @@
+.raw-document-tab {
+  padding: 0;
+}
+
+.raw-document-tip {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background-color: #f0f2f5;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.raw-document-tab .ant-table {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.raw-document-tab .ant-table-thead > tr > th {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  background-color: #fafafa;
+}
+
+.raw-document-tab .ant-table-tbody > tr > td {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.raw-document-tab .ant-btn-link {
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.raw-document-tab .ant-btn-sm {
+  font-size: 12px;
+  padding: 2px 6px;
+  height: auto;
+}
+
+.raw-document-tab .ant-tag {
+  font-size: 11px;
+  padding: 0 4px;
+  line-height: 18px;
+}

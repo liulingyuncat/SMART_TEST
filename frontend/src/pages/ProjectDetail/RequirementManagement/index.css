@@ -1,0 +1,87 @@
+.requirement-management-container {
+  height: calc(100vh - 180px); /* 减去顶部导航和标题的高度 */
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-title-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.panel-title {
+  color: #262626;
+}
+
+.collapsed-panel-trigger {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 60px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: background 0.3s;
+}
+
+.collapsed-panel-trigger:hover {
+  background: #e6f7ff;
+}
+
+.collapsed-panel-trigger.right {
+  left: auto;
+  right: 0;
+  border-left: 1px solid #e8e8e8;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+}
+
+.requirement-management-container .drag-handle {
+  width: 5px;
+  cursor: col-resize;
+  background-color: #f0f0f0;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+
+.requirement-management-container .drag-handle:hover {
+  background-color: #d9d9d9;
+}
+
+.requirement-management-container .drag-handle:active {
+  background-color: #1890ff;
+}
+
+/* 响应式布局：小屏幕改为上下布局 */
+@media (max-width: 1280px) {
+  .requirement-management-container .ant-row {
+    flex-direction: column;
+  }
+  
+  .requirement-management-container .ant-col {
+    width: 100% !important;
+    height: 50% !important;
+  }
+  
+  .requirement-management-container .drag-handle {
+    display: none;
+  }
+}
