@@ -32,9 +32,11 @@ func getFrontendBuildPath() string {
 	log.Printf("Executable directory: %s", exeDir)
 
 	// 尝试多种路径：
-	// 1. server.exe 在 backend/ 目录下 -> 向上1级到项目根目录
+	// 1. Docker 容器路径: /app/server -> /app/frontend/build
+	// 2. 本地开发路径: backend/ -> webtest/frontend/build
 	candidates := []string{
-		filepath.Join(exeDir, "..", "frontend", "build"), // backend/ -> webtest/frontend/build
+		filepath.Join(exeDir, "frontend", "build"),       // Docker: /app/frontend/build
+		filepath.Join(exeDir, "..", "frontend", "build"), // Local: backend/ -> webtest/frontend/build
 	}
 
 	for _, candidate := range candidates {
