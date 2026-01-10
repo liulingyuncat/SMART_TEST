@@ -165,6 +165,11 @@ func (m *MockManualTestCaseRepository) DecrementOrderAfter(projectID uint, caseT
 	return args.Error(0)
 }
 
+func (m *MockManualTestCaseRepository) IncrementOrderAfter(projectID uint, caseType string, afterOrder int) error {
+	args := m.Called(projectID, caseType, afterOrder)
+	return args.Error(0)
+}
+
 func (m *MockManualTestCaseRepository) GetCaseGroupName(projectID uint, groupID uint) (string, error) {
 	args := m.Called(projectID, groupID)
 	return args.String(0), args.Error(1)
