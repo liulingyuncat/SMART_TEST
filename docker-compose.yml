@@ -5,9 +5,15 @@
 # 包含: webtest服务 + PostgreSQL数据库
 #
 # 使用方法:
-#   1. cp .env.example .env
-#   2. 修改 .env 中的密码和密钥
-#   3. docker-compose up -d
+#   1. (可选) 创建 .env 文件设置自定义密码
+#   2. docker-compose up -d
+#
+# .env 文件示例:
+#   DB_PASSWORD=your_secure_password
+#   JWT_SECRET=your_jwt_secret_key
+#   MCP_AUTH_TOKEN=your_mcp_token
+#
+# 如不创建 .env 文件，将使用默认值（仅用于测试）
 # =============================================================================
 
 version: '3.8'
@@ -20,6 +26,8 @@ services:
     image: ghcr.io/liulingyuncat/smart_test:latest
     container_name: webtest
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "8443:8443"   # Web 服务 (HTTPS)
       - "16410:16410" # MCP 服务 (HTTP)
@@ -66,6 +74,8 @@ services:
     image: postgres:16-alpine
     container_name: webtest-postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - POSTGRES_DB=webtest
       - POSTGRES_USER=webtest
