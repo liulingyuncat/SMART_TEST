@@ -39,6 +39,11 @@ func (m *MockProjectRepository) ExistsByName(name string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockProjectRepository) DeleteWithCascade(id uint) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
 // MockProjectMemberRepository Mock项目成员仓储
 type MockProjectMemberRepository struct {
 	mock.Mock
@@ -73,6 +78,11 @@ func (m *MockProjectMemberRepository) GetProjectMembers(projectID uint) ([]model
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]models.ProjectMember), args.Error(1)
+}
+
+func (m *MockProjectMemberRepository) BatchUpdateMembers(projectID uint, managers []uint, members []uint) error {
+	args := m.Called(projectID, managers, members)
+	return args.Error(0)
 }
 
 // TestProjectService_GetUserProjects 测试获取用户项目列表
