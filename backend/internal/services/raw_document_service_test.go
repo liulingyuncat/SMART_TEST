@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"webtest/internal/models"
 
@@ -10,6 +11,7 @@ import (
 
 // MockRawDocumentRepository 模拟存储库用于测试
 type MockRawDocumentRepository struct {
+	mu   sync.RWMutex
 	docs map[uint]*models.RawDocument
 }
 
@@ -20,11 +22,15 @@ func NewMockRawDocumentRepository() *MockRawDocumentRepository {
 }
 
 func (m *MockRawDocumentRepository) Create(doc *models.RawDocument) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.docs[doc.ID] = doc
 	return nil
 }
 
 func (m *MockRawDocumentRepository) GetByID(id uint) (*models.RawDocument, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if doc, exists := m.docs[id]; exists {
 		return doc, nil
 	}
@@ -32,6 +38,8 @@ func (m *MockRawDocumentRepository) GetByID(id uint) (*models.RawDocument, error
 }
 
 func (m *MockRawDocumentRepository) FindByID(id uint) (*models.RawDocument, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if doc, exists := m.docs[id]; exists {
 		return doc, nil
 	}
@@ -39,6 +47,8 @@ func (m *MockRawDocumentRepository) FindByID(id uint) (*models.RawDocument, erro
 }
 
 func (m *MockRawDocumentRepository) ListByProjectID(projectID uint) ([]*models.RawDocument, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var result []*models.RawDocument
 	for _, doc := range m.docs {
 		if doc.ProjectID == projectID {
@@ -49,11 +59,15 @@ func (m *MockRawDocumentRepository) ListByProjectID(projectID uint) ([]*models.R
 }
 
 func (m *MockRawDocumentRepository) Update(doc *models.RawDocument) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.docs[doc.ID] = doc
 	return nil
 }
 
 func (m *MockRawDocumentRepository) UpdateStatus(id uint, status string, progress int, filename string, filepath string, filesize int64, convertError string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if doc, exists := m.docs[id]; exists {
 		doc.ConvertStatus = status
 		doc.ConvertProgress = progress
@@ -69,6 +83,8 @@ func (m *MockRawDocumentRepository) UpdateStatus(id uint, status string, progres
 }
 
 func (m *MockRawDocumentRepository) GetConvertStatus(id uint) (*models.ConvertStatusResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if doc, exists := m.docs[id]; exists {
 		return &models.ConvertStatusResponse{
 			Status:            doc.ConvertStatus,
