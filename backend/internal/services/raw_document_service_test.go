@@ -53,7 +53,7 @@ func (m *MockRawDocumentRepository) Update(doc *models.RawDocument) error {
 	return nil
 }
 
-func (m *MockRawDocumentRepository) UpdateStatus(id uint, status string, progress int, filename string, filesize int64, convertError string) error {
+func (m *MockRawDocumentRepository) UpdateStatus(id uint, status string, progress int, filename string, filepath string, filesize int64, convertError string) error {
 	if doc, exists := m.docs[id]; exists {
 		doc.ConvertStatus = status
 		doc.ConvertProgress = progress

@@ -679,10 +679,11 @@ func TestClearAICases_Success(t *testing.T) {
 	mockRepo.On("DeleteByCaseType", uint(1), "ai").Return(nil)
 
 	// 执行测试
-	err := service.ClearAICases(1, 123)
+	deletedCount, err := service.ClearAICases(1, 123)
 
 	// 断言
 	assert.NoError(t, err)
+	assert.Greater(t, deletedCount, 0)
 	mockProjectService.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)
 }
@@ -701,7 +702,7 @@ func TestClearAICases_PermissionDenied(t *testing.T) {
 	mockProjectService.On("IsProjectMember", uint(1), uint(123)).Return(false, nil)
 
 	// 执行测试
-	err := service.ClearAICases(1, 123)
+	_, err := service.ClearAICases(1, 123)
 
 	// 断言
 	assert.Error(t, err)

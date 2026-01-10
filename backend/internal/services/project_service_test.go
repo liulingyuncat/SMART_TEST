@@ -131,7 +131,8 @@ func TestProjectService_GetUserProjects(t *testing.T) {
 				mockRepo.On("FindProjectsByUserID", tt.userID).Return(tt.mockData, tt.mockError)
 			}
 
-			service := NewProjectService(mockRepo, mockMemberRepo, &gorm.DB{})
+			mockUserRepo := new(MockUserRepository)
+			service := NewProjectService(mockRepo, mockMemberRepo, mockUserRepo, &gorm.DB{})
 
 			projects, err := service.GetUserProjects(tt.userID, tt.role)
 
@@ -206,7 +207,8 @@ func TestProjectService_CreateProject_DuplicateName(t *testing.T) {
 	// Mock ExistsByName返回true(已存在)
 	mockRepo.On("ExistsByName", projectName).Return(true, nil)
 
-	service := NewProjectService(mockRepo, mockMemberRepo, mockDB)
+	mockUserRepo := new(MockUserRepository)
+	service := NewProjectService(mockRepo, mockMemberRepo, mockUserRepo, mockDB)
 
 	project, err := service.CreateProject(projectName, description, creatorID)
 
@@ -234,7 +236,8 @@ func TestProjectService_CreateProject_ExistsByNameError(t *testing.T) {
 	// Mock ExistsByName返回错误
 	mockRepo.On("ExistsByName", projectName).Return(false, errors.New("database error"))
 
-	service := NewProjectService(mockRepo, mockMemberRepo, mockDB)
+	mockUserRepo := new(MockUserRepository)
+	service := NewProjectService(mockRepo, mockMemberRepo, mockUserRepo, mockDB)
 
 	project, err := service.CreateProject(projectName, description, creatorID)
 
@@ -288,7 +291,8 @@ func TestProjectService_IsProjectMember(t *testing.T) {
 
 			mockMemberRepo.On("IsMember", tt.projectID, tt.userID).Return(tt.mockResp, tt.mockError)
 
-			service := NewProjectService(mockRepo, mockMemberRepo, &gorm.DB{})
+			mockUserRepo := new(MockUserRepository)
+			service := NewProjectService(mockRepo, mockMemberRepo, mockUserRepo, &gorm.DB{})
 
 			isMember, err := service.IsProjectMember(tt.projectID, tt.userID)
 
@@ -313,9 +317,10 @@ func TestProjectService_Interface(t *testing.T) {
 func TestNewProjectService(t *testing.T) {
 	mockRepo := new(MockProjectRepository)
 	mockMemberRepo := new(MockProjectMemberRepository)
+	mockUserRepo := new(MockUserRepository)
 	mockDB := &gorm.DB{}
 
-	service := NewProjectService(mockRepo, mockMemberRepo, mockDB)
+	service := NewProjectService(mockRepo, mockMemberRepo, mockUserRepo, mockDB)
 
 	assert.NotNil(t, service)
 }
