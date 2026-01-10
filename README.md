@@ -1,8 +1,29 @@
 # PEVVD智能测试平台 - 用户登录功能
 
+[![CI/CD](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/ci.yml/badge.svg)](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/ci.yml)
+[![Docker Build](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/docker-build.yml/badge.svg)](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/docker-build.yml)
+[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-smart__test-blue?logo=docker)](https://github.com/liulingyuncat/SMART_TEST/pkgs/container/smart_test)
+[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://golang.org/)
+[![Node Version](https://img.shields.io/badge/Node-20-339933?logo=node.js)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 ## 项目概述
 
 这是一个现代化的 智能测试平台,采用前后端分离架构。本文档介绍 T01-用户登录功能的实现。
+
+## 🚀 快速部署
+
+### 使用 Docker (推荐)
+
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/liulingyuncat/smart_test:latest
+
+# 使用 Docker Compose 启动
+docker-compose up -d
+```
+
+详见: [Docker 使用指南](./DOCKER.md) | [GitHub Packages 部署指南](./GITHUB_PACKAGES_DEPLOYMENT.md)
 
 ## 技术栈
 
