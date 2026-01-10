@@ -43,8 +43,8 @@ func (s *versionService) SaveVersion(projectID, userID uint, caseType string) (s
 		return "", fmt.Errorf("unsupported case_type: %s", caseType)
 	}
 
-	// 2. 调用ExcelService导出对应类型用例(版本管理不合并执行结果,传空taskUUID)
-	fileBytes, filename, err := s.excelSvc.ExportCases(projectID, caseType, "")
+	// 2. 调用ExcelService导出对应类型用例(版本管理不合并执行结果,传空taskUUID;默认CN语言,空caseGroup导出所有分组)
+	fileBytes, filename, err := s.excelSvc.ExportCases(projectID, caseType, "", "CN", "")
 	if err != nil {
 		return "", fmt.Errorf("export cases failed: %w", err)
 	}

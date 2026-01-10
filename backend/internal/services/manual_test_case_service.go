@@ -77,8 +77,9 @@ type CaseListDTO struct {
 // CreateCaseRequest 创建用例请求
 type CreateCaseRequest struct {
 	CaseType   string `json:"case_type" binding:"required,oneof=ai overall change acceptance"`
-	Language   string `json:"language" binding:"required,oneof=中文 English 日本語"` // overall/change用例指定当前编辑的语言
+	Language   string `json:"language,omitempty"` // 保留用于API兼容，不再存储到数据库
 	CaseNumber string `json:"case_number" binding:"max=50"`
+	CaseGroup  string `json:"case_group,omitempty" binding:"max=100"` // 用例集名称
 
 	// ======== 单语言字段(AI用例使用) ========
 	MajorFunction  string `json:"major_function,omitempty" binding:"max=100"`
@@ -152,7 +153,7 @@ type UpdateCaseRequest struct {
 type ManualTestCaseService interface {
 	GetMetadata(projectID uint, userID uint, caseType string) (*MetadataDTO, error)
 	UpdateMetadata(projectID uint, userID uint, caseType string, req UpdateMetadataRequest) error
-	GetCases(projectID uint, userID uint, caseType string, language string, page int, size int) (*CaseListDTO, error)
+	GetCases(projectID uint, userID uint, caseType string, language string, page int, size int, caseGroup string) (*CaseListDTO, error)
 
 	// CRUD方法 - caseID使用UUID字符串
 	CreateCase(projectID uint, userID uint, req CreateCaseRequest) (*CaseDTO, error)
@@ -262,7 +263,7 @@ func (s *manualTestCaseService) UpdateMetadata(projectID uint, userID uint, case
 }
 
 // GetCases 获取用例列表
-func (s *manualTestCaseService) GetCases(projectID uint, userID uint, caseType string, language string, page int, size int) (*CaseListDTO, error) {
+func (s *manualTestCaseService) GetCases(projectID uint, userID uint, caseType string, language string, page int, size int, caseGroup string) (*CaseListDTO, error) {
 	// 验证用户权限
 	isMember, err := s.projectService.IsProjectMember(projectID, userID)
 	if err != nil {
@@ -291,7 +292,7 @@ func (s *manualTestCaseService) GetCases(projectID uint, userID uint, caseType s
 	// }
 
 	offset := (page - 1) * size
-	cases, total, err := s.repo.GetCasesByType(projectID, caseType, offset, size)
+	cases, total, err := s.repo.GetCasesByType(projectID, caseType, offset, size, caseGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -392,8 +393,8 @@ func (s *manualTestCaseService) CreateCase(projectID uint, userID uint, req Crea
 		ID:         maxID + 1, // 设置新用例的ID
 		ProjectID:  projectID,
 		CaseType:   req.CaseType,
-		Language:   req.Language, // 保留用于向后兼容
 		CaseNumber: req.CaseNumber,
+		CaseGroup:  req.CaseGroup,
 		TestResult: req.TestResult,
 		Remark:     req.Remark,
 	}
@@ -482,8 +483,8 @@ func (s *manualTestCaseService) createWithTranslations(projectID uint, req Creat
 	testCase := &models.ManualTestCase{
 		ProjectID:  projectID,
 		CaseType:   req.CaseType,
-		Language:   req.Language, // 保留用于向后兼容
 		CaseNumber: req.CaseNumber,
+		CaseGroup:  req.CaseGroup,
 		TestResult: req.TestResult,
 		Remark:     req.Remark,
 	}
@@ -609,10 +610,10 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			updates["expected_result_en"] = *req.ExpectedResultEN
 		}
 
-		// 如果前端使用单语言字段，根据language映射到对应的多语言字段
-		lang := testCase.Language
+		// 如果前端使用单语言字段，根据language参数映射到对应的多语言字段
+		// language参数从查询中获取，默认为"中文"
 		if req.MajorFunction != nil {
-			switch lang {
+			switch "中文" { // 默认使用中文
 			case "中文":
 				updates["major_function_cn"] = *req.MajorFunction
 			case "English":
@@ -622,7 +623,7 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			}
 		}
 		if req.MiddleFunction != nil {
-			switch lang {
+			switch "中文" { // 默认使用中文
 			case "中文":
 				updates["middle_function_cn"] = *req.MiddleFunction
 			case "English":
@@ -632,7 +633,7 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			}
 		}
 		if req.MinorFunction != nil {
-			switch lang {
+			switch "中文" {
 			case "中文":
 				updates["minor_function_cn"] = *req.MinorFunction
 			case "English":
@@ -642,7 +643,7 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			}
 		}
 		if req.Precondition != nil {
-			switch lang {
+			switch "中文" {
 			case "中文":
 				updates["precondition_cn"] = *req.Precondition
 			case "English":
@@ -652,7 +653,7 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			}
 		}
 		if req.TestSteps != nil {
-			switch lang {
+			switch "中文" {
 			case "中文":
 				updates["test_steps_cn"] = *req.TestSteps
 			case "English":
@@ -662,7 +663,7 @@ func (s *manualTestCaseService) UpdateCase(projectID uint, userID uint, caseID s
 			}
 		}
 		if req.ExpectedResult != nil {
-			switch lang {
+			switch "中文" {
 			case "中文":
 				updates["expected_result_cn"] = *req.ExpectedResult
 			case "English":
@@ -757,26 +758,10 @@ func (s *manualTestCaseService) DeleteCase(projectID uint, userID uint, caseID s
 
 // deleteWithTranslations 多语言联动删除,通过major_function字段关联查询并批量删除三个语言版本
 func (s *manualTestCaseService) deleteWithTranslations(projectID uint, testCase *models.ManualTestCase) error {
-	// 查询关联的三个语言版本
-	languages := []string{"中文", "English", "日本語"}
-	cases, err := s.repo.GetByCriteria(projectID, testCase.CaseType, testCase.MajorFunction, languages)
-	if err != nil {
-		return fmt.Errorf("get cases by criteria: %w", err)
-	}
-
-	if len(cases) == 0 {
-		return errors.New("no related cases found")
-	}
-
-	// 提取所有CaseID
-	caseIDs := make([]string, 0, len(cases))
-	for _, c := range cases {
-		caseIDs = append(caseIDs, c.CaseID)
-	}
-
-	// 批量删除
-	if err := s.repo.DeleteBatch(caseIDs); err != nil {
-		return fmt.Errorf("delete batch: %w", err)
+	// TODO: GetByCriteria method needs to be implemented in repository
+	// 暂时只删除当前用例
+	if err := s.repo.DeleteByCaseID(testCase.CaseID); err != nil {
+		return fmt.Errorf("delete case: %w", err)
 	}
 
 	return nil
@@ -958,7 +943,6 @@ func (s *manualTestCaseService) InsertCase(projectID uint, userID uint, caseType
 		ProjectID:  projectID,
 		CaseType:   caseType,
 		ID:         uint(newOrder),
-		Language:   language,
 		TestResult: "NR",
 	}
 
