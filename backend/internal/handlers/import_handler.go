@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"webtest/internal/constants"
+	"webtest/internal/repositories"
 	"webtest/internal/services"
 	"webtest/internal/utils"
 
@@ -14,13 +15,15 @@ import (
 
 // ImportHandler 导入处理器
 type ImportHandler struct {
-	excelService services.ExcelService
+	excelService  services.ExcelService
+	caseGroupRepo *repositories.CaseGroupRepository
 }
 
 // NewImportHandler 创建导入处理器实例
-func NewImportHandler(excelService services.ExcelService) *ImportHandler {
+func NewImportHandler(excelService services.ExcelService, caseGroupRepo *repositories.CaseGroupRepository) *ImportHandler {
 	return &ImportHandler{
-		excelService: excelService,
+		excelService:  excelService,
+		caseGroupRepo: caseGroupRepo,
 	}
 }
 
@@ -34,18 +37,32 @@ func NewImportHandler(excelService services.ExcelService) *ImportHandler {
 // @Success 200 {object} map[string]interface{} "导入结果"
 // @Router /api/manual-cases/:id/import [post]
 func (h *ImportHandler) ImportCases(c *gin.Context) {
-	fmt.Println("========================================")
-	fmt.Println("ImportCases handler called!")
+	fmt.Println("\n========================================")
+	fmt.Println("🔍 [ImportHandler] ImportCases handler called!")
 	fmt.Println("========================================")
 
 	projectID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
+		fmt.Printf("❌ [ImportHandler] 解析projectID失败: %v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": constants.GetErrorMessage(constants.ErrInvalidInput)})
 		return
 	}
 
 	caseType := c.PostForm("caseType")
-	fmt.Printf("ProjectID: %d, CaseType: %s\n", projectID, caseType)
+	// T44: 新增language和case_group参数支持精准导入
+	language := c.PostForm("language")    // CN/JP/EN
+	caseGroup := c.PostForm("case_group") // 用例集名称
+	fmt.Printf("📋 [ImportHandler] 接收参数:\n")
+	fmt.Printf("  ProjectID: %d\n", projectID)
+	fmt.Printf("  CaseType: %q\n", caseType)
+	fmt.Printf("  Language: %q\n", language)
+	fmt.Printf("  CaseGroup: %q (长度: %d)\n", caseGroup, len(caseGroup))
+
+	if caseGroup == "" {
+		fmt.Println("⚠️  [ImportHandler] 警告: case_group参数为空！")
+	} else {
+		fmt.Printf("✅ [ImportHandler] case_group已接收: %q\n", caseGroup)
+	}
 
 	if caseType != "overall" && caseType != "change" && caseType != "acceptance" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": constants.GetErrorMessage(constants.ErrInvalidInput)})
@@ -84,9 +101,21 @@ func (h *ImportHandler) ImportCases(c *gin.Context) {
 		return
 	}
 
+	// 如果提供了case_group，自动创建用例集记录（如果不存在）
+	if caseGroup != "" {
+		fmt.Printf("🗂️  [ImportHandler] 确保用例集存在: %q\n", caseGroup)
+		_, err := h.caseGroupRepo.CreateIfNotExists(uint(projectID), caseType, caseGroup)
+		if err != nil {
+			fmt.Printf("❌ [ImportHandler] 创建用例集失败: %v\n", err)
+			// 不阻止导入继续，只记录警告
+		} else {
+			fmt.Printf("✅ [ImportHandler] 用例集记录已确保存在\n")
+		}
+	}
+
 	// 执行导入
 	fmt.Println("Calling excelService.ImportCases...")
-	updateCount, insertCount, err := h.excelService.ImportCases(uint(projectID), caseType, fileData)
+	updateCount, insertCount, err := h.excelService.ImportCases(uint(projectID), caseType, fileData, language, caseGroup)
 	if err != nil {
 		fmt.Printf("Import failed: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": constants.GetErrorMessage(constants.ErrImportFailed), "details": err.Error()})

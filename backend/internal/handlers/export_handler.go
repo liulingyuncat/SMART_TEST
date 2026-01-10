@@ -99,7 +99,11 @@ func (h *ExportHandler) ExportCases(c *gin.Context) {
 	// 获取可选的task_uuid参数(用于导出执行结果)
 	taskUUID := c.Query("task_uuid")
 
-	fileData, filename, err := h.excelService.ExportCases(uint(projectID), caseType, taskUUID)
+	// T44: 新增language和case_group参数支持按语言导出
+	language := c.Query("language")    // CN/JP/EN
+	caseGroup := c.Query("case_group") // 用例集名称
+
+	fileData, filename, err := h.excelService.ExportCases(uint(projectID), caseType, taskUUID, language, caseGroup)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": constants.GetErrorMessage(constants.ErrExportFailed)})
 		return

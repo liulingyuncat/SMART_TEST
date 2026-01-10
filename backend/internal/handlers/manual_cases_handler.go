@@ -12,12 +12,16 @@ import (
 
 // ManualCasesHandler 手工测试用例处理器
 type ManualCasesHandler struct {
-	service services.ManualTestCaseService
+	service        services.ManualTestCaseService
+	versionService services.VersionService
 }
 
 // NewManualCasesHandler 创建处理器实例
-func NewManualCasesHandler(service services.ManualTestCaseService) *ManualCasesHandler {
-	return &ManualCasesHandler{service: service}
+func NewManualCasesHandler(service services.ManualTestCaseService, versionService services.VersionService) *ManualCasesHandler {
+	return &ManualCasesHandler{
+		service:        service,
+		versionService: versionService,
+	}
 }
 
 // GetMetadata 获取元数据
@@ -125,6 +129,7 @@ func (h *ManualCasesHandler) GetCases(c *gin.Context) {
 	// 获取查询参数
 	caseType := c.DefaultQuery("case_type", "overall")
 	language := c.DefaultQuery("language", "中文")
+	caseGroup := c.Query("case_group") // 获取用例集过滤参数（可选）
 	pageStr := c.DefaultQuery("page", "1")
 	sizeStr := c.DefaultQuery("size", "50")
 
@@ -132,7 +137,7 @@ func (h *ManualCasesHandler) GetCases(c *gin.Context) {
 	size, _ := strconv.Atoi(sizeStr)
 
 	// 调用服务
-	caseList, err := h.service.GetCases(uint(projectID), userID, caseType, language, page, size)
+	caseList, err := h.service.GetCases(uint(projectID), userID, caseType, language, page, size, caseGroup)
 	if err != nil {
 		log.Printf("[Cases Get Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
 		if err.Error() == "无项目访问权限" {
@@ -485,6 +490,7 @@ func (h *ManualCasesHandler) InsertCase(c *gin.Context) {
 		Position     string `json:"position" binding:"required,oneof=before after"`
 		TargetCaseID string `json:"target_case_id" binding:"required"`
 		Language     string `json:"language" binding:"omitempty,oneof=中文 English 日本語"`
+		CaseGroup    string `json:"case_group"` // 用例集名称（可选）
 	}
 	if err = c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
@@ -504,9 +510,9 @@ func (h *ManualCasesHandler) InsertCase(c *gin.Context) {
 	}
 
 	// 调用服务
-	log.Printf("[Insert Case Start] user_id=%d, project_id=%d, type=%s, position=%s, target=%s",
-		userID, projectID, req.CaseType, req.Position, req.TargetCaseID)
-	newCase, err := h.service.InsertCase(uint(projectID), userID, req.CaseType, req.Position, req.TargetCaseID, req.Language)
+	log.Printf("[Insert Case Start] user_id=%d, project_id=%d, type=%s, position=%s, target=%s, case_group=%s",
+		userID, projectID, req.CaseType, req.Position, req.TargetCaseID, req.CaseGroup)
+	newCase, err := h.service.InsertCase(uint(projectID), userID, req.CaseType, req.Position, req.TargetCaseID, req.Language, req.CaseGroup)
 	if err != nil {
 		log.Printf("[Insert Case Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
 		if err.Error() == "无项目访问权限" {
@@ -615,5 +621,174 @@ func (h *ManualCasesHandler) ReassignIDs(c *gin.Context) {
 	log.Printf("[Reassign IDs Success] user_id=%d, project_id=%d, type=%s", userID, projectID, req.CaseType)
 	utils.SuccessResponse(c, gin.H{
 		"message": "重新分配ID成功",
+	})
+}
+
+// SaveMultiLangVersion 保存多语言版本
+// POST /api/v1/projects/:id/manual-cases/save-version
+func (h *ManualCasesHandler) SaveMultiLangVersion(c *gin.Context) {
+	// 获取项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	// 获取用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 调用版本服务保存多语言版本
+	log.Printf("[SaveMultiLangVersion Start] user_id=%d, project_id=%d", userID, projectID)
+	filename, err := h.versionService.SaveMultiLangVersion(uint(projectID), userID)
+	if err != nil {
+		log.Printf("[SaveMultiLangVersion Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
+		utils.ErrorResponse(c, http.StatusInternalServerError, "版本保存失败: "+err.Error())
+		return
+	}
+
+	log.Printf("[SaveMultiLangVersion Success] user_id=%d, project_id=%d, filename=%s", userID, projectID, filename)
+	utils.SuccessResponse(c, gin.H{
+		"filename": filename,
+		"message":  "版本保存成功",
+	})
+}
+
+// CreateCaseForGroup 为指定的用例集创建用例
+// POST /api/v1/projects/:id/case-groups/:groupId/manual-cases
+func (h *ManualCasesHandler) CreateCaseForGroup(c *gin.Context) {
+	// 获取项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	// 获取用例集ID
+	groupIDStr := c.Param("groupId")
+	groupID, err := strconv.ParseUint(groupIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的用例集ID")
+		return
+	}
+
+	// 获取用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 解析请求体
+	var req services.CreateCaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
+		return
+	}
+
+	// 如果没有指定case_type，默认为overall
+	if req.CaseType == "" {
+		req.CaseType = "overall"
+	}
+
+	// 根据groupID获取用例集的group_name
+	groupName, err := h.service.GetCaseGroupName(uint(projectID), uint(groupID))
+	if err != nil {
+		log.Printf("[Get Case Group Failed] user_id=%d, project_id=%d, group_id=%d, error=%v", userID, projectID, groupID, err)
+		utils.ErrorResponse(c, http.StatusNotFound, "用例集不存在")
+		return
+	}
+
+	// 设置请求中的case_group为组名称
+	req.CaseGroup = groupName
+
+	// 调用服务创建用例
+	caseDTO, err := h.service.CreateCase(uint(projectID), userID, req)
+	if err != nil {
+		log.Printf("[Case Create For Group Failed] user_id=%d, project_id=%d, group_id=%d, error=%v", userID, projectID, groupID, err)
+		if err.Error() == "无项目访问权限" {
+			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "创建用例失败")
+		return
+	}
+
+	log.Printf("[Case Create For Group] user_id=%d, project_id=%d, group_id=%d, group_name=%s, case_id=%s", userID, projectID, groupID, groupName, caseDTO.CaseID)
+	utils.SuccessResponse(c, caseDTO)
+}
+
+// UpdateCaseForGroup 为指定的用例集更新用例
+// PUT /api/v1/projects/:id/case-groups/:groupId/manual-cases/:caseId
+func (h *ManualCasesHandler) UpdateCaseForGroup(c *gin.Context) {
+	// 获取项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	// 获取用例集ID
+	groupIDStr := c.Param("groupId")
+	groupID, err := strconv.ParseUint(groupIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的用例集ID")
+		return
+	}
+
+	// 获取用例ID（整数）
+	caseIDStr := c.Param("caseId")
+	caseID, err := strconv.ParseUint(caseIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的用例ID")
+		return
+	}
+
+	// 获取用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 解析请求体
+	var req services.UpdateCaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
+		return
+	}
+
+	// 调用服务更新用例（使用整数ID）
+	err = h.service.UpdateCaseByID(uint(projectID), userID, uint(caseID), req)
+	if err != nil {
+		log.Printf("[Case Update For Group Failed] user_id=%d, project_id=%d, group_id=%d, case_id=%d, error=%v", userID, projectID, groupID, caseID, err)
+		if err.Error() == "无项目访问权限" {
+			utils.ErrorResponse(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if err.Error() == "用例不存在" {
+			utils.ErrorResponse(c, http.StatusNotFound, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "更新用例失败")
+		return
+	}
+
+	log.Printf("[Case Update For Group] user_id=%d, project_id=%d, group_id=%d, case_id=%d", userID, projectID, groupID, caseID)
+	utils.SuccessResponse(c, map[string]interface{}{
+		"code":    0,
+		"message": "更新成功",
+		"data": map[string]interface{}{
+			"case_id": caseID,
+		},
 	})
 }
