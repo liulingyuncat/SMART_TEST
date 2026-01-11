@@ -139,8 +139,14 @@ ENV_EOF
 # ===========================================
 create_directories() {
     log_info "创建数据持久化目录..."
+    
+    # 应用数据目录 (附件、导出文件等)
     mkdir -p storage
     log_info "storage/ 目录创建完成 ✓"
+    
+    # PostgreSQL 数据目录
+    mkdir -p data/postgres
+    log_info "data/postgres/ 目录创建完成 ✓"
 }
 
 # ===========================================
@@ -152,9 +158,10 @@ show_next_steps() {
     echo -e "${GREEN}   环境准备完成！${NC}"
     echo -e "${GREEN}================================================${NC}"
     echo ""
-    echo -e "${CYAN}已生成的文件:${NC}"
-    echo "  ├── .env          # 环境变量配置 (含随机生成的安全密钥)"
-    echo "  └── storage/      # 数据持久化目录 (附件、导出文件等)"
+    echo -e "${CYAN}已生成的文件和目录:${NC}"
+    echo "  ├── .env            # 环境变量配置 (含随机生成的安全密钥)"
+    echo "  ├── storage/        # 应用数据目录 (附件、导出文件等)"
+    echo "  └── data/postgres/  # PostgreSQL 数据库目录"
     echo ""
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}   后续步骤说明${NC}"

@@ -4,16 +4,18 @@
 # 生产环境容器编排配置
 # 包含: webtest服务 + PostgreSQL数据库
 #
-# 使用方法:
-#   1. (可选) 创建 .env 文件设置自定义密码
-#   2. docker-compose up -d
+# 环境准备：Docker 和 Docker Compose 已安装
+# 1.创建一个工程文件夹，如 ~/smart_test
+# 2.在该文件夹内复制 install.sh和docker-compose.yml 文件
+# 3.执行安装脚本: ./install.sh(chmod +x install.sh)
+# 4.拉取最新镜像:docker compose pull
+# 5.运行在当前文件夹：docker compose up -d
 #
 # .env 文件示例:
 #   DB_PASSWORD=your_secure_password
 #   JWT_SECRET=your_jwt_secret_key
 #   MCP_AUTH_TOKEN=your_mcp_token
 #
-# 如不创建 .env 文件，将使用默认值（仅用于测试）
 # =============================================================================
 
 version: '3.8'
@@ -82,7 +84,8 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-webtest_default_pass_change_me}
       - TZ=Asia/Shanghai
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # 使用本地目录挂载，方便备份和管理
+      - ./data/postgres:/var/lib/postgresql/data
     networks:
       - webtest-network
     healthcheck:
@@ -107,6 +110,7 @@ networks:
 # -----------------------------------------------------------------------------
 # 数据卷配置
 # -----------------------------------------------------------------------------
-volumes:
-  postgres_data:
-    driver: local
+# 注意: 本配置使用本地目录挂载而非 Docker 命名卷
+# 数据目录:
+#   - ./data/postgres  PostgreSQL 数据库文件
+#   - ./storage        应用数据 (附件、导出文件等)
