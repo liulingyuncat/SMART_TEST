@@ -1,256 +1,256 @@
 #!/bin/bash
-# ===========================================
-# SMART TEST 平台部署前安装脚本
-# 用于生成必要的运行时文件
-# ===========================================
+# =============================================================================
+# SMART TEST 平台 - 生产环境一键部署脚本
+#
+# 用法: curl -sSL https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/install.sh | bash
+# 或者: ./install.sh
+#
+# 本脚本会生成:
+#   - docker-compose.yml
+#   - .env (包含随机生成的安全密钥)
+#   - storage/ 目录 (数据持久化)
+# =============================================================================
 
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-CERTS_DIR="$BACKEND_DIR/certs"
-STORAGE_DIR="$BACKEND_DIR/storage"
 
 # 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+echo ""
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}   SMART TEST 平台 - 生产环境部署${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+# ===========================================
+# 1. 检查 Docker 环境
+# ===========================================
+check_docker() {
+    log_info "检查 Docker 环境..."
+    
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker 未安装，请先安装 Docker"
+        echo "  安装指南: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+    
+    if ! docker info &> /dev/null; then
+        log_error "Docker 服务未运行，请启动 Docker"
+        exit 1
+    fi
+    
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        log_error "Docker Compose 未安装"
+        exit 1
+    fi
+    
+    log_info "Docker 环境检查通过 ✓"
 }
 
 # ===========================================
-# 1. 创建必要的目录结构
+# 2. 生成随机密钥
 # ===========================================
-create_directories() {
-    log_info "创建必要的目录结构..."
-    
-    # 存储目录
-    mkdir -p "$STORAGE_DIR/static"
-    mkdir -p "$STORAGE_DIR/attachments"
-    mkdir -p "$STORAGE_DIR/versions"
-    mkdir -p "$STORAGE_DIR/exports"
-    mkdir -p "$STORAGE_DIR/raw_documents"
-    mkdir -p "$STORAGE_DIR/defects"
-    mkdir -p "$STORAGE_DIR/tmp"
-    
-    # 证书目录
-    mkdir -p "$CERTS_DIR"
-    
-    # 后端临时目录
-    mkdir -p "$BACKEND_DIR/tmp"
-    
-    log_info "目录结构创建完成"
+generate_secret() {
+    local length=${1:-32}
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 $length | tr -d '=/+' | head -c $length
+    else
+        head -c $length /dev/urandom | base64 | tr -d '=/+' | head -c $length
+    fi
 }
 
 # ===========================================
-# 2. 生成自签名 HTTPS 证书
+# 3. 创建 docker-compose.yml
 # ===========================================
-generate_certificates() {
-    log_info "检查并生成 HTTPS 证书..."
+create_docker_compose() {
+    log_info "生成 docker-compose.yml..."
     
-    CERT_FILE="$CERTS_DIR/server.crt"
-    KEY_FILE="$CERTS_DIR/server.key"
-    
-    # 检查证书是否已存在
-    if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-        log_warn "证书文件已存在，跳过生成"
-        log_info "  - 证书: $CERT_FILE"
-        log_info "  - 私钥: $KEY_FILE"
+    if [ -f "docker-compose.yml" ]; then
+        log_warn "docker-compose.yml 已存在，跳过生成"
         return 0
     fi
     
-    # 检查 openssl 是否可用
-    if ! command -v openssl &> /dev/null; then
-        log_error "openssl 未安装，无法生成证书"
-        log_info "请手动安装 openssl 后重新运行此脚本"
-        return 1
-    fi
-    
-    log_info "使用 openssl 生成自签名证书..."
-    
-    # 证书配置
-    CERT_DAYS=365
-    CERT_CN="localhost"
-    CERT_SUBJ="/C=CN/ST=Beijing/L=Beijing/O=SMART_TEST/OU=Development/CN=$CERT_CN"
-    
-    # 创建证书扩展配置文件
-    CERT_EXT_FILE="$CERTS_DIR/cert_ext.cnf"
-    cat > "$CERT_EXT_FILE" << EOF
-[req]
-default_bits = 2048
-prompt = no
-default_md = sha256
-distinguished_name = dn
-x509_extensions = v3_req
+    cat > docker-compose.yml << 'COMPOSE_EOF'
+# =============================================================================
+# SMART TEST - Production Docker Compose
+# 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
+# =============================================================================
 
-[dn]
-C = CN
-ST = Beijing
-L = Beijing
-O = SMART_TEST
-OU = Development
-CN = localhost
+version: '3.8'
 
-[v3_req]
-basicConstraints = CA:FALSE
-keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-subjectAltName = @alt_names
+services:
+  webtest:
+    image: ghcr.io/liulingyuncat/smart_test:latest
+    container_name: webtest
+    restart: unless-stopped
+    ports:
+      - "8443:8443"   # Web HTTPS
+      - "16410:16410" # MCP HTTP
+    environment:
+      # 数据库配置
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=webtest
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=webtest
+      # 应用配置
+      - JWT_SECRET=${JWT_SECRET}
+      - TZ=Asia/Shanghai
+      # MCP 配置 (可选)
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
+      - MCP_BACKEND_URL=https://localhost:8443
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - webtest-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8443/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
-[alt_names]
-DNS.1 = localhost
-DNS.2 = webtest.local
-DNS.3 = *.webtest.local
-IP.1 = 127.0.0.1
-IP.2 = ::1
-EOF
+  postgres:
+    image: postgres:16-alpine
+    container_name: webtest-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=webtest
+      - POSTGRES_USER=webtest
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - TZ=Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - webtest-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webtest -d webtest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-    # 生成私钥和证书
-    openssl req -x509 -nodes -days $CERT_DAYS \
-        -newkey rsa:2048 \
-        -keyout "$KEY_FILE" \
-        -out "$CERT_FILE" \
-        -config "$CERT_EXT_FILE" \
-        -extensions v3_req
+networks:
+  webtest-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+COMPOSE_EOF
     
-    # 清理临时配置文件
-    rm -f "$CERT_EXT_FILE"
-    
-    # 设置文件权限
-    chmod 600 "$KEY_FILE"
-    chmod 644 "$CERT_FILE"
-    
-    log_info "证书生成完成："
-    log_info "  - 证书: $CERT_FILE"
-    log_info "  - 私钥: $KEY_FILE"
-    log_info "  - 有效期: $CERT_DAYS 天"
-    
-    # 显示证书信息
-    log_info "证书信息："
-    openssl x509 -in "$CERT_FILE" -noout -subject -dates
+    log_info "docker-compose.yml 创建完成 ✓"
 }
 
 # ===========================================
-# 3. 创建环境配置文件
+# 4. 创建 .env 文件
 # ===========================================
 create_env_file() {
-    log_info "检查环境配置文件..."
+    log_info "生成 .env 配置文件..."
     
-    ENV_FILE="$SCRIPT_DIR/.env"
-    ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
-    
-    if [ -f "$ENV_FILE" ]; then
-        log_warn ".env 文件已存在，跳过创建"
+    if [ -f ".env" ]; then
+        log_warn ".env 文件已存在，跳过生成"
+        log_warn "如需重新生成，请先删除现有 .env 文件"
         return 0
     fi
     
-    if [ -f "$ENV_EXAMPLE" ]; then
-        log_info "从 .env.example 复制环境配置..."
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
-        
-        # 生成随机密钥
-        if command -v openssl &> /dev/null; then
-            JWT_SECRET=$(openssl rand -base64 32)
-            DB_PASSWORD=$(openssl rand -hex 16)
-            MCP_TOKEN=$(openssl rand -base64 24)
-            
-            # 替换默认值（适用于 Linux/Mac）
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS
-                sed -i '' "s/default_jwt_secret_please_change_in_production/$JWT_SECRET/" "$ENV_FILE"
-                sed -i '' "s/webtest_default_pass_change_me/$DB_PASSWORD/" "$ENV_FILE"
-                sed -i '' "s/default_mcp_token_change_me/$MCP_TOKEN/" "$ENV_FILE"
-            else
-                # Linux
-                sed -i "s/default_jwt_secret_please_change_in_production/$JWT_SECRET/" "$ENV_FILE"
-                sed -i "s/webtest_default_pass_change_me/$DB_PASSWORD/" "$ENV_FILE"
-                sed -i "s/default_mcp_token_change_me/$MCP_TOKEN/" "$ENV_FILE"
-            fi
-            
-            log_info "已生成随机密钥并写入 .env 文件"
-        fi
-        
-        log_info ".env 文件创建完成"
-    else
-        log_warn ".env.example 不存在，跳过环境配置"
-    fi
+    local db_password=$(generate_secret 24)
+    local jwt_secret=$(generate_secret 48)
+    local mcp_token=$(generate_secret 32)
+    
+    cat > .env << ENV_EOF
+# =============================================================================
+# SMART TEST - 环境变量配置
+# 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
+# 警告: 此文件包含敏感信息，请勿提交到版本控制！
+# =============================================================================
+
+# 数据库密码
+DB_PASSWORD=${db_password}
+
+# JWT 签名密钥 (至少32字符)
+JWT_SECRET=${jwt_secret}
+
+# MCP 服务认证令牌 (可选，用于 AI 工具集成)
+MCP_AUTH_TOKEN=${mcp_token}
+ENV_EOF
+    
+    chmod 600 .env
+    log_info ".env 文件创建完成 ✓"
 }
 
 # ===========================================
-# 4. 检查 MCP 配置文件
+# 5. 创建数据目录
 # ===========================================
-check_mcp_config() {
-    log_info "检查 MCP 配置文件..."
-    
-    MCP_CONFIG="$BACKEND_DIR/config/mcp-server.yaml"
-    
-    if [ -f "$MCP_CONFIG" ]; then
-        log_info "MCP 配置文件存在: $MCP_CONFIG"
-    else
-        log_warn "MCP 配置文件不存在，请确认是否需要手动创建"
-    fi
+create_directories() {
+    log_info "创建数据目录..."
+    mkdir -p storage
+    log_info "storage/ 目录创建完成 ✓"
 }
 
 # ===========================================
-# 5. 设置文件权限
+# 6. 拉取镜像
 # ===========================================
-set_permissions() {
-    log_info "设置文件权限..."
-    
-    # 确保脚本可执行
-    chmod +x "$SCRIPT_DIR/docker-entrypoint.sh" 2>/dev/null || true
-    chmod +x "$SCRIPT_DIR/install.sh" 2>/dev/null || true
-    
-    # 存储目录权限
-    chmod -R 755 "$STORAGE_DIR" 2>/dev/null || true
-    
-    log_info "文件权限设置完成"
+pull_image() {
+    log_info "拉取最新 Docker 镜像..."
+    docker pull ghcr.io/liulingyuncat/smart_test:latest
+    log_info "镜像拉取完成 ✓"
 }
 
 # ===========================================
 # 主函数
 # ===========================================
 main() {
-    echo "=========================================="
-    echo " SMART TEST 平台部署前安装脚本"
-    echo "=========================================="
+    check_docker
     echo ""
     
+    create_docker_compose
+    create_env_file
     create_directories
     echo ""
     
-    generate_certificates
-    echo ""
+    # 询问是否拉取镜像
+    read -p "是否立即拉取 Docker 镜像? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        pull_image
+    fi
     
-    create_env_file
     echo ""
-    
-    check_mcp_config
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}   部署准备完成！${NC}"
+    echo -e "${GREEN}========================================${NC}"
     echo ""
-    
-    set_permissions
+    echo "生成的文件:"
+    echo "  - docker-compose.yml  (容器编排)"
+    echo "  - .env                (环境配置)"
+    echo "  - storage/            (数据目录)"
     echo ""
-    
-    echo "=========================================="
-    log_info "安装脚本执行完成！"
-    echo "=========================================="
+    echo "启动服务:"
+    echo -e "  ${BLUE}docker compose up -d${NC}"
     echo ""
-    log_info "下一步操作："
-    echo "  1. 检查并修改 .env 文件中的配置"
-    echo "  2. 运行 docker-compose up -d 启动服务"
-    echo "  3. 访问 https://localhost:8443"
+    echo "访问地址:"
+    echo -e "  Web 界面: ${BLUE}https://localhost:8443${NC}"
+    echo -e "  MCP 服务: ${BLUE}http://localhost:16410${NC}"
+    echo ""
+    echo "默认账号:"
+    echo -e "  用户名: ${BLUE}admin${NC}"
+    echo -e "  密码:   ${BLUE}admin123${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  首次登录后请立即修改默认密码！${NC}"
     echo ""
 }
 
-# 执行主函数
+# 执行
 main "$@"
