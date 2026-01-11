@@ -105,18 +105,6 @@ const LoginPage = () => {
         {/* 标题 */}
         <div className="login-title">SMART TEST</div>
         <div className="login-subtitle">PEVVD Intelligent Test Platform</div>
-        
-        {/* 版本号 */}
-        <div style={{
-          textAlign: 'center',
-          marginBottom: '24px',
-          fontSize: '12px',
-          color: '#1890ff',
-          fontFamily: 'monospace',
-          fontWeight: 500,
-        }}>
-          v{VERSION}
-        </div>
 
         {/* 表单 */}
         <Form
@@ -186,6 +174,18 @@ const LoginPage = () => {
             <Option value="en">English</Option>
             <Option value="ja">日本語</Option>
           </Select>
+        </div>
+
+        {/* 版本号 - 右下角 */}
+        <div style={{
+          position: 'absolute',
+          bottom: '16px',
+          right: '20px',
+          fontSize: '11px',
+          color: '#8c8c8c',
+          fontFamily: 'monospace',
+        }}>
+          v{VERSION}
         </div>
       </div>
     </div>
