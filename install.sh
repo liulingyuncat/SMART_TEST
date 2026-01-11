@@ -1,12 +1,15 @@
 #!/bin/bash
 # =============================================================================
-# SMART TEST 平台 - 生产环境一键部署脚本
+# SMART TEST 平台 - 生产环境部署准备脚本
 #
-# 用法: curl -sSL https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/install.sh | bash
-# 或者: ./install.sh
+# 功能: 在执行 docker compose 之前，准备必要的环境配置
+#
+# 使用方法:
+#   1. 下载 docker-compose.yml 和 install.sh
+#   2. 运行 ./install.sh 生成配置
+#   3. 运行 docker compose pull && docker compose up -d
 #
 # 本脚本会生成:
-#   - docker-compose.yml
 #   - .env (包含随机生成的安全密钥)
 #   - storage/ 目录 (数据持久化)
 # =============================================================================
@@ -18,16 +21,18 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 echo ""
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}   SMART TEST 平台 - 生产环境部署${NC}"
-echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}================================================${NC}"
+echo -e "${BLUE}   SMART TEST 平台 - 生产环境部署准备${NC}"
+echo -e "${BLUE}================================================${NC}"
 echo ""
 
 # ===========================================
@@ -47,16 +52,40 @@ check_docker() {
         exit 1
     fi
     
-    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    # 检查 docker compose 命令
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
         log_error "Docker Compose 未安装"
         exit 1
     fi
     
     log_info "Docker 环境检查通过 ✓"
+    log_info "Compose 命令: $COMPOSE_CMD"
 }
 
 # ===========================================
-# 2. 生成随机密钥
+# 2. 检查 docker-compose.yml
+# ===========================================
+check_compose_file() {
+    log_info "检查 docker-compose.yml..."
+    
+    if [ ! -f "docker-compose.yml" ]; then
+        log_error "docker-compose.yml 文件不存在！"
+        echo ""
+        echo "请先下载 docker-compose.yml 文件:"
+        echo -e "  ${BLUE}curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/docker-compose.yml${NC}"
+        echo ""
+        exit 1
+    fi
+    
+    log_info "docker-compose.yml 检查通过 ✓"
+}
+
+# ===========================================
+# 3. 生成随机密钥
 # ===========================================
 generate_secret() {
     local length=${1:-32}
@@ -68,92 +97,6 @@ generate_secret() {
 }
 
 # ===========================================
-# 3. 创建 docker-compose.yml
-# ===========================================
-create_docker_compose() {
-    log_info "生成 docker-compose.yml..."
-    
-    if [ -f "docker-compose.yml" ]; then
-        log_warn "docker-compose.yml 已存在，跳过生成"
-        return 0
-    fi
-    
-    cat > docker-compose.yml << 'COMPOSE_EOF'
-# =============================================================================
-# SMART TEST - Production Docker Compose
-# 生成时间: $(date '+%Y-%m-%d %H:%M:%S')
-# =============================================================================
-
-version: '3.8'
-
-services:
-  webtest:
-    image: ghcr.io/liulingyuncat/smart_test:latest
-    container_name: webtest
-    restart: unless-stopped
-    ports:
-      - "8443:8443"   # Web HTTPS
-      - "16410:16410" # MCP HTTP
-    environment:
-      # 数据库配置
-      - DB_TYPE=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=webtest
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=webtest
-      # 应用配置
-      - JWT_SECRET=${JWT_SECRET}
-      - TZ=Asia/Shanghai
-      # MCP 配置 (可选)
-      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
-      - MCP_BACKEND_URL=https://localhost:8443
-    volumes:
-      - ./storage:/app/storage
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - webtest-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8443/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: webtest-postgres
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=webtest
-      - POSTGRES_USER=webtest
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - TZ=Asia/Shanghai
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - webtest-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U webtest -d webtest"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-networks:
-  webtest-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-COMPOSE_EOF
-    
-    log_info "docker-compose.yml 创建完成 ✓"
-}
-
-# ===========================================
 # 4. 创建 .env 文件
 # ===========================================
 create_env_file() {
@@ -161,7 +104,7 @@ create_env_file() {
     
     if [ -f ".env" ]; then
         log_warn ".env 文件已存在，跳过生成"
-        log_warn "如需重新生成，请先删除现有 .env 文件"
+        log_warn "如需重新生成密钥，请先删除现有 .env 文件"
         return 0
     fi
     
@@ -176,10 +119,10 @@ create_env_file() {
 # 警告: 此文件包含敏感信息，请勿提交到版本控制！
 # =============================================================================
 
-# 数据库密码
+# 数据库密码 (PostgreSQL)
 DB_PASSWORD=${db_password}
 
-# JWT 签名密钥 (至少32字符)
+# JWT 签名密钥 (用于用户认证，至少32字符)
 JWT_SECRET=${jwt_secret}
 
 # MCP 服务认证令牌 (可选，用于 AI 工具集成)
@@ -188,24 +131,127 @@ ENV_EOF
     
     chmod 600 .env
     log_info ".env 文件创建完成 ✓"
+    log_info "文件权限已设为 600 (仅所有者可读写)"
 }
 
 # ===========================================
 # 5. 创建数据目录
 # ===========================================
 create_directories() {
-    log_info "创建数据目录..."
+    log_info "创建数据持久化目录..."
     mkdir -p storage
     log_info "storage/ 目录创建完成 ✓"
 }
 
 # ===========================================
-# 6. 拉取镜像
+# 6. 显示后续步骤
 # ===========================================
-pull_image() {
-    log_info "拉取最新 Docker 镜像..."
-    docker pull ghcr.io/liulingyuncat/smart_test:latest
-    log_info "镜像拉取完成 ✓"
+show_next_steps() {
+    echo ""
+    echo -e "${GREEN}================================================${NC}"
+    echo -e "${GREEN}   环境准备完成！${NC}"
+    echo -e "${GREEN}================================================${NC}"
+    echo ""
+    echo -e "${CYAN}已生成的文件:${NC}"
+    echo "  ├── .env          # 环境变量配置 (含随机生成的安全密钥)"
+    echo "  └── storage/      # 数据持久化目录 (附件、导出文件等)"
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}   后续步骤说明${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    
+    # Step 1: 拉取镜像
+    log_step "步骤 1: 拉取 Docker 镜像"
+    echo ""
+    echo "  执行命令:"
+    echo -e "    ${BLUE}$COMPOSE_CMD pull${NC}"
+    echo ""
+    echo "  说明: 从 GitHub Container Registry (ghcr.io) 拉取最新的应用镜像。"
+    echo "        首次拉取可能需要几分钟，取决于网络速度。"
+    echo "        镜像包含: 前端 React 应用 + 后端 Go 服务 + MCP 服务器"
+    echo ""
+    
+    # Step 2: 启动服务
+    log_step "步骤 2: 启动服务"
+    echo ""
+    echo "  执行命令:"
+    echo -e "    ${BLUE}$COMPOSE_CMD up -d${NC}"
+    echo ""
+    echo "  说明: 以后台模式启动所有服务容器。"
+    echo "        -d 参数表示 detached mode (后台运行)"
+    echo "        将启动以下服务:"
+    echo "          • webtest      - 主应用 (Web + API + MCP)"
+    echo "          • postgres     - PostgreSQL 数据库"
+    echo ""
+    
+    # Step 3: 查看状态
+    log_step "步骤 3: 查看服务状态"
+    echo ""
+    echo "  执行命令:"
+    echo -e "    ${BLUE}$COMPOSE_CMD ps${NC}"
+    echo ""
+    echo "  说明: 查看所有容器的运行状态。"
+    echo "        正常情况下，所有服务状态应为 'Up' 或 'running'。"
+    echo ""
+    
+    # Step 4: 查看日志
+    log_step "步骤 4: 查看服务日志 (可选)"
+    echo ""
+    echo "  执行命令:"
+    echo -e "    ${BLUE}$COMPOSE_CMD logs -f webtest${NC}    # 实时查看应用日志"
+    echo -e "    ${BLUE}$COMPOSE_CMD logs -f postgres${NC}   # 实时查看数据库日志"
+    echo -e "    ${BLUE}$COMPOSE_CMD logs --tail=100${NC}    # 查看最近100行日志"
+    echo ""
+    echo "  说明: -f 参数表示 follow mode，实时输出新日志。"
+    echo "        按 Ctrl+C 退出日志查看。"
+    echo ""
+    
+    # 快捷命令
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}   快捷命令 (一键启动)${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    echo "  如果想一次性完成拉取和启动，执行:"
+    echo -e "    ${BLUE}$COMPOSE_CMD pull && $COMPOSE_CMD up -d${NC}"
+    echo ""
+    
+    # 访问信息
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}   访问信息${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    echo "  Web 管理界面:"
+    echo -e "    ${BLUE}https://localhost:8443${NC}"
+    echo ""
+    echo "  MCP 服务地址 (用于 AI 工具集成):"
+    echo -e "    ${BLUE}http://localhost:16410${NC}"
+    echo ""
+    echo "  默认管理员账号:"
+    echo -e "    用户名: ${BLUE}admin${NC}"
+    echo -e "    密码:   ${BLUE}admin123${NC}"
+    echo ""
+    echo -e "  ${YELLOW}⚠️  首次登录后请立即修改默认密码！${NC}"
+    echo ""
+    
+    # 常用运维命令
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}   常用运维命令${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    echo "  停止服务:"
+    echo -e "    ${BLUE}$COMPOSE_CMD down${NC}"
+    echo ""
+    echo "  重启服务:"
+    echo -e "    ${BLUE}$COMPOSE_CMD restart${NC}"
+    echo ""
+    echo "  更新到最新版本:"
+    echo -e "    ${BLUE}$COMPOSE_CMD pull && $COMPOSE_CMD up -d${NC}"
+    echo ""
+    echo "  完全清理 (包括数据卷):"
+    echo -e "    ${BLUE}$COMPOSE_CMD down -v${NC}"
+    echo -e "    ${YELLOW}⚠️  警告: 此命令会删除所有数据！${NC}"
+    echo ""
 }
 
 # ===========================================
@@ -215,41 +261,13 @@ main() {
     check_docker
     echo ""
     
-    create_docker_compose
+    check_compose_file
+    echo ""
+    
     create_env_file
     create_directories
-    echo ""
     
-    # 询问是否拉取镜像
-    read -p "是否立即拉取 Docker 镜像? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-        pull_image
-    fi
-    
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}   部署准备完成！${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-    echo "生成的文件:"
-    echo "  - docker-compose.yml  (容器编排)"
-    echo "  - .env                (环境配置)"
-    echo "  - storage/            (数据目录)"
-    echo ""
-    echo "启动服务:"
-    echo -e "  ${BLUE}docker compose up -d${NC}"
-    echo ""
-    echo "访问地址:"
-    echo -e "  Web 界面: ${BLUE}https://localhost:8443${NC}"
-    echo -e "  MCP 服务: ${BLUE}http://localhost:16410${NC}"
-    echo ""
-    echo "默认账号:"
-    echo -e "  用户名: ${BLUE}admin${NC}"
-    echo -e "  密码:   ${BLUE}admin123${NC}"
-    echo ""
-    echo -e "${YELLOW}⚠️  首次登录后请立即修改默认密码！${NC}"
-    echo ""
+    show_next_steps
 }
 
 # 执行
