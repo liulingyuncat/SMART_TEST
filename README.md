@@ -36,22 +36,59 @@ docker-compose up -d
 ### 生产环境部署
 
 ```bash
-# 1. 运行安装脚本（自动生成证书和随机密钥）
+# 1. 下载部署文件
+curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/install.sh
+chmod +x install.sh
+
+# 2. 运行安装脚本（自动生成随机密钥和目录）
 ./install.sh
 
-# 2. 或手动编辑 .env 文件
-DB_PASSWORD=your_secure_password
-JWT_SECRET=your_jwt_secret_min_32_chars
-MCP_AUTH_TOKEN=your_mcp_token
-
-# 3. 使用 GitHub Container Registry（支持 AMD64/ARM64）
-docker pull ghcr.io/liulingyuncat/smart_test:latest
-docker-compose up -d
+# 3. 拉取镜像并启动
+docker compose pull
+docker compose up -d
 ```
 
 > 📌 **架构支持**: 支持 AMD64 (Intel/AMD x86_64)、ARM64 (Apple Silicon、ARM 服务器)
 
 > 📖 详细文档: [Docker 使用指南](./DOCKER.md) | [GitHub Packages 部署](./GITHUB_PACKAGES_DEPLOYMENT.md)
+
+### 数据备份与迁移
+
+```bash
+# 下载迁移脚本
+curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/migrate.sh
+chmod +x migrate.sh
+
+# 备份数据
+./migrate.sh backup                  # 备份到 ./backups/ 目录
+./migrate.sh backup /mnt/backup      # 备份到指定目录
+
+# 恢复数据
+./migrate.sh restore smarttest_backup_20260111_120000.tar.gz
+```
+
+**备份内容**:
+- `data/postgres/` - PostgreSQL 数据库文件
+- `storage/` - 应用数据（附件、导出文件等）
+- `.env` - 环境配置文件
+
+**迁移到新服务器**:
+```bash
+# 1. 在旧服务器备份
+./migrate.sh backup
+
+# 2. 传输到新服务器
+scp backups/smarttest_backup_*.tar.gz user@new-server:/path/to/smarttest/
+
+# 3. 在新服务器恢复
+cd /path/to/smarttest
+curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/liulingyuncat/SMART_TEST/main/migrate.sh
+chmod +x migrate.sh
+./migrate.sh restore smarttest_backup_*.tar.gz
+docker compose pull && docker compose up -d
+```
 
 ## 技术栈
 

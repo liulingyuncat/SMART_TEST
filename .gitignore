@@ -33,6 +33,7 @@ Desktop.ini
 /*.sql
 /*.sh
 !install.sh
+!migrate.sh
 !docker-entrypoint.sh
 
 # 文档（仅保留必要的）
