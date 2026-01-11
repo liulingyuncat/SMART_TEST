@@ -6,6 +6,7 @@ import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { login as loginAPI } from '../../api/auth';
 import { login } from '../../store/authSlice';
+import { VERSION } from '../../version';
 import './index.css';
 
 const { Option } = Select;
@@ -104,6 +105,18 @@ const LoginPage = () => {
         {/* 标题 */}
         <div className="login-title">SMART TEST</div>
         <div className="login-subtitle">PEVVD Intelligent Test Platform</div>
+        
+        {/* 版本号 */}
+        <div style={{
+          textAlign: 'center',
+          marginBottom: '24px',
+          fontSize: '12px',
+          color: '#1890ff',
+          fontFamily: 'monospace',
+          fontWeight: 500,
+        }}>
+          v{VERSION}
+        </div>
 
         {/* 表单 */}
         <Form

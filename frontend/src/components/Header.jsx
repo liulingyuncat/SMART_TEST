@@ -1,5 +1,5 @@
-import { Layout, Button, Typography, message, Select, Space, Tooltip, Modal, Tag } from 'antd';
-import { LogoutOutlined, BulbOutlined, UserOutlined, TeamOutlined, IdcardOutlined, ProjectOutlined, CheckOutlined, CloseOutlined, PlusOutlined, DeleteOutlined, TagOutlined } from '@ant-design/icons';
+import { Layout, Button, Typography, message, Select, Space, Tooltip, Modal } from 'antd';
+import { LogoutOutlined, BulbOutlined, UserOutlined, TeamOutlined, IdcardOutlined, ProjectOutlined, CheckOutlined, CloseOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -301,18 +301,6 @@ const Header = () => {
         >
           SMART TEST
         </Title>
-        <Tag 
-          icon={<TagOutlined />} 
-          color="blue"
-          style={{ 
-            fontSize: '11px', 
-            padding: '2px 8px',
-            fontFamily: 'monospace',
-            fontWeight: 500,
-          }}
-        >
-          v{VERSION}
-        </Tag>
         <Typography.Text
           style={{
             color: '#8c8c8c',
