@@ -1,12 +1,68 @@
+# ===========================================
 # 通用忽略文件
+# ===========================================
 .DS_Store
-.vscode/
+Thumbs.db
+Desktop.ini
 *.log
 *.swp
 *.swo
 *~
+*.tmp
+*.bak
+*.backup
 
-# 前端
+# IDE 特定文件
+.idea/
+*.iml
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ===========================================
+# 根目录 - 开发/调试文件
+# ===========================================
+# 数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# 脚本文件（仅用于本地开发调试）
+/*.ps1
+/*.bat
+/*.sql
+/*.sh
+!install.sh
+!docker-entrypoint.sh
+
+# 文档（仅保留必要的）
+/*.md
+!README.md
+!DOCKER.md
+!GITHUB_PACKAGES_DEPLOYMENT.md
+
+# 临时/测试文件
+/*.txt
+/*.csv
+/*.json
+!.env.example
+/*.js
+!docker-compose.yml
+!docker-compose.dev.yml
+/*.go
+
+# image 目录（文档截图）
+/image/
+
+# public 目录（根目录的空目录）
+/public/
+
+# docs 目录（开发文档，不需要提交）
+/docs/
+
+# ===========================================
+# 前端 (frontend/)
+# ===========================================
 frontend/node_modules/
 frontend/.pnp
 frontend/.pnp.js
@@ -20,51 +76,75 @@ frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
 
-# 后端 Go
-backend/tmp/
+# 前端文档和图片（仅保留 README.md）
+frontend/*.md
+!frontend/README.md
+frontend/image/
+
+# 前端数据库文件
+frontend/*.db
+
+# ===========================================
+# 后端 (backend/)
+# ===========================================
+# 编译输出
+backend/bin/
+backend/build/
 backend/*.exe
 backend/*.test
 backend/*.out
 backend/vendor/
-backend/coverage
-backend/services_coverage
 
-# 后端存储文件
-backend/storage/static/
-backend/storage/attachments/
-backend/storage/versions/
-backend/storage/exports/
-
-# 数据库文件（可选，根据需要调整）
+# 数据库文件
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/*.db.bak
+backend/*.db.backup*
+backend/cmd/**/*.db
 
-# 临时文件和备份
-*.tmp
-*.bak
-*.backup
-*~
+# 可执行文件
+backend/cmd/**/*.exe
+backend/server
+backend/mcp-server
 
-# IDE 特定文件
-.idea/
-*.iml
-.vscode/settings.json
-.vscode/launch.json
-*.sublime-project
-*.sublime-workspace
+# 日志文件
+backend/*.log
 
-# 操作系统文件
-Thumbs.db
-Desktop.ini
+# 覆盖率报告
+backend/coverage
+backend/services_coverage
 
+# 存储目录（运行时生成）
+backend/storage/
+
+# 脚本目录
+backend/scripts/
+
+# Node.js 相关（不应出现在后端）
+backend/node_modules/
+backend/package.json
+backend/package-lock.json
+
+# 临时 SQL 脚本
+backend/*.sql
+
+# PowerShell 脚本
+backend/*.ps1
+
+# SSL 证书目录（敏感信息，应在部署时生成）
+backend/certs/
+
+# 临时目录
+backend/tmp/
+
+# ===========================================
 # Docker 环境配置（敏感信息）
+# ===========================================
 .env
 !.env.example
 
-# SSL证书和密钥（安全考虑）
-backend/certs/*.key
-backend/certs/*.pfx
-# 保留证书文件以便开发使用
-# backend/certs/*.crt
+# ===========================================
+# Playwright/E2E 测试
+# ===========================================
+.playwright-mcp/
