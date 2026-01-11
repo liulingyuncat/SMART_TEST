@@ -9,8 +9,7 @@ import { setCurrentProject, setProjects, clearProjects } from '../store/projectS
 import LanguageSwitch from './LanguageSwitch';
 import { getProjects, deleteProject } from '../api/project';
 import { setCurrentProject as setCurrentProjectAPI } from '../api/profile';
-import CreateProjectModal from '../pages/ProjectList/CreateProjectModal';
-
+import CreateProjectModal from '../pages/ProjectList/CreateProjectModal';import { VERSION } from '../version';
 const { Header: AntHeader } = Layout;
 const { Title } = Typography;
 
@@ -312,7 +311,7 @@ const Header = () => {
             fontWeight: 500,
           }}
         >
-          v{process.env.REACT_APP_VERSION || process.env.npm_package_version || 'dev'}
+          v{VERSION}
         </Tag>
         <Typography.Text
           style={{
