@@ -436,6 +436,7 @@
       "download": "ダウンロード",
       "edit": "編集",
       "save": "保存",
+      "execute": "実行",
       "featureComingSoon": "機能開発中...",
       "saveSuccess": "保存に成功しました",
       "saveFailed": "保存に失敗しました",
@@ -446,6 +447,17 @@
     },
     "responseTime": {
       "slowWarning": "{{time}} ms - レスポンスタイムが遅いです、確認してください"
+    },
+    "execute": {
+      "success": "実行完了：合計{{total}}件、OK {{ok}}件、NG {{ng}}件",
+      "failed": "実行失敗",
+      "manualDisabled": "手動テストタイプは自動実行に対応していません",
+      "singleCase": "ケース実行",
+      "singleCaseSuccess": "ケース実行成功",
+      "singleCaseFailed": "ケース実行失敗",
+      "singleCaseExecuting": "実行中...",
+      "noScriptCode": "このケースにスクリプトコードがありません",
+      "completeTitle": "実行タスク完了"
     },
     "executionType": {
       "manual": "手動テスト",

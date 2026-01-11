@@ -330,6 +330,16 @@ browser_navigate('{meta_protocol}://{meta_server}:{meta_port}')
 // 使用元数据中的 meta_user / meta_password 登录
 ```
 
+#### 🔐 HTTPS证书跳过（ERR_CERT_AUTHORITY_INVALID时使用）
+
+```javascript
+const ctx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+await p.goto('https://...');
+```
+
+> script_code无需额外处理，该context中的fetch自动跳过证书。
+
 ### 第三步：逐画面采集API（核心步骤）
 
 **对每个画面执行以下操作：**

@@ -11,6 +11,7 @@ import useDebounce from '../hooks/useDebounce';
 import MultiLangEditModal from './MultiLangEditModal';
 import ApiCaseDetailModal from '../../ApiTestTabs/components/ApiCaseDetailModal';
 import WebCaseDetailModal from '../../AutoTestTabs/components/WebCaseDetailModal';
+import { maskKnownPasswords } from '../../../../utils/maskPassword';
 import './EditableTable.css';
 
 const { TextArea } = Input;
@@ -124,8 +125,9 @@ const getCellStyle = (currentCase, previousCase, fieldName) => {
  * @param {Array<string>} props.hiddenButtons - 需要隐藏的按钮标识数组，可选值: ['saveVersion', 'exportTemplate', 'aiSupplement', 'exportCases', 'importCases']
  * @param {string} props.caseGroupFilter - 用例集过滤器，只显示指定用例集的用例
  * @param {Function} props.onBatchDeleteRequest - 批量删除请求回调，返回{selectedCount, executeDelete}对象
+ * @param {Array<string>} props.knownPasswords - 已知密码列表（用于脱敏显示）
  */
-const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, projectId: propsProjectId, executionMode = false, selectionMode = false, taskUuid, onResultsChange, onCasesLoaded, hiddenButtons = [], caseGroupFilter = null, onBatchDeleteRequest }) => {
+const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, projectId: propsProjectId, executionMode = false, selectionMode = false, taskUuid, onResultsChange, onCasesLoaded, hiddenButtons = [], caseGroupFilter = null, onBatchDeleteRequest, knownPasswords = [] }) => {
   const { t } = useTranslation();
   
   // 调试日志
@@ -1625,6 +1627,15 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           width: 200,
           editable: true,
           ellipsis: true,
+          render: (text, record) => {
+            // 在显示时对密码进行脱敏
+            const maskedText = maskKnownPasswords(text || '', knownPasswords);
+            return (
+              <Tooltip title={maskedText} placement="topLeft">
+                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedText || '-'}</div>
+              </Tooltip>
+            );
+          },
           onCell: (record) => ({
             editing: editingKey === record.case_id,
             dataIndex: 'body',
@@ -1868,17 +1879,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`precondition${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'precondition')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,
@@ -1901,17 +1913,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`test_steps${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'test_steps')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,
@@ -1934,17 +1947,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`expected_result${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'expected_result')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,
@@ -2098,17 +2112,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`precondition${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'precondition')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,
@@ -2131,17 +2146,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`test_steps${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'test_steps')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,
@@ -2164,17 +2180,18 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             }
             
             const fieldValue = record[`expected_result${langFieldSuffix}`];
+            const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
               return (
                 <div
                   style={{ cursor: 'pointer', color: '#1890ff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                   onClick={() => !isEditing && openMultiLangModal(record, 'expected_result')}
                 >
-                  {fieldValue || '-'}
+                  {maskedValue || '-'}
                 </div>
               );
             }
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fieldValue || '-'}</div>;
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue || '-'}</div>;
           },
           onCell: (record) => ({
             editing: editingKey === record.case_id && !isChinese,

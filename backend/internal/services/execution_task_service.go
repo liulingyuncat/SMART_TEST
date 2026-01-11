@@ -1,8 +1,10 @@
 package services
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 	"webtest/internal/models"
@@ -35,18 +37,38 @@ type UpdateTaskRequest struct {
 	TaskDescription *string    `json:"task_description" binding:"omitempty,max=2000"`
 }
 
+// ExecuteTaskResult 执行结果统计
+type ExecuteTaskResult struct {
+	Total      int       `json:"total"`
+	OKCount    int       `json:"ok_count"`
+	NGCount    int       `json:"ng_count"`
+	BlockCount int       `json:"block_count"`
+	ExecutedAt time.Time `json:"executed_at"`
+	ExecutedBy string    `json:"executed_by"`
+}
+
+// DockerExecResult Docker执行结果
+type DockerExecResult struct {
+	Success      bool
+	Output       string
+	ResponseTime int // 毫秒
+}
+
 // ExecutionTaskService 测试执行任务服务接口
 type ExecutionTaskService interface {
 	GetTasksByProject(projectID uint, userID uint) ([]*models.ExecutionTask, error)
 	CreateTask(projectID uint, userID uint, req CreateTaskRequest) (*models.ExecutionTask, error)
 	UpdateTask(projectID uint, userID uint, taskUUID string, req UpdateTaskRequest) (*models.ExecutionTask, error)
 	DeleteTask(projectID uint, userID uint, taskUUID string) error
+	ExecuteTask(projectID uint, userID uint, taskUUID string) (*ExecuteTaskResult, error)
+	ExecuteSingleCase(projectID uint, userID uint, taskUUID string, caseResultID uint) (*ExecuteTaskResult, error)
 }
 
 type executionTaskService struct {
 	repo        repositories.ExecutionTaskRepository
 	projectRepo repositories.ProjectRepository             // 用于权限验证
 	ecrRepo     repositories.ExecutionCaseResultRepository // 用于级联删除
+	userRepo    repositories.UserRepository                // 用于获取用户名
 }
 
 // NewExecutionTaskService 创建任务服务实例
@@ -54,11 +76,13 @@ func NewExecutionTaskService(
 	repo repositories.ExecutionTaskRepository,
 	projectRepo repositories.ProjectRepository,
 	ecrRepo repositories.ExecutionCaseResultRepository,
+	userRepo repositories.UserRepository,
 ) ExecutionTaskService {
 	return &executionTaskService{
 		repo:        repo,
 		projectRepo: projectRepo,
 		ecrRepo:     ecrRepo,
+		userRepo:    userRepo,
 	}
 }
 
@@ -250,4 +274,295 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// ExecuteTask 执行测试任务
+func (s *executionTaskService) ExecuteTask(projectID uint, userID uint, taskUUID string) (*ExecuteTaskResult, error) {
+	fmt.Printf("[ExecuteTask] 开始执行任务: projectID=%d, userID=%d, taskUUID=%s\n", projectID, userID, taskUUID)
+
+	// 1. 获取任务信息
+	task, err := s.repo.GetByUUID(taskUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在")
+		}
+		return nil, fmt.Errorf("get task by uuid: %w", err)
+	}
+	if task.ProjectID != projectID {
+		return nil, errors.New("任务不属于该项目")
+	}
+	fmt.Printf("[ExecuteTask] 任务信息: task_name=%s, execution_type=%s\n", task.TaskName, task.ExecutionType)
+
+	// 2. 检查执行类型
+	if task.ExecutionType == "manual" {
+		return nil, errors.New("手工测试类型不支持自动执行")
+	}
+
+	// 3. 获取用例列表
+	cases, err := s.ecrRepo.GetByTaskUUID(taskUUID)
+	if err != nil {
+		return nil, fmt.Errorf("get case results: %w", err)
+	}
+	if len(cases) == 0 {
+		return nil, errors.New("没有可执行的用例")
+	}
+	fmt.Printf("[ExecuteTask] 获取到 %d 个用例\n", len(cases))
+
+	// 4. 确定remark语言
+	lang := task.DisplayLanguage
+	if lang == "" {
+		lang = "cn"
+	}
+
+	// 5. 逐个执行用例
+	var okCount, ngCount, blockCount int
+	for i, c := range cases {
+		fmt.Printf("[ExecuteTask] 执行用例 %d/%d: case_id=%d, has_script=%v\n",
+			i+1, len(cases), c.ID, c.ScriptCode != "")
+
+		if c.ScriptCode == "" {
+			blockCount++
+			continue
+		}
+
+		// 调用Docker执行脚本
+		fmt.Printf("[ExecuteTask] 开始执行Docker脚本...\n")
+		execResult, execErr := s.executeInDocker(c.ScriptCode)
+		if execErr != nil {
+			// 执行失败
+			fmt.Printf("[ExecuteTask] 执行失败: %v\n", execErr)
+			c.TestResult = "NG"
+			c.Remark = s.getRemarkByLang(lang, false, execErr.Error())
+			ngCount++
+		} else {
+			fmt.Printf("[ExecuteTask] 执行成功: response_time=%dms\n", execResult.ResponseTime)
+			c.TestResult = "OK"
+			c.Remark = s.getRemarkByLang(lang, true, "")
+			okCount++
+		}
+		// 记录执行时间（无论成功失败，只要有结果就记录）
+		if execResult != nil && execResult.ResponseTime > 0 {
+			c.ResponseTime = fmt.Sprintf("%d", execResult.ResponseTime)
+		}
+
+		// 更新数据库
+		updates := map[string]interface{}{
+			"test_result": c.TestResult,
+			"remark":      c.Remark,
+		}
+		if c.ResponseTime != "" {
+			updates["response_time"] = c.ResponseTime
+		}
+		if updateErr := s.ecrRepo.UpdateResult(c.ID, updates); updateErr != nil {
+			return nil, fmt.Errorf("update case result: %w", updateErr)
+		}
+	}
+
+	fmt.Printf("[ExecuteTask] 执行完成: OK=%d, NG=%d, Block=%d\n", okCount, ngCount, blockCount)
+
+	// 6. 更新任务的测试日期和执行人
+	now := time.Now()
+	executor := s.getUserName(userID)
+	updates := map[string]interface{}{
+		"test_date": now,
+		"executor":  executor,
+	}
+	if updateErr := s.repo.UpdateByUUID(taskUUID, updates); updateErr != nil {
+		return nil, fmt.Errorf("update task: %w", updateErr)
+	}
+
+	return &ExecuteTaskResult{
+		Total:      len(cases),
+		OKCount:    okCount,
+		NGCount:    ngCount,
+		BlockCount: blockCount,
+		ExecutedAt: now,
+		ExecutedBy: executor,
+	}, nil
+}
+
+// getRemarkByLang 根据语言生成remark
+func (s *executionTaskService) getRemarkByLang(lang string, success bool, errMsg string) string {
+	if success {
+		switch lang {
+		case "jp":
+			return "自動実行成功"
+		case "en":
+			return "Auto execution succeeded"
+		default:
+			return "自动执行成功"
+		}
+	}
+
+	switch lang {
+	case "jp":
+		return fmt.Sprintf("自動実行失敗: %s", errMsg)
+	case "en":
+		return fmt.Sprintf("Auto execution failed: %s", errMsg)
+	default:
+		return fmt.Sprintf("自动执行失败: %s", errMsg)
+	}
+}
+
+// executeInDocker 在Docker容器内执行脚本
+func (s *executionTaskService) executeInDocker(scriptCode string) (*DockerExecResult, error) {
+	fmt.Printf("[executeInDocker] 开始执行Docker脚本，长度: %d bytes\n", len(scriptCode))
+
+	// 创建临时脚本文件名
+	tmpFile := fmt.Sprintf("/tmp/test_%d.js", time.Now().UnixNano())
+	fmt.Printf("[executeInDocker] 临时文件: %s\n", tmpFile)
+
+	// 写入脚本到容器
+	writeCmd := exec.Command("docker", "exec", "-i", "playwright-runner",
+		"sh", "-c", fmt.Sprintf("cat > %s", tmpFile))
+	writeCmd.Stdin = strings.NewReader(scriptCode)
+	if err := writeCmd.Run(); err != nil {
+		return nil, fmt.Errorf("写入脚本失败: %w", err)
+	}
+	fmt.Printf("[executeInDocker] 脚本写入成功\n")
+
+	// 执行脚本
+	var stdout, stderr bytes.Buffer
+	startTime := time.Now()
+
+	runCmd := exec.Command("docker", "exec", "playwright-runner", "node", tmpFile)
+	runCmd.Stdout = &stdout
+	runCmd.Stderr = &stderr
+
+	fmt.Printf("[executeInDocker] 开始执行node命令...\n")
+	err := runCmd.Run()
+	responseTime := time.Since(startTime).Milliseconds()
+	fmt.Printf("[executeInDocker] 执行完成，耗时: %dms\n", responseTime)
+
+	// 清理临时文件
+	_ = exec.Command("docker", "exec", "playwright-runner", "rm", "-f", tmpFile).Run()
+
+	if err != nil {
+		errOutput := stderr.String()
+		if errOutput == "" {
+			errOutput = err.Error()
+		}
+		fmt.Printf("[executeInDocker] 执行错误: %s\n", errOutput)
+		return nil, fmt.Errorf("执行失败: %s", errOutput)
+	}
+
+	fmt.Printf("[executeInDocker] 输出: %s\n", stdout.String())
+	return &DockerExecResult{
+		Success:      true,
+		Output:       stdout.String(),
+		ResponseTime: int(responseTime),
+	}, nil
+}
+
+// getUserName 获取用户名
+func (s *executionTaskService) getUserName(userID uint) string {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil || user == nil {
+		return fmt.Sprintf("user_%d", userID)
+	}
+	if user.Nickname != "" {
+		return user.Nickname
+	}
+	return user.Username
+}
+
+// ExecuteSingleCase 执行单条测试用例
+func (s *executionTaskService) ExecuteSingleCase(projectID uint, userID uint, taskUUID string, caseResultID uint) (*ExecuteTaskResult, error) {
+	fmt.Printf("[ExecuteSingleCase] 开始执行单条用例: projectID=%d, userID=%d, taskUUID=%s, caseResultID=%d\n", projectID, userID, taskUUID, caseResultID)
+
+	// 1. 获取任务信息
+	task, err := s.repo.GetByUUID(taskUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在")
+		}
+		return nil, fmt.Errorf("get task by uuid: %w", err)
+	}
+	if task.ProjectID != projectID {
+		return nil, errors.New("任务不属于该项目")
+	}
+	fmt.Printf("[ExecuteSingleCase] 任务信息: task_name=%s, execution_type=%s\n", task.TaskName, task.ExecutionType)
+
+	// 2. 检查执行类型
+	if task.ExecutionType == "manual" {
+		return nil, errors.New("手工测试类型不支持自动执行")
+	}
+
+	// 3. 获取指定用例
+	c, err := s.ecrRepo.GetByID(caseResultID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("用例不存在")
+		}
+		return nil, fmt.Errorf("get case result: %w", err)
+	}
+	if c.TaskUUID != taskUUID {
+		return nil, errors.New("用例不属于该任务")
+	}
+	fmt.Printf("[ExecuteSingleCase] 用例信息: case_id=%d, has_script=%v\n", c.ID, c.ScriptCode != "")
+
+	// 4. 检查是否有脚本
+	if c.ScriptCode == "" {
+		return nil, errors.New("用例没有脚本代码，无法执行")
+	}
+
+	// 5. 确定remark语言
+	lang := task.DisplayLanguage
+	if lang == "" {
+		lang = "cn"
+	}
+
+	// 6. 执行用例
+	fmt.Printf("[ExecuteSingleCase] 开始执行Docker脚本...\n")
+	execResult, execErr := s.executeInDocker(c.ScriptCode)
+	var okCount, ngCount, blockCount int
+	if execErr != nil {
+		// 执行失败
+		fmt.Printf("[ExecuteSingleCase] 执行失败: %v\n", execErr)
+		c.TestResult = "NG"
+		c.Remark = s.getRemarkByLang(lang, false, execErr.Error())
+		ngCount = 1
+	} else {
+		fmt.Printf("[ExecuteSingleCase] 执行成功: response_time=%dms\n", execResult.ResponseTime)
+		c.TestResult = "OK"
+		c.Remark = s.getRemarkByLang(lang, true, "")
+		okCount = 1
+	}
+	// 记录执行时间（api和automation类型都记录）
+	if execResult != nil && execResult.ResponseTime > 0 {
+		c.ResponseTime = fmt.Sprintf("%d", execResult.ResponseTime)
+	}
+
+	// 7. 更新数据库
+	updates := map[string]interface{}{
+		"test_result": c.TestResult,
+		"remark":      c.Remark,
+	}
+	if c.ResponseTime != "" {
+		updates["response_time"] = c.ResponseTime
+	}
+	if updateErr := s.ecrRepo.UpdateResult(c.ID, updates); updateErr != nil {
+		return nil, fmt.Errorf("update case result: %w", updateErr)
+	}
+
+	// 8. 更新任务的测试日期和执行人
+	now := time.Now()
+	executor := s.getUserName(userID)
+	taskUpdates := map[string]interface{}{
+		"test_date": now,
+		"executor":  executor,
+	}
+	if updateErr := s.repo.UpdateByUUID(taskUUID, taskUpdates); updateErr != nil {
+		return nil, fmt.Errorf("update task: %w", updateErr)
+	}
+
+	fmt.Printf("[ExecuteSingleCase] 执行完成: OK=%d, NG=%d, Block=%d\n", okCount, ngCount, blockCount)
+	return &ExecuteTaskResult{
+		Total:      1,
+		OKCount:    okCount,
+		NGCount:    ngCount,
+		BlockCount: blockCount,
+		ExecutedAt: now,
+		ExecutedBy: executor,
+	}, nil
 }

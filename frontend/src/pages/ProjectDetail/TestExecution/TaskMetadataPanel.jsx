@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Form, Input, Select, DatePicker, Button, Space, Empty, message, Row, Col, Modal, Table, Radio, Progress, Tooltip, Tag } from 'antd';
-import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
-import { updateExecutionTask } from '../../../api/executionTask';
+import { updateExecutionTask, executeExecutionTask, executeSingleCase } from '../../../api/executionTask';
 import { saveExecutionCaseResults, getExecutionCaseResults } from '../../../api/executionCaseResult';
 import CaseSelectionPanel from './CaseSelectionPanel';
 import CaseDetailModal from './CaseDetailModal';
+import { maskKnownPasswords } from '../../../utils/maskPassword';
 import './TaskMetadataPanel.css';
 
 const { Option } = Select;
@@ -18,6 +19,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [caseSelectionVisible, setCaseSelectionVisible] = useState(false);
   const [selectedCasesData, setSelectedCasesData] = useState(null);
@@ -31,6 +33,13 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   // 用例详细弹窗状态
   const [caseDetailVisible, setCaseDetailVisible] = useState(false);
   const [selectedCaseForDetail, setSelectedCaseForDetail] = useState(null);
+  
+  // 单条用例执行状态
+  const [executingSingleCase, setExecutingSingleCase] = useState(null); // 正在执行的用例ID
+  
+  // 执行完成对话框状态
+  const [completionModalVisible, setCompletionModalVisible] = useState(false);
+  const [completionModalConfig, setCompletionModalConfig] = useState({ type: 'success', title: '', content: '' });
   
   // 用于防抖自动保存的ref
   const saveTimeoutRef = useRef(null);
@@ -726,17 +735,29 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     const expandColumn = {
       title: '',
       key: 'expand_action',
-      width: 50,
+      width: 100, // 所有类型都显示执行按钮，需要更宽
       fixed: 'left',
       render: (_, record) => (
-        <Button
-          type="text"
-          size="small"
-          icon={<EyeOutlined />}
-          onClick={() => handleOpenCaseDetail(record)}
-          style={{ color: '#1890ff' }}
-          title={t('testExecution.caseDetail.viewDetail')}
-        />
+        <Space size="small">
+          <Button
+            type="text"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleOpenCaseDetail(record)}
+            style={{ color: '#1890ff' }}
+            title={t('testExecution.caseDetail.viewDetail')}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<PlayCircleOutlined />}
+            onClick={() => handleExecuteSingleCase(record)}
+            loading={executingSingleCase === record.id}
+            disabled={isManual || !record.script_code || (executingSingleCase !== null && executingSingleCase !== record.id)}
+            style={{ color: isManual ? '#d9d9d9' : '#52c41a' }}
+            title={isManual ? t('testExecution.execute.manualDisabled') : t('testExecution.execute.singleCase')}
+          />
+        </Space>
       ),
     };
 
@@ -917,7 +938,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           width: 150,
           render: (_, record) => {
             const value = record[`precondition${langSuffix}`] || record.precondition || '-';
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</div>;
+            const passwords = [selectedCasesData?.filterConditions?.meta_password].filter(Boolean);
+            const maskedValue = maskKnownPasswords(value, passwords);
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue}</div>;
           },
         },
         {
@@ -926,7 +949,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           width: 200,
           render: (_, record) => {
             const value = record[`test_steps${langSuffix}`] || record.test_steps || '-';
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</div>;
+            const passwords = [selectedCasesData?.filterConditions?.meta_password].filter(Boolean);
+            const maskedValue = maskKnownPasswords(value, passwords);
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue}</div>;
           },
         },
         {
@@ -935,7 +960,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           width: 150,
           render: (_, record) => {
             const value = record[`expected_result${langSuffix}`] || record.expected_result || '-';
-            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{value}</div>;
+            const passwords = [selectedCasesData?.filterConditions?.meta_password].filter(Boolean);
+            const maskedValue = maskKnownPasswords(value, passwords);
+            return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{maskedValue}</div>;
           },
         },
       ];
@@ -995,9 +1022,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           ellipsis: true,
           render: (value) => {
             const displayValue = value || '-';
+            const passwords = [selectedCasesData?.filterConditions?.meta_password].filter(Boolean);
+            const maskedValue = maskKnownPasswords(displayValue, passwords);
             return (
-              <Tooltip title={displayValue !== '-' ? displayValue : ''} placement="topLeft">
-                <div className="single-line-cell">{displayValue}</div>
+              <Tooltip title={maskedValue !== '-' ? maskedValue : ''} placement="topLeft">
+                <div className="single-line-cell">{maskedValue}</div>
               </Tooltip>
             );
           },
@@ -1146,6 +1175,96 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     }
   }, [task, form]);
 
+  // 判断是否可执行（仅Web/API类型且有用例数据）
+  const canExecute = () => {
+    const execType = task?.execution_type;
+    const hasCases = caseTableData && caseTableData.length > 0;
+    return (execType === 'automation' || execType === 'api') && hasCases;
+  };
+
+  // 执行测试任务
+  const handleExecuteTask = async () => {
+    console.log('🎯 [TaskMetadataPanel] handleExecuteTask called');
+    if (!canExecute()) return;
+
+    setExecuting(true);
+    try {
+      console.log('🎯 [TaskMetadataPanel] Calling executeExecutionTask API...');
+      const result = await executeExecutionTask(task.project_id, task.task_uuid);
+      console.log('🎯 [TaskMetadataPanel] API result:', result);
+      
+      // 重新加载用例结果
+      await loadSavedCaseResults(task.task_uuid);
+      
+      // 显示执行完成对话框
+      console.log('🎯 [TaskMetadataPanel] Showing Modal.success...');
+      
+      // 构造统计信息文本
+      const statsText = `${t('common.total')} ${result.total}${t('common.items')}：OK ${result.ok_count}${t('common.items')}、NG ${result.ng_count}${t('common.items')}、Block ${result.block_count || 0}${t('common.items')}、NR ${(result.total - result.ok_count - result.ng_count - (result.block_count || 0))}${t('common.items')}`;
+      
+      setCompletionModalConfig({
+        type: 'success',
+        title: t('testExecution.execute.completeTitle'),
+        content: statsText,
+      });
+      setCompletionModalVisible(true);
+      console.log('🎯 [TaskMetadataPanel] Modal state set');
+    } catch (error) {
+      console.error('🎯 [TaskMetadataPanel] Error in handleExecuteTask:', error);
+      message.error(t('testExecution.execute.failed') + ': ' + (error.message || error));
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  // 执行单条用例
+  const handleExecuteSingleCase = async (record) => {
+    console.log('🎬 [TaskMetadataPanel] handleExecuteSingleCase called');
+    console.log('🎬 [TaskMetadataPanel] record:', record);
+    
+    if (!record.script_code) {
+      message.warning(t('testExecution.execute.noScriptCode'));
+      return;
+    }
+
+    setExecutingSingleCase(record.id);
+    try {
+      console.log('🎬 [TaskMetadataPanel] Calling executeSingleCase API...');
+      const result = await executeSingleCase(task.project_id, task.task_uuid, record.id);
+      console.log('🎬 [TaskMetadataPanel] API result:', result);
+      
+      // 重新加载用例结果
+      await loadSavedCaseResults(task.task_uuid);
+      
+      // 显示执行完成对话框
+      console.log('🎬 [TaskMetadataPanel] Showing dialog...');
+      console.log('🎬 [TaskMetadataPanel] result.ok_count:', result.ok_count);
+      
+      if (result.ok_count > 0) {
+        console.log('🎬 [TaskMetadataPanel] Setting success modal state...');
+        setCompletionModalConfig({
+          type: 'success',
+          title: t('testExecution.execute.completeTitle'),
+          content: t('testExecution.execute.singleCaseSuccess'),
+        });
+        setCompletionModalVisible(true);
+      } else {
+        console.log('🎬 [TaskMetadataPanel] Setting warning modal state...');
+        setCompletionModalConfig({
+          type: 'warning',
+          title: t('testExecution.execute.completeTitle'),
+          content: t('testExecution.execute.singleCaseFailed'),
+        });
+        setCompletionModalVisible(true);
+      }
+    } catch (error) {
+      console.error('🎬 [TaskMetadataPanel] Error in handleExecuteSingleCase:', error);
+      message.error(t('testExecution.execute.singleCaseFailed') + ': ' + (error.message || error));
+    } finally {
+      setExecutingSingleCase(null);
+    }
+  };
+
   const handleSave = async () => {
     console.log('\ud83d\udcbe [TaskMetadataPanel] handleSave called');
     console.log('\ud83d\udcbe [TaskMetadataPanel] Current task:', task);
@@ -1273,13 +1392,23 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             {t('testExecution.metadata.download')}
           </Button>
           {!isEditing ? (
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={() => setIsEditing(true)}
-            >
-              {t('testExecution.metadata.edit')}
-            </Button>
+            <>
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => setIsEditing(true)}
+              >
+                {t('testExecution.metadata.edit')}
+              </Button>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={handleExecuteTask}
+                loading={executing}
+                disabled={!canExecute()}
+              >
+                {t('testExecution.metadata.execute')}
+              </Button>
+            </>
           ) : (
             <Space>
               <Button
@@ -1667,6 +1796,30 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         onSave={handleSaveCaseDetail}
         onCancel={handleCloseCaseDetail}
       />
+      
+      {/* 执行完成对话框 */}
+      <Modal
+        open={completionModalVisible}
+        title={completionModalConfig.title}
+        onOk={() => setCompletionModalVisible(false)}
+        onCancel={() => setCompletionModalVisible(false)}
+        okText={t('common.confirm')}
+        cancelButtonProps={{ style: { display: 'none' } }}
+        centered
+        zIndex={10000}
+      >
+        {completionModalConfig.type === 'success' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '22px', color: '#52c41a' }}>✓</span>
+            <span>{completionModalConfig.content}</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '22px', color: '#faad14' }}>⚠</span>
+            <span>{completionModalConfig.content}</span>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

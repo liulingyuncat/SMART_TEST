@@ -80,7 +80,17 @@ version: 1.0
 
 ### 第五步：执行Playwright自动化测试 (Execute Playwright Automation)
 
-#### 🚨 浏览器状态隔离规则（关键）
+#### 🔐 HTTPS证书跳过（ERR_CERT_AUTHORITY_INVALID时使用）
+
+```javascript
+const ctx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+await p.goto('https://...');
+```
+
+> script_code无需额外处理，该context中的操作自动跳过证书。
+
+#### �🚨 浏览器状态隔离规则（关键）
 
 **每个用例执行前必须确保状态隔离，避免用例间干扰：**
 

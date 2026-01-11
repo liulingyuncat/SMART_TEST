@@ -13,6 +13,7 @@ type ExecutionCaseResultRepository interface {
 	// 查询方法
 	GetByTaskUUID(taskUUID string) ([]*models.ExecutionCaseResult, error)
 	GetByCaseID(caseID string) ([]*models.ExecutionCaseResult, error)
+	GetByID(id uint) (*models.ExecutionCaseResult, error)
 
 	// 批量操作
 	BatchCreate(results []*models.ExecutionCaseResult) error
@@ -59,6 +60,16 @@ func (r *executionCaseResultRepository) GetByCaseID(caseID string) ([]*models.Ex
 		return nil, fmt.Errorf("get results by case_id %s: %w", caseID, err)
 	}
 	return results, nil
+}
+
+// GetByID 根据ID获取单个执行结果
+func (r *executionCaseResultRepository) GetByID(id uint) (*models.ExecutionCaseResult, error) {
+	var result models.ExecutionCaseResult
+	err := r.db.First(&result, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // BatchCreate 批量插入执行结果(使用事务)
@@ -163,6 +174,9 @@ func (r *executionCaseResultRepository) UpdateResult(id uint, updates map[string
 	}
 	if bugID, ok := updates["bug_id"].(string); ok {
 		existingResult.BugID = bugID
+	}
+	if responseTime, ok := updates["response_time"].(string); ok {
+		existingResult.ResponseTime = responseTime
 	}
 	if updatedBy, ok := updates["updated_by"].(uint); ok {
 		existingResult.UpdatedBy = updatedBy

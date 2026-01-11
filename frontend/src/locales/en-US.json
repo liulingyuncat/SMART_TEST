@@ -438,6 +438,7 @@
       "download": "Download",
       "edit": "Edit",
       "save": "Save",
+      "execute": "Execute",
       "featureComingSoon": "Feature coming soon...",
       "saveSuccess": "Saved successfully",
       "saveFailed": "Failed to save",
@@ -448,6 +449,17 @@
     },
     "responseTime": {
       "slowWarning": "{{time}} ms - Slow response time, please check"
+    },
+    "execute": {
+      "success": "Execution completed: Total {{total}}, OK {{ok}}, NG {{ng}}",
+      "failed": "Execution failed",
+      "manualDisabled": "Manual test type does not support auto execution",
+      "singleCase": "Execute Case",
+      "singleCaseSuccess": "Case executed successfully",
+      "singleCaseFailed": "Case execution failed",
+      "singleCaseExecuting": "Executing...",
+      "noScriptCode": "This case has no script code",
+      "completeTitle": "Execution Task Completed"
     },
     "executionType": {
       "manual": "Manual Test",

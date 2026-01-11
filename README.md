@@ -318,6 +318,7 @@ Content-Type: application/json
 - Playwright 用例管理
 - 版本保存和回退
 - 执行结果记录
+- **单条用例执行**：每条用例可单独执行，实时查看结果
 
 #### 接口测试用例
 3. 配置 HTTPS
@@ -343,6 +344,16 @@ Content-Type: application/json
 ### 测试执行
 - 任务创建和分配
 - 用例筛选和批量执行
+- **Playwright 自动化执行**：
+  - 官方 Playwright Docker 镜像集成
+  - 批量执行：一键执行任务内所有用例
+  - 单条执行：表格行内执行按钮 + 详情弹窗执行按钮
+  - 实时执行状态：loading 动画、禁用状态、错误提示
+  - 自动结果回填：执行完成后自动更新 TestResult、Remark、ResponseTime
+  - 支持类型：Web 自动化（automation）、API 接口（api）
+  - Manual 类型：显示执行按钮但禁用，提示"手工测试类型不支持自动执行"
+  - 超时控制：单条/批量执行均为 60 秒超时
+  - 多语言支持：执行结果备注支持中/日/英三种语言
 - 实时进度跟踪
 - 燃尽图和进度统计
 

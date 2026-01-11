@@ -201,3 +201,113 @@ func (h *ExecutionTaskHandler) DeleteTask(c *gin.Context) {
 	log.Printf("[ExecutionTask Delete] user_id=%d, project_id=%d, task_uuid=%s", userID, projectID, taskUUID)
 	utils.MessageResponse(c, http.StatusOK, "任务已删除")
 }
+
+// ExecuteTask 执行测试任务
+// POST /api/v1/projects/:id/execution-tasks/:task_uuid/execute
+func (h *ExecutionTaskHandler) ExecuteTask(c *gin.Context) {
+	// 获取项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	// 获取任务UUID
+	taskUUID := c.Param("task_uuid")
+	if taskUUID == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "任务UUID不能为空")
+		return
+	}
+
+	// 获取用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 调用服务执行
+	result, err := h.service.ExecuteTask(uint(projectID), userID, taskUUID)
+	if err != nil {
+		log.Printf("[ExecutionTask Execute Failed] user_id=%d, project_id=%d, task_uuid=%s, error=%v",
+			userID, projectID, taskUUID, err)
+
+		if err.Error() == "任务不存在" {
+			utils.ErrorResponse(c, http.StatusNotFound, err.Error())
+			return
+		}
+		if err.Error() == "手工测试类型不支持自动执行" {
+			utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err.Error() == "没有可执行的用例" {
+			utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "执行任务失败")
+		return
+	}
+
+	log.Printf("[ExecutionTask Execute] user_id=%d, project_id=%d, task_uuid=%s, total=%d, ok=%d, ng=%d",
+		userID, projectID, taskUUID, result.Total, result.OKCount, result.NGCount)
+	utils.SuccessResponse(c, result)
+}
+
+// ExecuteSingleCase 执行单条测试用例
+// POST /api/v1/projects/:id/execution-tasks/:task_uuid/cases/:case_result_id/execute
+func (h *ExecutionTaskHandler) ExecuteSingleCase(c *gin.Context) {
+	// 获取项目ID
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的项目ID")
+		return
+	}
+
+	// 获取任务UUID
+	taskUUID := c.Param("task_uuid")
+	if taskUUID == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "任务UUID不能为空")
+		return
+	}
+
+	// 获取用例结果ID
+	caseResultIDStr := c.Param("case_result_id")
+	caseResultID, err := strconv.ParseUint(caseResultIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的用例ID")
+		return
+	}
+
+	// 获取用户ID
+	userIDVal, exists := c.Get("userID")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+	userID := userIDVal.(uint)
+
+	// 调用服务执行
+	result, err := h.service.ExecuteSingleCase(uint(projectID), userID, taskUUID, uint(caseResultID))
+	if err != nil {
+		log.Printf("[ExecutionTask ExecuteSingleCase Failed] user_id=%d, project_id=%d, task_uuid=%s, case_result_id=%d, error=%v",
+			userID, projectID, taskUUID, caseResultID, err)
+
+		if err.Error() == "任务不存在" || err.Error() == "用例不存在" {
+			utils.ErrorResponse(c, http.StatusNotFound, err.Error())
+			return
+		}
+		if err.Error() == "手工测试类型不支持自动执行" || err.Error() == "用例没有脚本代码，无法执行" {
+			utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "执行用例失败")
+		return
+	}
+
+	log.Printf("[ExecutionTask ExecuteSingleCase] user_id=%d, project_id=%d, task_uuid=%s, case_result_id=%d, result=%s",
+		userID, projectID, taskUUID, caseResultID, result.OKCount > 0)
+	utils.SuccessResponse(c, result)
+}

@@ -417,6 +417,16 @@ mcp_aigo_get_web_group_metadata(group_name=<用户指定的用例集名称>)
 2. 导航到目标页面
 3. 如需登录，使用元数据凭证
 
+#### 🔐 HTTPS证书跳过（ERR_CERT_AUTHORITY_INVALID时使用）
+
+```javascript
+const ctx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+await p.goto('https://...');
+```
+
+> script_code无需额外处理，该context中的操作自动跳过证书。
+
 ### 第五步：采集页面信息
 
 使用 `browser_snapshot` 获取页面快照，记录：

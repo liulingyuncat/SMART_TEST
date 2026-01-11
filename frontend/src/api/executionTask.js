@@ -42,3 +42,27 @@ export const updateExecutionTask = (projectId, taskUuid, data) => {
 export const deleteExecutionTask = (projectId, taskUuid) => {
   return apiClient.delete(`/projects/${projectId}/execution-tasks/${taskUuid}`);
 };
+
+/**
+ * 执行测试任务
+ * @param {number} projectId - 项目ID
+ * @param {string} taskUuid - 任务UUID
+ * @returns {Promise<Object>} 执行结果统计
+ */
+export const executeExecutionTask = (projectId, taskUuid) => {
+  return apiClient.post(`/projects/${projectId}/execution-tasks/${taskUuid}/execute`, null, {
+    timeout: 60000, // 60秒超时，因为执行测试用例可能需要较长时间
+  });
+};
+/**
+ * 执行单条测试用例
+ * @param {number} projectId - 项目ID
+ * @param {string} taskUuid - 任务UUID
+ * @param {number} caseResultId - 用例结果ID
+ * @returns {Promise<Object>} 执行结果统计
+ */
+export const executeSingleCase = (projectId, taskUuid, caseResultId) => {
+  return apiClient.post(`/projects/${projectId}/execution-tasks/${taskUuid}/cases/${caseResultId}/execute`, null, {
+    timeout: 60000, // 60秒超时
+  });
+};

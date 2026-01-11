@@ -438,6 +438,7 @@
       "download": "下载",
       "edit": "编辑",
       "save": "保存",
+      "execute": "执行",
       "featureComingSoon": "功能开发中...",
       "saveSuccess": "保存成功",
       "saveFailed": "保存失败",
@@ -448,6 +449,17 @@
     },
     "responseTime": {
       "slowWarning": "{{time}} ms - 响应时间较慢，建议检查"
+    },
+    "execute": {
+      "success": "执行完成：共{{total}}条，OK {{ok}}条，NG {{ng}}条",
+      "failed": "执行失败",
+      "manualDisabled": "手工测试类型不支持自动执行",
+      "singleCase": "执行用例",
+      "singleCaseSuccess": "用例执行成功",
+      "singleCaseFailed": "用例执行失败",
+      "singleCaseExecuting": "执行中...",
+      "noScriptCode": "该用例没有脚本代码，无法执行",
+      "completeTitle": "执行任务结束"
     },
     "executionType": {
       "manual": "手工测试",

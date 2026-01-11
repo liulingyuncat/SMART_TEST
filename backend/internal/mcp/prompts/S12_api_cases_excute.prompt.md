@@ -110,6 +110,15 @@ remark字段: 无法识别用例，请求URL中包含动态参数{imsi}，未提
 
 ### 第五步：API登录与获取Token (API Login & Get Token)
 
+#### 🔐 HTTPS证书跳过（ERR_CERT_AUTHORITY_INVALID时使用）
+
+```javascript
+const ctx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+```
+
+> script_code无需额外处理，该context中的fetch自动跳过证书。
+
 基于第三步B获取的用例集元数据，使用Playwright执行登录API获取认证Token：
 
 1. **构建登录请求**

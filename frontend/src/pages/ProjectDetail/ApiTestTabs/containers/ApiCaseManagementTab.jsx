@@ -298,6 +298,7 @@ const ApiCaseManagementTab = ({ projectId }) => {
               caseGroupFilter={selectedCaseGroup.case_group}
               onBatchDeleteRequest={handleBatchDeleteRequest}
               hiddenButtons={['saveVersion', 'exportTemplate', 'exportCases', 'importCases']}
+              knownPasswords={[metadata.password].filter(Boolean)}
             />
           )}
         </div>

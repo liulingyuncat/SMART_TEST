@@ -349,6 +349,7 @@ const WebCaseManagementTab = ({ projectId }) => {
               onCaseDeleted={handleCaseDeleted}
               onBatchDeleteRequest={handleBatchDeleteRequest}
               hiddenButtons={['saveVersion', 'exportTemplate', 'exportCases', 'importCases']}
+              knownPasswords={[metadata.password].filter(Boolean)}
             />
           )}
         </div>

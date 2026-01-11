@@ -158,7 +158,7 @@ func main() {
 	storageDir := "storage"
 	requirementItemService := services.NewRequirementItemService(requirementItemRepo, versionRepo, storageDir)
 	viewpointItemService := services.NewViewpointItemService(viewpointItemRepo, versionRepo, storageDir)
-	executionTaskService := services.NewExecutionTaskService(executionTaskRepo, projectRepo, executionCaseResultRepo)
+	executionTaskService := services.NewExecutionTaskService(executionTaskRepo, projectRepo, executionCaseResultRepo, userRepo)
 	executionCaseResultService := services.NewExecutionCaseResultService(
 		executionCaseResultRepo,
 		executionTaskRepo,
@@ -736,6 +736,12 @@ func main() {
 			projects.DELETE("/:id/execution-tasks/:task_uuid",
 				middleware.RequireRole(constants.RoleProjectManager),
 				executionTaskHandler.DeleteTask)
+			projects.POST("/:id/execution-tasks/:task_uuid/execute",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				executionTaskHandler.ExecuteTask)
+			projects.POST("/:id/execution-tasks/:task_uuid/cases/:case_result_id/execute",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				executionTaskHandler.ExecuteSingleCase)
 
 			// 缺陷管理路由 - 允许PM和PM Member访问
 			projects.GET("/:id/defects",
