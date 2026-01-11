@@ -90,6 +90,30 @@ chmod +x migrate.sh
 docker compose pull && docker compose up -d
 ```
 
+### 版本号管理
+
+**发布新版本（开发者）**:
+```bash
+# 1. 创建并推送版本标签（自动触发 CI/CD）
+git tag 0.0.8
+git push && git push --tags
+
+# 2. GitHub Actions 自动构建包含版本号的 Docker 镜像
+# 无需手动修改任何文件！
+```
+
+**版本号显示**:
+- 主页 Header 左上角显示当前版本号（蓝色标签）
+- 本地开发：显示 `package.json` 中的版本或 "dev"
+- 生产环境：显示构建时从 git tag 注入的版本号
+- Docker 镜像标签：`ghcr.io/liulingyuncat/smart_test:0.0.8`
+
+**工作原理**:
+1. 推送 git tag 后，GitHub Actions 自动检测
+2. CI/CD 从 tag 提取版本号（如 `v0.0.8` → `0.0.8`）
+3. Docker 构建时注入 `VERSION` 构建参数
+4. React 应用从 `REACT_APP_VERSION` 环境变量读取并显示
+
 ## 技术栈
 
 ### 后端

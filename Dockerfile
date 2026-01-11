@@ -30,6 +30,10 @@ RUN npm ci --production=false --legacy-peer-deps || \
 # 复制源码并构建
 COPY frontend/ ./
 
+# 构建参数：版本号（从 .env 读取，或使用默认值）
+ARG VERSION=0.0.1
+ENV REACT_APP_VERSION=${VERSION}
+
 # ARM64 构建时降低内存使用，避免 QEMU 崩溃
 ARG TARGETARCH
 ENV NODE_OPTIONS="--max-old-space-size=3072"

@@ -51,6 +51,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Extract version from git
+        id: version
+        run: |
+          # 尝试获取最新 tag
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev-${GITHUB_SHA::7}")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Detected version: $VERSION"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -89,6 +97,8 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
         timeout-minutes: 45
 
       - name: Image digest
