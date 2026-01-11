@@ -29,7 +29,18 @@ RUN npm ci --production=false --legacy-peer-deps || \
 
 # 复制源码并构建
 COPY frontend/ ./
-RUN npm run build
+
+# ARM64 构建时降低内存使用，避免 QEMU 崩溃
+ARG TARGETARCH
+ENV NODE_OPTIONS="--max-old-space-size=3072"
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+        # ARM64: 降低并发，减少内存压力
+        export NODE_OPTIONS="--max-old-space-size=2048" && \
+        npm run build -- --max-workers=2; \
+    else \
+        # AMD64: 正常构建
+        npm run build; \
+    fi
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
@@ -41,10 +52,11 @@ RUN apk add --no-cache git
 
 WORKDIR /app/backend
 
-# 设置 Go 环境
+# 设置 Go 环境 - 支持多架构
+ARG TARGETARCH
 ENV CGO_ENABLED=0
 ENV GOOS=linux
-ENV GOARCH=amd64
+ENV GOARCH=${TARGETARCH}
 
 # 复制依赖文件并下载
 COPY backend/go.mod backend/go.sum ./

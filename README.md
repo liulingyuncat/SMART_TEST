@@ -1,60 +1,57 @@
-# PEVVD智能测试平台 - 用户登录功能
+# SMART TEST 智能测试平台
 
 [![CI/CD](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/ci.yml/badge.svg)](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/ci.yml)
 [![Docker Build](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/docker-build.yml/badge.svg)](https://github.com/liulingyuncat/SMART_TEST/actions/workflows/docker-build.yml)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-smart__test-blue?logo=docker)](https://github.com/liulingyuncat/SMART_TEST/pkgs/container/smart_test)
-[![Go Version](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org/)
 [![Node Version](https://img.shields.io/badge/Node-20-339933?logo=node.js)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 项目概述
+## 简介
 
-这是一个现代化的 智能测试平台,采用前后端分离架构。本文档介绍 T01-用户登录功能的实现。
+现代化的智能测试管理平台，采用 Go + React 前后端分离架构，支持需求管理、测试用例管理、缺陷跟踪、AI 辅助测试和质量报告生成。
 
-## 🚀 快速部署
+## 🚀 快速开始
 
-### 使用 Docker (推荐)
-
-```bash
-# 拉取最新镜像
-docker pull ghcr.io/liulingyuncat/smart_test:latest
-
-# 使用 Docker Compose 启动
-docker-compose up -d
-```
-
-#### 环境变量配置
-
-默认配置会使用以下默认值（生产环境请修改）：
-
-| 变量 | 默认值 | 说明 | 修改方式 |
-|------|--------|------|----------|
-| `DB_PASSWORD` | `webtest_default_pass_change_me` | 数据库密码 | 创建 `.env` 文件设置 |
-| `JWT_SECRET` | `default_jwt_secret_please_change_in_production` | JWT 签名密钥 | 创建 `.env` 文件设置 |
-| `MCP_AUTH_TOKEN` | `default_mcp_token_change_me` | MCP 服务认证令牌 | 创建 `.env` 文件设置 |
-
-**生产环境配置步骤**：
+### 使用 Docker 部署（推荐）
 
 ```bash
-# 1. 创建 .env 文件
-cat > .env << 'EOF'
-DB_PASSWORD=your_secure_database_password_here
-JWT_SECRET=your_random_jwt_secret_key_here_at_least_32_chars
-MCP_AUTH_TOKEN=your_mcp_authentication_token_here
-EOF
+# 1. 克隆项目
+git clone https://github.com/liulingyuncat/SMART_TEST.git
+cd SMART_TEST
 
-# 2. 生成强密码（可选）
-openssl rand -base64 32  # 用于 JWT_SECRET
-openssl rand -hex 16     # 用于 DB_PASSWORD
-openssl rand -base64 24  # 用于 MCP_AUTH_TOKEN
+# 2. 运行安装脚本（生成证书和配置）
+./install.sh
 
 # 3. 启动服务
 docker-compose up -d
+
+# 4. 访问应用
+# 前端: https://localhost:8443
+# 后端: https://localhost:8443/api
 ```
 
-> ⚠️ **安全提示**: 默认值仅用于快速测试，生产环境必须修改为强密码！
+**默认管理员账号**: `admin` / `admin123`
 
-详见: [Docker 使用指南](./DOCKER.md) | [GitHub Packages 部署指南](./GITHUB_PACKAGES_DEPLOYMENT.md)
+### 生产环境部署
+
+```bash
+# 1. 运行安装脚本（自动生成证书和随机密钥）
+./install.sh
+
+# 2. 或手动编辑 .env 文件
+DB_PASSWORD=your_secure_password
+JWT_SECRET=your_jwt_secret_min_32_chars
+MCP_AUTH_TOKEN=your_mcp_token
+
+# 3. 使用 GitHub Container Registry（支持 AMD64/ARM64）
+docker pull ghcr.io/liulingyuncat/smart_test:latest
+docker-compose up -d
+```
+
+> 📌 **架构支持**: 支持 AMD64 (Intel/AMD x86_64)、ARM64 (Apple Silicon、ARM 服务器)
+
+> 📖 详细文档: [Docker 使用指南](./DOCKER.md) | [GitHub Packages 部署](./GITHUB_PACKAGES_DEPLOYMENT.md)
 
 ## 技术栈
 
@@ -63,23 +60,10 @@ docker-compose up -d
 - **语言**: Go 1.21+
 - **Web框架**: Gin v1.9.1
 - **ORM**: GORM v1.25.5
-- **认证**: JWT (golang-jwt/jwt v5.2.0)
-- **密码加密**: bcrypt
-- **数据库**: PostgreSQL / SQLite / MongoDB
-
-### 前端
-
-- **框架**: React 18+
-- **UI库**: Ant Design 5.x
-- **状态管理**: Redux Toolkit
-- **路由**: React Router v6
-- **HTTP客户端**: Axios
-- **国际化**: i18next
-
-## 快速开始
-
-### 前置要求
-
+**后端**: Go 1.21+ · Gin · GORM · JWT · SQLite  
+**前端**: React 18 · Ant Design 5 · Redux Toolkit · Axios  
+**部署**: Docker · Docker Compose · HTTPS  
+**AI**: MCP (Model Context Protocol) Server
 - Go 1.21+
 - Node.js 14+
 - PostgreSQL 13+ (可选, 默认使用 SQLite)
@@ -94,55 +78,27 @@ cd backend
 export GOPROXY=https://goproxy.cn,direct  # Linux/Mac
 $env:GOPROXY="https://goproxy.cn,direct"  # Windows PowerShell
 
-# 3. 安装依赖
-go mod tidy
+# 3本地开发
 
-# 4. 运行服务
-go run cmd/server/main.go
+### 前置要求
+- Go 1.21+
+- Node.js 20+
+- OpenSSL (生成证书)
 
-# 服务将在 http://localhost:8080 启动
-```
-
-### 前端启动
-
+### 后端开发
 ```bash
-# 1. 进入前端目录
+cd backend
+export GOPROXY=https://goproxy.cn,direct  # 国内用户
+go mod tidy
+go run cmd/server/main.go  # 启动后端服务
+```
+
+### 前端开发
+```bash
 cd frontend
-
-# 2. 安装依赖
 npm install
-
-# 3. 启动开发服务器
-npm start
-
-# 应用将在 http://localhost:3000 启动
-```
-
-### 测试登录
-
-1. 访问 http://localhost:3000/login
-2. 使用默认管理员账号:
-   - 用户名: `admin`
-   - 密码: `admin123`
-3. 登录成功后自动跳转到首页
-
-## 项目结构
-
-```
-webtest/
-├── backend/                    # 后端 Go 项目
-│   ├── cmd/
-│   │   └── server/
-│   │       └── main.go         # 程序入口
-│   ├── config/
-│   │   └── database.go         # 数据库配置
-│   ├── internal/
-│   │   ├── handlers/
-│   │   │   └── auth.go         # 认证处理器
-│   │   ├── middleware/
-│   │   │   └── auth.go         # 认证中间件
-│   │   ├── models/
-│   │   │   └── user.go         # User 模型
+npm start  # 启动开发服务器
+``` user.go         # User 模型
 │   │   ├── repositories/
 │   │   │   └── user_repo.go    # 数据访问层
 │   │   ├── services/
@@ -176,64 +132,33 @@ webtest/
 │   │   │   └── authSlice.js    # 认证状态
 │   │   ├── App.js
 │   │   └── index.js
-│   ├── .env                    # 环境变量
-│   ├── .env.development
-│   ├── .env.production
-│   ├── jest.config.js
-│   └── package.json
+│   ├── .env                    # Go 后端
+│   ├── cmd/                    # 主程序入口
+│   │   ├── server/             # Web 服务器
+│   │   ├── mcp/                # MCP 服务器
+│   │   └── gencert/            # 证书生成工具
+│   ├── internal/               # 内部包
+│   │   ├── handlers/           # HTTP 处理器
+│   │   ├── middleware/         # 中间件
+│   │   ├── models/             # 数据模型
+│   │   ├── services/           # 业务逻辑
+│   │   └── mcp/                # MCP 协议实现
+│   ├── migrations/             # 数据库迁移
+│   └── config/                 # 配置文件
 │
-└── docs/                       # 文档
-    ├── API-documentation.md
-    ├── backend-deployment.md
-    ├── frontend-deployment.md
-    ├── manual-test-guide.md
-    └── T01-development-summary.md
-```
-
-## 核心功能
-
-### 1. 用户登录
-
-- ✅ 用户名/密码表单验证
-- ✅ bcrypt 密码加密存储
-- ✅ JWT Token 认证
-- ✅ 自动跳转到目标页面
-
-### 2. 权限控制
-
-- ✅ JWT 中间件保护路由
-- ✅ 前端路由守卫
-- ✅ Token 自动刷新重定向
-
-### 3. 需求管理 (T31)
-
-- ✅ 四种需求文档类型支持
-  - 整体需求 (Overall Requirements)
-  - 整体测试观点 (Overall Test Viewpoint)
-  - 变更需求 (Change Requirements)
-  - 变更测试观点 (Change Test Viewpoint)
-- ✅ Markdown 编辑器集成
-  - 编辑/只读模式切换
-  - 实时预览渲染
-  - 工具栏快捷操作(加粗、斜体、标题、列表等)
-- ✅ 版本管理功能
-  - 自动生成版本文件名(格式: {项目名}_{文档类型}_{日期}_{时间}.md)
-  - 双重保存机制(数据库+文件系统)
-  - 版本列表查询(支持按文档类型筛选)
-  - 版本下载(Markdown格式)
-  - 版本删除(软删除)
-- ✅ Markdown 文件导入
-  - 文件大小限制(≤5MB)
-  - .md 后缀验证
-  - UTF-8 编码支持
-- ✅ 国际化支持(中文/英文/日文)
-
-**使用指南:**
-
-1. 进入项目详情页 → 需求管理Tab
-2. 选择文档类型Tab(整体需求/整体测试观点/变更需求/变更测试观点)
-3. 默认只读模式,点击"编辑"按钮进入编辑模式
-4. 编辑文档内容:
+├── frontend/                   # React 前端
+│   ├── src/
+│   │   ├── api/                # API 客户端
+│   │   ├── pages/              # 页面组件
+│   │   ├── components/         # 公共组件
+│   │   ├── store/              # Redux 状态
+│   │   └── locales/            # 国际化资源
+│   └── public/                 # 静态资源
+│
+├── install.sh                  # 部署前安装脚本
+├── docker-compose.yml          # Docker 编排
+├── Dockerfile                  # Docker 镜像
+└── .env.example                # 环境变量模板
    - 使用工具栏快捷操作
    - 或直接输入Markdown语法
    - 支持导入现有.md文件
@@ -264,20 +189,13 @@ webtest/
   - 19列:ID, CaseNumber, Screen/Function/Precondition/TestSteps/ExpectedResult (CN/JP/EN), TestResult, Remark
   - 样式美化:表头深蓝背景+粗体白字,自动列宽,文本换行
   - 并发导出:4个ROLE并发处理,提升性能
+用户认证
+- JWT Token 认证
+- bcrypt 密码加密
+- 角色权限管理
+- 前后端路由守卫
 
-**使用指南:**
-
-1. 进入项目详情页 → 自动化测试用例Tab
-2. 切换到ROLE1/ROLE2/ROLE3/ROLE4 Tab管理对应用例
-3. 保存版本:
-   - 点击ROLE1 Tab顶部"保存版本"按钮
-   - 系统并发导出4个ROLE的用例为Excel
-   - 自动切换到"版本管理"Tab
-4. 查看版本历史:
-   - 版本ID:格式为 `{项目名}_{YYYYMMDD_HHMMSS}`
-   - 版本文件:显示4个Excel文件及文件大小、用例数量
-   - 备注:点击编辑区域可添加/修改备注
-5. 版本操作:
+### 需求管理
    - 下载:下载zip压缩包(包含4个Excel文件)
    - 删除:删除版本记录和物理文件(需二次确认)
 
@@ -286,47 +204,13 @@ webtest/
 - ✅ ROLE1-4 四类接口测试用例管理
   - 可编辑表格(内联编辑)
   - 插入行(在上方/在下方)
-  - 批量删除
-  - UUID主键+display_order排序
-- ✅ 表格字段
-  - No.(显示序号,基于display_order计算)
-  - 用例编号、画面、URL、Header、Method、Body、Response、测试结果、备考
-  - Method下拉选择:GET/POST/PUT/DELETE/PATCH
-  - 测试结果下拉选择:NR/OK/NG
-- ✅ 版本管理功能
-  - 一键保存版本:导出ROLE1-4的用例为CSV(4个文件)
-  - 版本列表展示:显示历史版本,4个文件名分4行显示
-  - 版本下载:一键下载ZIP压缩包(包含4个CSV文件)
-  - 备注编辑:更新版本备注(≤500字符)
-  - 版本删除:删除版本记录和CSV文件
+  四种需求文档类型（整体需求/测试观点、变更需求/测试观点）
+- Markdown 编辑器（实时预览、工具栏）
+- 版本管理（自动命名、文件存储、下载）
+- Markdown 文件导入（≤5MB）
+- 三语言支持（中/英/日）
 
-**使用指南:**
-
-1. 进入项目详情页 → 接口测试用例Tab
-2. 切换到ROLE1/ROLE2/ROLE3/ROLE4 Tab管理对应用例
-3. 表格操作:
-   - 内联编辑:单击单元格直接编辑
-   - 插入行:点击操作列"在上方插入"或"在下方插入"
-   - 批量删除:勾选多行后点击顶部"批量删除"按钮
-4. 保存版本:
-   - 点击顶部"保存版本"按钮
-   - 系统生成4个CSV文件(格式:{项目名}_APITestCase_ROLE1_YYYYMMDD_HHMMSS.csv)
-   - 自动切换到"版本管理"Tab
-5. 查看版本历史:
-   - 版本ID:UUID格式
-   - 版本文件:4个文件名分4行显示,每行显示文件名
-   - 备注:点击编辑按钮修改备注
-6. 版本操作:
-   - 下载:下载ZIP压缩包(包含4个CSV文件)
-   - 删除:删除版本记录和CSV文件(需二次确认)
-
-**技术特性:**
-
-- 数据库主键使用UUID(VARCHAR 36),确保全局唯一性
-- display_order字段控制显示顺序,支持插入行时自动调整
-- 插入行后自动重新分配display_order为连续序号(1,2,3...)
-- CSV导出时No.列基于display_order计算显示序号
-
+### 测试用例管理
 ### 6. 国际化
 
 - ✅ 中英文动态切换
@@ -362,39 +246,19 @@ Content-Type: application/json
   "data": {
     "token": "eyJhbGc..."
   }
-}
-```
+#### 手工测试用例
+- ROLE1-4 分类管理
+- 多语言用例（中/英/日）
+- 内联编辑、拖拽排序、批量操作
+- Excel 导出（19列全语言）
+- 版本管理（ZIP 打包、备注编辑）
 
-#### 获取用户信息
+#### Web 自动化用例
+- Playwright 用例管理
+- 版本保存和回退
+- 执行结果记录
 
-```
-GET /api/v1/profile
-Authorization: Bearer <token>
-
-响应:
-{
-  "username": "admin",
-  "message": "authenticated user profile"
-}
-```
-
-## 部署
-
-### 开发环境
-
-已配置热重载,修改代码后自动重启。
-
-### 生产环境
-
-详见:
-
-- [后端部署文档](./docs/backend-deployment.md)
-- [前端部署文档](./docs/frontend-deployment.md)
-
-**关键步骤**:
-
-1. 修改 `JWT_SECRET` 环境变量
-2. 修改管理员默认密码
+#### 接口测试用例
 3. 配置 HTTPS
 4. 配置反向代理 (Nginx)
 5. 设置数据库备份
@@ -403,60 +267,35 @@ Authorization: Bearer <token>
 
 ### 后端测试
 
-```bash
-cd backend
-go test ./internal/services/... -v
-go test ./... -coverprofile=coverage.out
-```
+``ROLE1-4 分类管理
+- 表格编辑（内联编辑、插入行、批量删除）
+- 字段：用例编号、URL、Method、Header、Body、Response 等
+- CSV 导出和版本管理
+- UUID 主键 + display_order 排序
 
-### 前端测试
+### 缺陷管理
+- 缺陷生命周期管理
+- 附件上传和评论
+- 缺陷统计和趋势图表
+- 导出 Excel 报告
 
-```bash
-cd frontend
-npm test
-npm test -- --coverage
-```
+### 测试执行
+- 任务创建和分配
+- 用例筛选和批量执行
+- 实时进度跟踪
+- 燃尽图和进度统计
 
-### 手动测试
+### AI 质量报告
+- Markdown 报告编辑
+- SVG/Recharts 图表集成
+- PDF/HTML 导出
+- 模板管理
 
-详见 [手动测试指南](./docs/manual-test-guide.md)
-
-## 安全性
-
-### 已实现
-
-- ✅ bcrypt 密码加密 (cost=10)
-- ✅ JWT Token 认证 (HS256)
-- ✅ 登录失败不泄露用户存在性
-- ✅ 参数验证防止注入攻击
-- ✅ CORS 支持配置白名单
-
-### 生产环境建议
-
-- ⚠️ 修改默认 JWT_SECRET
-- ⚠️ 启用 HTTPS
-- ⚠️ 配置 Rate Limiting 防暴力破解
-- ⚠️ 添加验证码
-- ⚠️ 实现 Refresh Token 机制
-
-## 开发规范
-
-### 后端 (Go)
-
-- 错误透明传递: `fmt.Errorf("msg: %w", err)`
-- 函数长度 ≤ 40 行
-- 文件长度 ≤ 500 行
-- 所有 struct 添加 json tag
-
-### 前端 (React)
-
-- 组件长度 ≤ 200 行
-- 使用函数组件 + Hooks
-- PascalCase 命名组件
-- useEffect 集中管理副作用
-
-## 常见问题
-
+### MCP 协议支持
+- AI 辅助用例生成
+- 智能需求分析
+- 自动化脚本生成
+- 15+ 工具集成
 ### Q: Go 依赖下载失败?
 
 A: 配置国内代理:
@@ -483,42 +322,89 @@ A: 登录后调用修改密码 API (待实现)
 
 - [ ] 实现用户管理功能 (CRUD)
 - [ ] 添加角色权限管理
-- [ ] 实现 Refresh Token
-- [ ] 添加登录验证码
+- [ ] 实示例
 
-### 中期 (1-2 月)
+### 用户登录
+```bash
+curl -X POST https://localhost:8443/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+```
 
-- [ ] 集成 Swagger API 文档
-- [ ] 添加操作日志记录
-- [ ] 性能监控 (Prometheus)
-- [ ] E2E 测试 (Cypress)
+### 获取项目列表
+```bash
+curl https://localhost:8443/api/v1/projects \
+  -H "Authorization: Bearer YOUR_TOKEN"*最后更新**: 2025-11-01
+**版本**: v1.0.0
+说明
 
-### 长期 (3-6 月)
+### install.sh 脚本
+部署前运行 `./install.sh` 自动完成：
+- 创建必要目录（storage、certs、tmp）
+- 生成自签名 HTTPS 证书
+- 创建 .env 文件并生成随机密钥
+- 设置文件权限
 
-- [ ] 单点登录 (SSO)
-- [ ] OAuth2 第三方登录
+### Docker Compose
+```yaml
+services:
+  webtest:
+    image: ghcr.io/liulingyuncat/smart_test:latest
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./backend/certs:/app/certs
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_PASSWORD=${DB_PASSWORD}
+```
+
+### 生产环境检查清单
+- [ ] 运行 `./install.sh` 生成证书和配置
+- [ ] 修改 `.env` 中的默认密码
+- [ ] 配置反向代理（Nginx）
+- [ ] 设置数据库备份计划
+- [ ] 修改管理员默认密码```bash
+**后端**: 错误透明传递 · 函数 ≤40 行 · 文件 ≤500 行  
+**前端**: 函数组件 + Hooks · 组件 ≤200 行 · PascalCase 命名
+- bcrypt 密码加密（cost=10）
+- JWT Token 认证（HS256）
+- HTTPS 自签名证书
+- CORS 白名单配置
+- SQL 注入防护
+- XSS 过滤**Q: Go 依赖下载失败？**  
+A: 配置代理 `export GOPROXY=https://goproxy.cn,direct`
+
+**Q: HTTPS 证书错误？**  
+A: 运行 `./install.sh` 重新生成证书
+
+**Q: Docker 容器无法启动？**  
+A: 检查 `.env` 文件和端口占用（8443）
+
+**Q: 如何修改默认密码？**  
+A: 登录后在个人中心修改开发路线
+
+- [ ] Refresh Token 机制
+- [ ] 登录验证码
+- [ ] Swagger API 文档
+- [ ] 操作日志审计
+- [ ] 性能监控（Prometheus）
+- [ ] SSO 单点登录
 - [ ] 多租户支持
-- [ ] 微服务架构拆分
 
-## 贡献指南
+欢迎提交 Issue 和 Pull Request！
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
+1. Fork 项目
+2. 创建特性分支 (`git checkout -b feature/Feature`)
+3. 提交更改 (`git commit -m 'Add Feature'`)
+4. 推送分支 (`git push origin feature/Feature`)
 5. 提交 Pull Request
 
 ## 许可证
 
-本项目采用 MIT 许可证
-
-## 联系方式
-
-- 项目负责人: [Your Name]
-- 邮箱: support@example.com
-- 问题反馈: https://github.com/yourorg/webtest/issues
+MIT License
 
 ---
 
-**最后更新**: 2025-11-01
-**版本**: v1.0.0
+**最后更新**: 2026-01-11 | 

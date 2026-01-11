@@ -156,6 +156,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 多架构支持: AMD64 (x86_64), ARM64 (Apple Silicon, ARM服务器)
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -165,7 +166,7 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ steps.meta.outputs.version }}
-        timeout-minutes: 60
+        timeout-minutes: 90
 
       - name: Image digest
         run: |
