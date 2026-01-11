@@ -307,7 +307,7 @@ func (h *ExecutionTaskHandler) ExecuteSingleCase(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[ExecutionTask ExecuteSingleCase] user_id=%d, project_id=%d, task_uuid=%s, case_result_id=%d, result=%s",
-		userID, projectID, taskUUID, caseResultID, result.OKCount > 0)
+	log.Printf("[ExecutionTask ExecuteSingleCase] user_id=%d, project_id=%d, task_uuid=%s, case_result_id=%d, ok_count=%d",
+		userID, projectID, taskUUID, caseResultID, result.OKCount)
 	utils.SuccessResponse(c, result)
 }
