@@ -1,7 +1,11 @@
 ---
 name: S9_web_cases_execute
 description: 基于Playwright MCP服务执行Web测试用例的提示词模版，支持自动化测试执行和结果回填。
-version: 1.0
+version: 1.1
+arguments:
+  - name: task_name
+    description: Web测试任务名 (Task Name / タスク名)
+    required: true
 ---
 
 # Web自动化测试执行模版
@@ -529,4 +533,4 @@ AI助手:
 
 ## 开始执行
 
-我将按照上述流程为您执行自动化测试，请提供要执行的Web测试任务名称：
+执行Web自动化测试，目标任务：**{{task_name}}**

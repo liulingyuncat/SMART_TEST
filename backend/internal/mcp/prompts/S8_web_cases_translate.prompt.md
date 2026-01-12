@@ -1,6 +1,11 @@
 ---
 name: S8_web_cases_translate
 description: Web测试用例多语言翻译工具
+version: 1.1
+arguments:
+  - name: group_name
+    description: Web用例集名 (Group Name / グループ名)
+    required: true
 ---
 
 # Web测试用例多语言翻译模版
@@ -265,4 +270,4 @@ test_step_en: "[AdminPortal] Open settings from admin menu"
 
 收到用户的翻译请求后，请按照上述工作流自动执行，无需额外确认即可开始处理。处理完成后输出详细的执行报告。
 
-请开始执行Web测试用例翻译任务，请在下方输入要翻译的Web测试用例集名：
+执行Web测试用例翻译，目标用例集：**{{group_name}}**

@@ -1,7 +1,11 @@
 ---
 name: S2_viewpoint_generation
 description: 用于从需求文档生成测试观点的提示词模版，确保测试覆盖全面且可追溯。
-version: 1.0
+version: 1.1
+arguments:
+  - name: requirement_name
+    description: 需求文档名 (Requirement Name / 要件名)
+    required: true
 ---
 
 # AI 测试观点生成模版
@@ -264,4 +268,4 @@ version: 1.0
 
 ---
 
-请基于以上模版，开始执行测试观点生成任务。请在下方输入要生成测试观点的需求文档名：
+生成测试观点，目标需求文档：**{{requirement_name}}**

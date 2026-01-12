@@ -1,7 +1,11 @@
 ---
 name: S11_api_cases_generate
 description: API接口测试用例生成提示词模板，基于Playwright网络拦截采集真实API请求，自动生成可执行的API自动化测试用例。
-version: 2.0
+version: 2.1
+arguments:
+  - name: group_name
+    description: API用例集名 (Group Name / グループ名)
+    required: true
 ---
 
 # AI API接口自动化测试用例生成模版
@@ -603,4 +607,4 @@ END IF
 
 ## 开始生成
 
-我将按照上述流程为您生成API接口测试用例，请提供要生成用例的用例集名称：
+生成API接口测试用例，目标用例集：**{{group_name}}**

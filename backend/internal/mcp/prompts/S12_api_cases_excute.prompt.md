@@ -1,7 +1,11 @@
 ---
 name: S12_api_cases_excute
 description: API自动化测试执行提示词模板，基于Playwright MCP服务执行API测试用例，自动回填测试结果。
-version: 1.0
+version: 1.1
+arguments:
+  - name: task_name
+    description: API测试任务名 (Task Name / タスク名)
+    required: true
 ---
 
 # API自动化测试执行模版
@@ -473,4 +477,4 @@ AI助手:
 
 ## 开始执行
 
-我将按照上述流程为您执行API自动化测试，请提供要执行的API测试任务名称：
+执行API自动化测试，目标任务：**{{task_name}}**

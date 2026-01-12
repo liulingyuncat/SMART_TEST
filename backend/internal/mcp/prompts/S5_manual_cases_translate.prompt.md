@@ -1,7 +1,11 @@
 ---
 name: S5_manual_cases_translate
 description: 用于手工测试用例库多语言字段翻译的提示词模版，支持中日英三语自动补全。
-version: 1.0
+version: 1.1
+arguments:
+  - name: group_name
+    description: 手工用例集名 (Group Name / グループ名)
+    required: true
 ---
 
 # 手工测试用例多语言翻译模版
@@ -247,4 +251,5 @@ major_function_en: "Login Function" // JP → EN 翻译
 ## 执行确认
 
 收到用户的翻译请求后，请按照上述工作流自动执行，无需额外确认即可开始处理。处理完成后输出详细的执行报告。
-请开始执行手工测试用例翻译任务，请在下方输入要翻译的手工测试用例集名：
+
+执行手工测试用例翻译，目标用例集：**{{group_name}}**

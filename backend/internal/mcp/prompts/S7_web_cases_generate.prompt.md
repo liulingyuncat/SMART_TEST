@@ -1,7 +1,11 @@
 ---
 name: S7_web_cases_generate
 description: Web自动化测试用例生成提示词模板
-version: 2.0
+version: 2.1
+arguments:
+  - name: group_name
+    description: Web用例集名 (Group Name / グループ名)
+    required: true
 ---
 
 # AI Web自动化测试用例生成模版
@@ -695,4 +699,4 @@ END IF
 
 ---
 
-请输入用例集名称：
+生成Web自动化测试用例，目标用例集：**{{group_name}}**

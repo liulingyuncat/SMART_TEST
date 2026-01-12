@@ -1,7 +1,11 @@
 ---
 name: S1_requirements_organization
 description: 用于将转换后的文档进行需求整理的提示词模版，确保需求清晰、结构化且易于引用。
-version: 1.0
+version: 1.2
+arguments:
+  - name: document_name
+    description: 转换文档名 (Document Name / ドキュメント名)
+    required: true
 ---
 
 # AI 需求整理模版
@@ -181,4 +185,8 @@ version: 1.0
 
 ---
 
-请开始执行需求整理任务，请在下方输入要整理的转换文档名：
+请开始执行需求整理任务，目标文档：**{{document_name}}**
+
+Please start the requirements organization task for document: **{{document_name}}**
+
+需求整理タスクを開始します。対象ドキュメント：**{{document_name}}**
