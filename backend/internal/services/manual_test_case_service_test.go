@@ -148,6 +148,14 @@ func (m *MockManualTestCaseRepository) GetByProjectAndTypeOrdered(projectID uint
 	return args.Get(0).([]*models.ManualTestCase), args.Error(1)
 }
 
+func (m *MockManualTestCaseRepository) GetCaseByIntID(projectID uint, intID uint) (*models.ManualTestCase, error) {
+	args := m.Called(projectID, intID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.ManualTestCase), args.Error(1)
+}
+
 func (m *MockManualTestCaseRepository) ReassignDisplayIDs(projectID uint, caseType string) error {
 	args := m.Called(projectID, caseType)
 	return args.Error(0)
