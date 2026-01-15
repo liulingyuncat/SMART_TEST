@@ -101,12 +101,12 @@ arguments:
 
 ### 第四步：获取待评审用例集 (Get Test Cases for Review)
 
-1. 调用 `list_manual_groups` 工具，获取当前项目的手工测试用例集列表。
-2. 根据用户指定的 `group_name` 参数匹配用例集。
-3. 调用 `list_manual_cases` 工具，参数设置：
+1. 调用 `list_manual_cases` 工具，参数设置：
    - `project_id`: 从第一步获取
-   - `group_id`: 用户指定的用例集ID
-   - `return_all_fields`: true（获取所有语言字段）
+   - `group_name`: 用户指定的用例集名称（与 `group_id` 二选一，工具会自动查找对应ID）
+   - `return_all_fields`: true（默认值，获取所有语言字段）
+
+> ℹ️ **简化流程**：无需先调用 `list_manual_groups`，`list_manual_cases` 支持直接通过 `group_name` 查询。
 
 ### 第五步：执行评审分析 (Perform Review Analysis)
 
@@ -277,8 +277,7 @@ arguments:
 4. 调用 `list_viewpoint_items` → 显示观点文档列表
 5. 用户选择观点文档 → 调用 `get_viewpoint_item` 获取内容
 6. 调用 `list_manual_groups` → 显示用例集列表
-7. 匹配 "登录功能" → group_id: 5
-8. 调用 `list_manual_cases(project_id=1, group_id=5, return_all_fields=true)`
+7. 调用 `list_manual_cases(project_id=1, group_name="登录功能")`
 9. 执行评审分析，对比需求、观点与用例
 10. 生成评审报告
 11. 调用 `create_review_item` 创建评审文档

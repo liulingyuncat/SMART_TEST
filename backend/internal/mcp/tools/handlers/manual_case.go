@@ -74,7 +74,7 @@ func (h *ListManualCasesHandler) Name() string {
 }
 
 func (h *ListManualCasesHandler) Description() string {
-	return "获取用例集中的手工测试用例列表，支持返回所有语言字段（CN、JP、EN）"
+	return "获取指定手工用例集的全部用例及所有字段，支持通过用例集名称或ID查询"
 }
 
 func (h *ListManualCasesHandler) InputSchema() map[string]interface{} {
@@ -87,14 +87,18 @@ func (h *ListManualCasesHandler) InputSchema() map[string]interface{} {
 			},
 			"group_id": map[string]interface{}{
 				"type":        "integer",
-				"description": "用例集ID",
+				"description": "用例集ID（与group_name二选一）",
+			},
+			"group_name": map[string]interface{}{
+				"type":        "string",
+				"description": "用例集名称（与group_id二选一），会自动查找对应的group_id",
 			},
 			"return_all_fields": map[string]interface{}{
 				"type":        "boolean",
-				"description": "是否返回所有字段包括CN、JP、EN (默认false)",
+				"description": "是否返回所有字段包括CN、JP、EN (默认true)",
 			},
 		},
-		"required": []interface{}{"project_id", "group_id"},
+		"required": []interface{}{"project_id"},
 	}
 }
 
@@ -104,41 +108,33 @@ func (h *ListManualCasesHandler) Execute(ctx context.Context, args map[string]in
 		return tools.NewErrorResult(err.Error()), nil
 	}
 
-	groupID, err := GetInt(args, "group_id")
-	if err != nil {
-		return tools.NewErrorResult(err.Error()), nil
-	}
+	// 支持 group_id 或 group_name
+	groupID := GetOptionalInt(args, "group_id", 0)
+	groupName := GetOptionalString(args, "group_name", "")
 
-	// 获取return_all_fields参数，默认为false
-	returnAllFields := false
+	// 获取return_all_fields参数，默认为true（MCP场景下通常需要所有字段）
+	returnAllFields := true
 	if val, ok := args["return_all_fields"].(bool); ok {
 		returnAllFields = val
 	}
 
-	// 首先获取case_group的名称
+	// 首先获取case_group列表
 	caseGroupPath := fmt.Sprintf("/api/v1/projects/%d/case-groups", projectID)
 	groupsData, err := h.client.Get(ctx, caseGroupPath, nil)
 	if err != nil {
 		return tools.NewErrorResult(err.Error()), nil
 	}
 
-	// 解析JSON获取对应的group_name
-	// API 返回直接的数组 [...]，或者包装的响应 {"code": 0, "data": [...]}
+	// 解析JSON获取groups列表
 	var groups []map[string]interface{}
-
-	// 首先尝试解析为直接数组
 	err = parseJSON(groupsData, &groups)
 	if err != nil {
-		// 如果失败，尝试解析为包装的响应
 		var response map[string]interface{}
 		err = parseJSON(groupsData, &response)
 		if err != nil {
 			return tools.NewErrorResult(fmt.Sprintf("failed to parse groups response: %v", err)), nil
 		}
-
-		// 获取data字段中的groups列表
 		if dataVal, ok := response["data"]; ok {
-			// 尝试将data解析为数组
 			if dataArray, ok := dataVal.([]interface{}); ok {
 				for _, item := range dataArray {
 					if itemMap, ok := item.(map[string]interface{}); ok {
@@ -149,18 +145,39 @@ func (h *ListManualCasesHandler) Execute(ctx context.Context, args map[string]in
 		}
 	}
 
-	var groupName string
-	for _, g := range groups {
-		if id, ok := g["id"].(float64); ok && int(id) == groupID {
-			if name, ok := g["group_name"].(string); ok {
-				groupName = name
-				break
+	// 如果提供了 group_name，先查找对应的 group_id
+	if groupID == 0 && groupName != "" {
+		for _, g := range groups {
+			if name, ok := g["group_name"].(string); ok && name == groupName {
+				if id, ok := g["id"].(float64); ok {
+					groupID = int(id)
+					break
+				}
 			}
+		}
+		if groupID == 0 {
+			return tools.NewErrorResult(fmt.Sprintf("用例集 '%s' 不存在", groupName)), nil
 		}
 	}
 
-	if groupName == "" {
-		return tools.NewErrorResult(fmt.Sprintf("case group with id %d not found", groupID)), nil
+	// 如果只提供了 group_id，获取对应的 group_name
+	if groupID != 0 && groupName == "" {
+		for _, g := range groups {
+			if id, ok := g["id"].(float64); ok && int(id) == groupID {
+				if name, ok := g["group_name"].(string); ok {
+					groupName = name
+					break
+				}
+			}
+		}
+		if groupName == "" {
+			return tools.NewErrorResult(fmt.Sprintf("用例集ID %d 不存在", groupID)), nil
+		}
+	}
+
+	// 必须提供 group_id 或 group_name
+	if groupID == 0 && groupName == "" {
+		return tools.NewErrorResult("必须提供 group_id 或 group_name 参数"), nil
 	}
 
 	// 使用group_name作为query参数过滤指定case-group的用例
