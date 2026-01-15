@@ -205,53 +205,46 @@
 
 **返回**：用例列表
 
-### create_case_group
-
-创建测试用例集
-
-**参数**：
-
-- `project_id` (integer, required): 项目ID
-- `name` (string, required): 用例集名称
-- `type` (string, optional): 用例类型（默认: overall）
-- `description` (string, optional): 用例集描述
-
-**返回**：新创建的用例集ID和详细信息
-
 ### create_manual_cases
 
-创建手工测试用例（支持批量创建）
+批量创建手工测试用例，必须指定用例集名称，只生成中文字段
 
 **参数**：
 
 - `project_id` (integer, required): 项目ID
-- `case_group_id` (integer, required): 用例集ID
-- `cases` (array, required): 用例数据数组，每个元素包含各语言字段
+- `group_name` (string, required): 手工用例集名称（必填），会自动查找对应的group_id，如果不存在则自动创建
+- `cases` (array, required): 用例数据数组，每个用例对象必须包含以下字段：
+  - `case_type` (string, required): 用例类型，可选值：`overall`(整体用例)、`change`(变更用例)、`ai`(AI用例)、`acceptance`(验收用例)
+  - `case_number` (string, optional): 用例编号
+  - `major_function_cn` (string, optional): 大功能（中文）
+  - `middle_function_cn` (string, optional): 中功能（中文）
+  - `minor_function_cn` (string, optional): 小功能（中文）
+  - `precondition_cn` (string, optional): 前置条件（中文）
+  - `test_steps_cn` (string, optional): 测试步骤（中文）
+  - `expected_result_cn` (string, optional): 期待结果（中文）
 - `continue_on_error` (boolean, optional): 失败是否继续处理（默认: true）
 
 **返回**：创建结果列表，包含每个用例的ID和状态
 
-### update_manual_case
-
-更新单个手工测试用例
-
-**参数**：
-
-- `project_id` (integer, required): 项目ID
-- `case_id` (integer, required): 用例ID
-- `data` (object, required): 要更新的用例数据
-
-**返回**：更新后的用例信息
-
 ### update_manual_cases
 
-批量更新手工测试用例
+批量更新手工测试用例，支持两种模式
+
+**模式1 - 直接更新模式**：通过cases数组中的id字段直接更新
+
+**模式2 - Filter模式**：通过大功能/中功能/小功能条件查找用例并批量更新
 
 **参数**：
 
 - `project_id` (integer, required): 项目ID
-- `case_group_id` (integer, optional): 用例集ID（推荐提供）
-- `cases` (array, required): 用例数据数组，每个元素必须包含id字段（整数型）
+- `group_id` (integer, optional): 用例集ID（与group_name二选一，使用filter模式时必填其一）
+- `group_name` (string, optional): 用例集名称（与group_id二选一），会自动查找对应的group_id
+- `filter` (object, optional): 筛选条件对象，用于查找要更新的用例
+  - `major_function_cn` (string): 大功能名称（精确匹配）
+  - `middle_function_cn` (string): 中功能名称（精确匹配）
+  - `minor_function_cn` (string): 小功能名称（精确匹配）
+- `update_data` (object, optional): 使用filter模式时，要更新的字段和值
+- `cases` (array, optional): 直接更新模式的用例数组，每个元素必须包含id字段（整数型）
 - `continue_on_error` (boolean, optional): 失败是否继续处理（默认: true）
 
 **返回**：更新结果列表

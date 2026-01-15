@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -700,9 +699,13 @@ func (h *ManualCasesHandler) CreateCaseForGroup(c *gin.Context) {
 		req.CaseType = "overall"
 	}
 
-	// TODO: GetCaseGroupName方法未实现，直接使用groupID作为caseGroup参数
 	// 根据groupID获取用例集的group_name
-	groupName := "" // 暂时使用空值，后续实现GetCaseGroupName方法
+	groupName, err := h.service.GetCaseGroupName(uint(projectID), uint(groupID))
+	if err != nil {
+		log.Printf("[Get Case Group Name Failed] project_id=%d, group_id=%d, error=%v", projectID, groupID, err)
+		utils.ErrorResponse(c, http.StatusBadRequest, "用例集不存在")
+		return
+	}
 
 	// 设置请求中的case_group为组名称
 	req.CaseGroup = groupName
@@ -765,10 +768,20 @@ func (h *ManualCasesHandler) UpdateCaseForGroup(c *gin.Context) {
 		return
 	}
 
-	// TODO: UpdateCaseByID方法未实现，需要先查询case_id然后使用UpdateCase
-	// 查询用例获取case_id
-	// 暂时跳过此操作
-	err = fmt.Errorf("UpdateCaseByID not implemented, please use UpdateCase with case_id")
+	// 查询用例以获取case_id (UUID)
+	caseModel, err := h.service.GetCaseByIntID(uint(projectID), uint(caseID))
+	if err != nil {
+		log.Printf("[Get Case By Int ID Failed] project_id=%d, int_id=%d, error=%v", projectID, caseID, err)
+		if err.Error() == "用例不存在" {
+			utils.ErrorResponse(c, http.StatusNotFound, err.Error())
+			return
+		}
+		utils.ErrorResponse(c, http.StatusInternalServerError, "获取用例信息失败")
+		return
+	}
+
+	// 使用UUID进行更新
+	err = h.service.UpdateCase(uint(projectID), userID, caseModel.CaseID, req)
 	if err != nil {
 		log.Printf("[Case Update For Group Failed] user_id=%d, project_id=%d, group_id=%d, case_id=%d, error=%v", userID, projectID, groupID, caseID, err)
 		if err.Error() == "无项目访问权限" {
@@ -783,12 +796,9 @@ func (h *ManualCasesHandler) UpdateCaseForGroup(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[Case Update For Group] user_id=%d, project_id=%d, group_id=%d, case_id=%d", userID, projectID, groupID, caseID)
+	log.Printf("[Case Update For Group] user_id=%d, project_id=%d, group_id=%d, case_id=%d, case_uuid=%s", userID, projectID, groupID, caseID, caseModel.CaseID)
 	utils.SuccessResponse(c, map[string]interface{}{
-		"code":    0,
-		"message": "更新成功",
-		"data": map[string]interface{}{
-			"case_id": caseID,
-		},
+		"case_id": caseModel.CaseID,
+		"id":      caseID,
 	})
 }

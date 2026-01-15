@@ -157,6 +157,7 @@ type ManualTestCaseService interface {
 
 	// CRUD方法 - caseID使用UUID字符串
 	CreateCase(projectID uint, userID uint, req CreateCaseRequest) (*CaseDTO, error)
+	GetCaseByIntID(projectID uint, intID uint) (*models.ManualTestCase, error)                      // 通过整数ID查询用例
 	UpdateCase(projectID uint, userID uint, caseID string, req UpdateCaseRequest) error             // 改用UUID
 	DeleteCase(projectID uint, userID uint, caseID string) error                                    // 改用UUID
 	ReorderCases(projectID uint, userID uint, caseType string, caseIDs []uint) ([]uint, error)      // ID显示序号重排（重新排序按钮）
@@ -170,6 +171,9 @@ type ManualTestCaseService interface {
 
 	// 新增：重新分配所有ID
 	ReassignAllIDs(projectID uint, userID uint, caseType string) error
+
+	// 获取用例集名称
+	GetCaseGroupName(projectID uint, groupID uint) (string, error)
 }
 
 type manualTestCaseService struct {
@@ -1007,4 +1011,14 @@ func (s *manualTestCaseService) ReassignAllIDs(projectID uint, userID uint, case
 	}
 
 	return nil
+}
+
+// GetCaseGroupName 获取用例集名称
+func (s *manualTestCaseService) GetCaseGroupName(projectID uint, groupID uint) (string, error) {
+	return s.repo.GetCaseGroupName(projectID, groupID)
+}
+
+// GetCaseByIntID 通过整数ID查询用例
+func (s *manualTestCaseService) GetCaseByIntID(projectID uint, intID uint) (*models.ManualTestCase, error) {
+	return s.repo.GetCaseByIntID(projectID, intID)
 }

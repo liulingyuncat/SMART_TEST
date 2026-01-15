@@ -6,7 +6,7 @@ import (
 )
 
 // RegisterAllTools registers all MCP tool handlers to the registry.
-// Total: 37 tools across 11 handler files.
+// Total: 34 tools (删除了 create_case_group, update_manual_case, create_web_group, create_api_group 等4个工具)
 func RegisterAllTools(registry *tools.ToolRegistry, c *client.BackendClient) {
 	// ==================== 用户与项目信息相关 (1 tool) ====================
 	// registry.Register(NewGetCurrentUserInfoHandler(c)) // 已禁用：提示词中不再使用
@@ -28,12 +28,12 @@ func RegisterAllTools(registry *tools.ToolRegistry, c *client.BackendClient) {
 	registry.Register(NewCreateViewpointItemHandler(c))
 	registry.Register(NewUpdateViewpointItemHandler(c))
 
-	// ==================== 用例集与手工用例相关 (6 tools) ====================
+	// ==================== 用例集与手工用例相关 (4 tools) ====================
 	registry.Register(NewListManualGroupsHandler(c))
 	registry.Register(NewListManualCasesHandler(c))
-	registry.Register(NewCreateCaseGroupHandler(c))
+	// registry.Register(NewCreateCaseGroupHandler(c)) // 已禁用：create_manual_cases 已支持 group_name 自动创建
 	registry.Register(NewCreateManualCasesHandler(c))
-	registry.Register(NewUpdateManualCaseHandler(c))
+	// registry.Register(NewUpdateManualCaseHandler(c)) // 已禁用：使用 update_manual_cases 批量更新
 	registry.Register(NewUpdateManualCasesHandler(c))
 
 	// ==================== Web自动化用例相关 (5 tools) ====================

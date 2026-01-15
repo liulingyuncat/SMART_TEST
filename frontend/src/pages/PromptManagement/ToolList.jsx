@@ -68,10 +68,8 @@ const ToolList = () => {
           tools: [
             { name: 'list_manual_groups', description: t('prompts.toolDescriptions.list_manual_groups'), params: 'project_id(required)', returns: '用例集列表' },
             { name: 'list_manual_cases', description: t('prompts.toolDescriptions.list_manual_cases'), params: 'project_id(required), case_group_id(required), all_fields(optional)', returns: '用例列表' },
-            { name: 'create_case_group', description: t('prompts.toolDescriptions.create_case_group'), params: 'project_id(required), name(required), type(optional), description(optional)', returns: '新创建的用例集ID和详细信息' },
-            { name: 'create_manual_cases', description: t('prompts.toolDescriptions.create_manual_cases'), params: 'project_id(required), case_group_id(required), cases(required), continue_on_error(optional)', returns: '创建结果列表' },
-            { name: 'update_manual_case', description: t('prompts.toolDescriptions.update_manual_case'), params: 'project_id(required), case_id(required), data(required)', returns: '更新后的用例信息' },
-            { name: 'update_manual_cases', description: t('prompts.toolDescriptions.update_manual_cases'), params: 'project_id(required), case_group_id(optional), cases(required), continue_on_error(optional)', returns: '更新结果列表' },
+            { name: 'create_manual_cases', description: t('prompts.toolDescriptions.create_manual_cases'), params: 'project_id(required), group_name(required), cases(required，只含中文字段), continue_on_error(optional)', returns: '创建结果列表，支持自动创建用例集' },
+            { name: 'update_manual_cases', description: t('prompts.toolDescriptions.update_manual_cases'), params: 'project_id(required), group_id或group_name(可选), cases或filter+update_data(二选一), continue_on_error(optional)', returns: '更新结果列表，支持按大/中/小功能筛选更新' },
           ]
         },
         {

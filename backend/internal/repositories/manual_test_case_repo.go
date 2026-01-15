@@ -17,6 +17,7 @@ type ManualTestCaseRepository interface {
 	// CRUD方法 - 使用CaseID(UUID)作为主键
 	Create(testCase *models.ManualTestCase) error
 	GetByCaseID(caseID string) (*models.ManualTestCase, error)                 // 改用CaseID(UUID)
+	GetCaseByIntID(projectID uint, intID uint) (*models.ManualTestCase, error) // 通过整数ID查询用例
 	UpdateByCaseID(caseID string, updates map[string]interface{}) error        // 改用CaseID(UUID)
 	DeleteByCaseID(caseID string) error                                        // 改用CaseID(UUID)
 	DeleteByCaseGroup(projectID uint, caseType string, caseGroup string) error // 级联删除用例集的所有用例
@@ -153,6 +154,19 @@ func (r *manualTestCaseRepository) GetByCaseID(caseID string) (*models.ManualTes
 	err := r.db.Where("case_id = ?", caseID).First(&testCase).Error
 	if err != nil {
 		return nil, err // 保留gorm.ErrRecordNotFound
+	}
+	return &testCase, nil
+}
+
+// GetCaseByIntID 通过整数ID查询用例
+func (r *manualTestCaseRepository) GetCaseByIntID(projectID uint, intID uint) (*models.ManualTestCase, error) {
+	var testCase models.ManualTestCase
+	err := r.db.Where("project_id = ? AND id = ?", projectID, intID).First(&testCase).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("用例不存在")
+		}
+		return nil, err
 	}
 	return &testCase, nil
 }
