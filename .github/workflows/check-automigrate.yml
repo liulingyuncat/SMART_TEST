@@ -1,0 +1,35 @@
+name: AutoMigrate 模型完整性检查
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/internal/models/**'
+      - 'backend/cmd/server/main.go'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/internal/models/**'
+      - 'backend/cmd/server/main.go'
+
+jobs:
+  check-automigrate:
+    name: 验证 AutoMigrate 配置
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      
+      - name: 运行 AutoMigrate 完整性检查
+        run: |
+          chmod +x check_automigrate.sh
+          ./check_automigrate.sh
+      
+      - name: 检查结果
+        if: failure()
+        run: |
+          echo "❌ AutoMigrate 配置检查失败！"
+          echo "请确保所有数据库模型都已在 backend/cmd/server/main.go 的 AutoMigrate 中注册。"
+          echo "运行 ./check_automigrate.sh 查看详细信息。"
+          exit 1

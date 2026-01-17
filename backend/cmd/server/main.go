@@ -86,6 +86,7 @@ func main() {
 		&models.CaseVersion{},
 		&models.AutoTestCaseVersion{},
 		&models.ExecutionTask{},
+		&models.ExecutionCaseResult{}, // 测试执行结果表
 		&models.Defect{},
 		&models.DefectAttachment{},
 		&models.DefectSubject{},

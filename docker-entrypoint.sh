@@ -27,6 +27,40 @@ generate_certs() {
     fi
 }
 
+# 检查数据库连接和必需的表
+check_database() {
+    local max_attempts=30
+    local attempt=0
+    
+    echo "[entrypoint] Checking database connection..."
+    
+    # 等待数据库就绪
+    while [ $attempt -lt $max_attempts ]; do
+        if [ "${DB_TYPE:-sqlite}" = "postgres" ]; then
+            # PostgreSQL 连接检查
+            if nc -z "${DB_HOST:-postgres}" "${DB_PORT:-5432}" 2>/dev/null; then
+                echo "[entrypoint] Database connection established"
+                break
+            fi
+        else
+            # SQLite 不需要连接检查
+            echo "[entrypoint] Using SQLite database"
+            break
+        fi
+        
+        attempt=$((attempt + 1))
+        echo "[entrypoint] Waiting for database... (${attempt}/${max_attempts})"
+        sleep 2
+    done
+    
+    if [ $attempt -eq $max_attempts ]; then
+        echo "[entrypoint] ERROR: Failed to connect to database after ${max_attempts} attempts"
+        exit 1
+    fi
+    
+    echo "[entrypoint] Database connectivity verified"
+}
+
 # 信号处理函数 - 优雅关闭所有子进程
 cleanup() {
     echo "[entrypoint] Received shutdown signal, stopping services..."
@@ -56,7 +90,11 @@ echo "[entrypoint] Starting SMART_TEST services..."
 # 生成证书
 generate_certs
 
+# 检查数据库连接
+check_database
+
 echo "[entrypoint] Database type: ${DB_TYPE:-sqlite}"
+echo "[entrypoint] Note: Table schema will be auto-created by GORM on first startup"
 
 # 启动 Web 服务（后台运行）
 echo "[entrypoint] Starting Web service on port 8443..."
