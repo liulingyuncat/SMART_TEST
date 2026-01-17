@@ -2,9 +2,9 @@
 # SMART_TEST (webtest) - Multi-stage Dockerfile
 # 
 # 三阶段构建策略：
-#   Stage 1: 前端构建 (Node.js)
-#   Stage 2: 后端构建 (Go)
-#   Stage 3: 生产镜像 (Alpine)
+#   Stage 1: 前端构建 (Node.js Alpine)
+#   Stage 2: 后端构建 (Go Debian) - 包含 playwright-go 驱动安装
+#   Stage 3: 生产镜像 (Debian Slim) - 支持 Playwright WebSocket 连接
 #
 # 镜像: ghcr.io/liulingyuncat/smart_test:latest
 # =============================================================================
@@ -48,11 +48,14 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
+# 使用 Debian 版本的 Go 镜像，以便正确安装 playwright-go 驱动
 # -----------------------------------------------------------------------------
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.24-bookworm AS backend-builder
 
 # 安装构建依赖
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/backend
 
@@ -75,25 +78,34 @@ RUN go build -ldflags="-s -w" -o server ./cmd/server
 # 构建 MCP 服务
 RUN go build -ldflags="-s -w" -o mcp-server ./cmd/mcp
 
+# 安装 playwright-go 驱动（下载到 /root/.cache/ms-playwright-go/）
+RUN go install github.com/playwright-community/playwright-go/cmd/playwright@v0.5200.1 && \
+    /go/bin/playwright install
+
 # -----------------------------------------------------------------------------
 # Stage 3: Production Image
+# 使用 Debian 而非 Alpine，因为 Playwright 不支持 musl libc
 # -----------------------------------------------------------------------------
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
 # 安装运行时依赖
-RUN apk add --no-cache \
+# 注意：不再需要 docker-cli，使用 WebSocket 连接 playwright-runner
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     openssl \
     wget \
-    && rm -rf /var/cache/apk/*
+    curl \
+    bash \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置时区
 ENV TZ=Asia/Shanghai
 
 # 创建非 root 用户
-RUN addgroup -g 1000 webtest && \
-    adduser -D -u 1000 -G webtest webtest
+RUN groupadd -g 1000 webtest && \
+    useradd -u 1000 -g webtest -m webtest
 
 WORKDIR /app
 
@@ -101,6 +113,12 @@ WORKDIR /app
 COPY --from=backend-builder /app/backend/server ./server
 COPY --from=backend-builder /app/backend/mcp-server ./mcp-server
 COPY --from=frontend-builder /app/frontend/build ./frontend/build
+
+# 复制 playwright-go 驱动文件到 webtest 用户的 home 目录
+COPY --from=backend-builder /root/.cache/ms-playwright-go /home/webtest/.cache/ms-playwright-go
+
+# 修复驱动文件权限
+RUN chown -R webtest:webtest /home/webtest/.cache
 
 # 复制配置文件
 COPY backend/config/mcp-server.yaml ./config/mcp-server.yaml

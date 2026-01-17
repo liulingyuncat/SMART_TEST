@@ -35,17 +35,31 @@ services:
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Playwright 测试运行器 (开发环境)
+  # Playwright 测试运行器 (开发环境 - run-server 模式)
   # ---------------------------------------------------------------------------
   playwright-runner:
-    image: mcr.microsoft.com/playwright:v1.40.0-jammy
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
     container_name: playwright-runner
-    command: tail -f /dev/null
+    # 使用 Playwright 官方 run-server 模式
+    command: >
+      /bin/sh -c "
+        npx -y playwright@1.52.0 run-server 
+        --port 3000 
+        --host 0.0.0.0
+      "
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"   # 暴露端口供本地开发调试
     volumes:
       - ./scripts:/app/scripts:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:

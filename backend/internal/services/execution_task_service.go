@@ -1,10 +1,9 @@
 package services
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 	"webtest/internal/models"
@@ -69,6 +68,7 @@ type executionTaskService struct {
 	projectRepo repositories.ProjectRepository             // 用于权限验证
 	ecrRepo     repositories.ExecutionCaseResultRepository // 用于级联删除
 	userRepo    repositories.UserRepository                // 用于获取用户名
+	pwClient    *PlaywrightClient                          // Playwright 客户端
 }
 
 // NewExecutionTaskService 创建任务服务实例
@@ -78,11 +78,15 @@ func NewExecutionTaskService(
 	ecrRepo repositories.ExecutionCaseResultRepository,
 	userRepo repositories.UserRepository,
 ) ExecutionTaskService {
+	// 初始化 Playwright 客户端
+	pwClient := NewPlaywrightClient(DefaultPlaywrightConfig())
+
 	return &executionTaskService{
 		repo:        repo,
 		projectRepo: projectRepo,
 		ecrRepo:     ecrRepo,
 		userRepo:    userRepo,
+		pwClient:    pwClient,
 	}
 }
 
@@ -325,9 +329,9 @@ func (s *executionTaskService) ExecuteTask(projectID uint, userID uint, taskUUID
 			continue
 		}
 
-		// 调用Docker执行脚本
-		fmt.Printf("[ExecuteTask] 开始执行Docker脚本...\n")
-		execResult, execErr := s.executeInDocker(c.ScriptCode)
+		// 调用 Playwright Server 执行脚本
+		fmt.Printf("[ExecuteTask] 开始执行 Playwright 脚本...\n")
+		execResult, execErr := s.executeViaPlaywright(c.ScriptCode)
 		if execErr != nil {
 			// 执行失败
 			fmt.Printf("[ExecuteTask] 执行失败: %v\n", execErr)
@@ -404,54 +408,20 @@ func (s *executionTaskService) getRemarkByLang(lang string, success bool, errMsg
 	}
 }
 
-// executeInDocker 在Docker容器内执行脚本
-func (s *executionTaskService) executeInDocker(scriptCode string) (*DockerExecResult, error) {
-	fmt.Printf("[executeInDocker] 开始执行Docker脚本，长度: %d bytes\n", len(scriptCode))
+// executeViaPlaywright 通过 Playwright Server 执行脚本
+// 使用 WebSocket 连接到 playwright-runner 容器的 run-server 服务
+func (s *executionTaskService) executeViaPlaywright(scriptCode string) (*DockerExecResult, error) {
+	fmt.Printf("[executeViaPlaywright] 开始执行脚本，长度: %d bytes\n", len(scriptCode))
 
-	// 创建临时脚本文件名
-	tmpFile := fmt.Sprintf("/tmp/test_%d.js", time.Now().UnixNano())
-	fmt.Printf("[executeInDocker] 临时文件: %s\n", tmpFile)
-
-	// 写入脚本到容器
-	writeCmd := exec.Command("docker", "exec", "-i", "playwright-runner",
-		"sh", "-c", fmt.Sprintf("cat > %s", tmpFile))
-	writeCmd.Stdin = strings.NewReader(scriptCode)
-	if err := writeCmd.Run(); err != nil {
-		return nil, fmt.Errorf("写入脚本失败: %w", err)
-	}
-	fmt.Printf("[executeInDocker] 脚本写入成功\n")
-
-	// 执行脚本
-	var stdout, stderr bytes.Buffer
-	startTime := time.Now()
-
-	runCmd := exec.Command("docker", "exec", "playwright-runner", "node", tmpFile)
-	runCmd.Stdout = &stdout
-	runCmd.Stderr = &stderr
-
-	fmt.Printf("[executeInDocker] 开始执行node命令...\n")
-	err := runCmd.Run()
-	responseTime := time.Since(startTime).Milliseconds()
-	fmt.Printf("[executeInDocker] 执行完成，耗时: %dms\n", responseTime)
-
-	// 清理临时文件
-	_ = exec.Command("docker", "exec", "playwright-runner", "rm", "-f", tmpFile).Run()
-
+	ctx := context.Background()
+	result, err := s.pwClient.ExecuteScript(ctx, scriptCode)
 	if err != nil {
-		errOutput := stderr.String()
-		if errOutput == "" {
-			errOutput = err.Error()
-		}
-		fmt.Printf("[executeInDocker] 执行错误: %s\n", errOutput)
-		return nil, fmt.Errorf("执行失败: %s", errOutput)
+		fmt.Printf("[executeViaPlaywright] 执行失败: %v\n", err)
+		return nil, err
 	}
 
-	fmt.Printf("[executeInDocker] 输出: %s\n", stdout.String())
-	return &DockerExecResult{
-		Success:      true,
-		Output:       stdout.String(),
-		ResponseTime: int(responseTime),
-	}, nil
+	fmt.Printf("[executeViaPlaywright] 执行完成，耗时: %dms\n", result.ResponseTime)
+	return result, nil
 }
 
 // getUserName 获取用户名
@@ -513,8 +483,8 @@ func (s *executionTaskService) ExecuteSingleCase(projectID uint, userID uint, ta
 	}
 
 	// 6. 执行用例
-	fmt.Printf("[ExecuteSingleCase] 开始执行Docker脚本...\n")
-	execResult, execErr := s.executeInDocker(c.ScriptCode)
+	fmt.Printf("[ExecuteSingleCase] 开始执行 Playwright 脚本...\n")
+	execResult, execErr := s.executeViaPlaywright(c.ScriptCode)
 	var okCount, ngCount, blockCount int
 	if execErr != nil {
 		// 执行失败

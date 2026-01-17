@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # =============================================================================
 # SMART_TEST (webtest) - Docker Entrypoint Script
 #
@@ -95,6 +95,11 @@ check_database
 
 echo "[entrypoint] Database type: ${DB_TYPE:-sqlite}"
 echo "[entrypoint] Note: Table schema will be auto-created by GORM on first startup"
+
+# 安装 Playwright 驱动（如果未安装）
+# playwright-go 在首次 Run() 时会自动下载驱动，这里不需要手动安装
+# 驱动会被下载到 /root/.cache/ms-playwright-go/
+echo "[entrypoint] Playwright driver will be auto-downloaded on first use"
 
 # 启动 Web 服务（后台运行）
 echo "[entrypoint] Starting Web service on port 8443..."

@@ -52,8 +52,11 @@ services:
     volumes:
       # 持久化存储
       - ./storage:/app/storage
+      # 注意：不再需要 Docker socket，使用 WebSocket 连接 playwright-runner
     depends_on:
       postgres:
+        condition: service_healthy
+      playwright-runner:
         condition: service_healthy
     networks:
       - webtest-network
@@ -101,12 +104,18 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # Playwright 测试运行器
+  # Playwright 测试运行器 (run-server 模式)
   # ---------------------------------------------------------------------------
   playwright-runner:
-    image: mcr.microsoft.com/playwright:v1.40.0-jammy
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
     container_name: playwright-runner
-    command: tail -f /dev/null
+    # 使用 Playwright 官方 run-server 模式
+    command: >
+      /bin/sh -c "
+        npx -y playwright@1.52.0 run-server 
+        --port 3000 
+        --host 0.0.0.0
+      "
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -114,6 +123,12 @@ services:
       - ./scripts:/app/scripts:ro
     networks:
       - webtest-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: json-file
       options:
