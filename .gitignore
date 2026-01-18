@@ -151,3 +151,9 @@ backend/tmp/
 # Playwright/E2E 测试
 # ===========================================
 .playwright-mcp/
+
+
+docs/*.md
+.vscode
+bin
+certs

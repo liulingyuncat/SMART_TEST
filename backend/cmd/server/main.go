@@ -1019,11 +1019,13 @@ func main() {
 	})
 
 	// 启动 HTTPS 服务器
-	certFile := "certs/server.crt"
-	keyFile := "certs/server.key"
+	// 证书路径通过环境变量配置，默认在项目根目录的 certs/ 下
+	certFile := config.GetCertFilePath()
+	keyFile := config.GetKeyFilePath()
+	serverAddr := config.GetServerAddr()
 
-	log.Println("server starting on https://localhost:8443")
-	if err := r.RunTLS(":8443", certFile, keyFile); err != nil {
+	log.Printf("server starting on https://localhost%s (cert: %s)", serverAddr, certFile)
+	if err := r.RunTLS(serverAddr, certFile, keyFile); err != nil {
 		log.Fatalf("failed to start HTTPS server: %v", err)
 	}
 }

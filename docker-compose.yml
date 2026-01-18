@@ -25,7 +25,7 @@ services:
   # webtest 主服务 (Web + MCP)
   # ---------------------------------------------------------------------------
   webtest:
-    image: ghcr.io/liulingyuncat/smart_test:latest
+    image: ghcr.io/liulingyuncat/smart_test-webtest:latest
     container_name: webtest
     restart: unless-stopped
     env_file:
@@ -49,14 +49,19 @@ services:
       # MCP 配置
       - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-default_mcp_token_change_me}
       - MCP_BACKEND_URL=https://localhost:8443
+      # Playwright 配置
+      - PLAYWRIGHT_EXECUTOR_URL=http://playwright-executor:53730
+      # TLS 证书配置（容器内使用绝对路径）
+      - CERT_FILE=/app/certs/server.crt
+      - KEY_FILE=/app/certs/server.key
     volumes:
       # 持久化存储
       - ./storage:/app/storage
-      # 注意：不再需要 Docker socket，使用 WebSocket 连接 playwright-runner
+      # 注意：不再需要 Docker socket，使用 HTTP 调用 playwright-executor
     depends_on:
       postgres:
         condition: service_healthy
-      playwright-runner:
+      playwright-executor:
         condition: service_healthy
     networks:
       - webtest-network
@@ -117,6 +122,9 @@ services:
         --host 0.0.0.0
       "
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -129,6 +137,37 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Playwright 脚本执行器 (Node.js HTTP 服务)
+  # ---------------------------------------------------------------------------
+  playwright-executor:
+    image: ghcr.io/liulingyuncat/smart_test-playwright-executor:latest
+    container_name: playwright-executor
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - PLAYWRIGHT_RUNNER_URL=ws://playwright-runner:3000
+    depends_on:
+      playwright-runner:
+        condition: service_healthy
+    networks:
+      - webtest-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:53730/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options:

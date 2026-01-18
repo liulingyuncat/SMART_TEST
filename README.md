@@ -138,62 +138,111 @@ cd backend
 # 2. 配置 Go 代理(国内用户)
 export GOPROXY=https://goproxy.cn,direct  # Linux/Mac
 $env:GOPROXY="https://goproxy.cn,direct"  # Windows PowerShell
-
-# 3本地开发
-
-### 前置要求
-- Go 1.21+
-- Node.js 20+
-- OpenSSL (生成证书)
-
-### 后端开发
-```bash
-cd backend
-export GOPROXY=https://goproxy.cn,direct  # 国内用户
-go mod tidy
-go run cmd/server/main.go  # 启动后端服务
 ```
 
-### 前端开发
+---
+
+## 🛠️ 本地开发
+
+### 前置要求
+- **Go**: 1.24+
+- **Node.js**: 20+
+- **Docker & Docker Compose**: 用于开发依赖
+- **Make**: Linux/macOS 使用 Makefile；Windows 使用 dev.bat
+
+### 快速启动（前后端分离，推荐）
+
+#### Linux / macOS
+
 ```bash
-cd frontend
-npm install
-npm start  # 启动开发服务器
-``` user.go         # User 模型
-│   │   ├── repositories/
-│   │   │   └── user_repo.go    # 数据访问层
-│   │   ├── services/
-│   │   │   ├── auth_service.go      # 认证服务
-│   │   │   └── auth_service_test.go # 单元测试
-│   │   └── utils/
-│   │       └── response.go     # 统一响应工具
-│   ├── migrations/             # 数据库迁移脚本
-│   │   ├── 001_create_users_table.sql
-│   │   └── mongodb_schema.js
-│   ├── go.mod
-│   └── go.sum
-│
-├── frontend/                   # 前端 React 项目
-│   ├── public/
-│   ├── src/
-│   │   ├── api/
-│   │   │   ├── client.js       # Axios 客户端
-│   │   │   └── auth.js         # 认证 API
-│   │   ├── i18n/
-│   │   │   └── index.js        # 国际化配置
-│   │   ├── pages/
-│   │   │   └── Login/
-│   │   │       ├── index.jsx   # 登录页面
-│   │   │       ├── index.css
-│   │   │       └── Login.test.jsx
-│   │   ├── router/
-│   │   │   └── index.jsx       # 路由配置
-│   │   ├── store/
-│   │   │   ├── index.js        # Redux store
-│   │   │   └── authSlice.js    # 认证状态
-│   │   ├── App.js
-│   │   └── index.js
-│   ├── .env                    # Go 后端
+# 终端 1：启动后端（Go + Docker）
+make dev
+
+# 终端 2：启动前端开发服务器（支持热重载）
+make frontend-dev
+```
+
+#### Windows
+
+```batch
+REM 终端 1：启动后端
+dev.bat start
+
+REM 终端 2：启动前端
+dev.bat frontend
+```
+
+访问：**http://localhost:3000**
+
+### 一键启动（快速演示）
+
+```bash
+# Linux/macOS：构建前端 + 启动后端
+make dev-full
+
+# Windows
+dev.bat start-full
+```
+
+访问：**https://localhost:8443**
+
+> ⚠️ **注意**：一键模式前端无热重载，修改代码需重新构建
+
+### 服务地址
+
+启动后可访问：
+- **前端开发服务器**: http://localhost:3000（支持热重载）
+- **后端 API**: https://localhost:8443
+- **MCP Server**: http://localhost:16410
+- **Playwright Executor**: http://localhost:53730
+
+### 详细文档
+
+- 📖 [开发环境指南](./doc/开发环境指南.md) - 完整的开发环境配置和使用说明
+- 🔧 [环境兼容性说明](./doc/环境兼容性说明.md) - Linux/macOS/Windows 平台差异和解决方案
+
+### 单独启动服务
+
+```bash
+# 仅启动 Docker 依赖（PostgreSQL + Playwright）
+make dev-deps
+
+# 仅启动 Web Server
+make server
+
+# 仅启动 MCP Server
+make mcp
+
+# 仅启动前端开发服务器
+make frontend-dev
+
+# 构建前端
+make frontend-build
+
+# 构建二进制文件
+make build
+
+# 停止所有服务
+make dev-stop
+```
+
+### 环境变量配置
+
+复制并修改环境变量文件：
+
+```bash
+cp .env.example .env.local
+```
+
+编辑 `.env.local` 设置本地配置（证书路径、数据库等）。
+
+---
+
+## 📁 项目结构
+
+```text
+SMART_TEST/
+├── backend/                    # Go 后端
 │   ├── cmd/                    # 主程序入口
 │   │   ├── server/             # Web 服务器
 │   │   ├── mcp/                # MCP 服务器

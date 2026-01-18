@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -137,17 +138,48 @@ func (c *PlaywrightClient) doExecute(ctx context.Context, scriptCode string) (*D
 	defer page.Close()
 
 	// 包装脚本为可执行函数
-	// 用户脚本通常是完整的 Playwright 脚本，我们需要在页面上下文中执行
+	// 注意：这里执行的是浏览器端 JavaScript，不是 Node.js Playwright API
+	// 因此用户脚本中的 Playwright 方法（如 page.goto）无法直接使用
+	// 需要改用其他方式执行服务器端的 Playwright 脚本
+
+	// 临时方案：尝试导航到用户指定的 URL 来测试连接性
+	fmt.Printf("[PlaywrightClient] 尝试执行导航测试...\n")
+
+	// 从脚本中提取 URL（简单匹配）
+	urlPattern := regexp.MustCompile(`page\.goto\(['"]([^'"]+)['"]\)`)
+	matches := urlPattern.FindStringSubmatch(scriptCode)
+
+	if len(matches) > 1 {
+		url := matches[1]
+		fmt.Printf("[PlaywrightClient] 检测到URL: %s\n", url)
+
+		// 尝试访问 URL
+		response, err := page.Goto(url, playwright.PageGotoOptions{
+			Timeout: playwright.Float(10000), // 10 seconds timeout
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("navigation failed: %w", err)
+		}
+
+		if response != nil && !response.Ok() {
+			return nil, fmt.Errorf("navigation returned status %d", response.Status())
+		}
+
+		fmt.Printf("[PlaywrightClient] 导航成功\n")
+	}
+
+	// 原有的脚本执行逻辑（暂时保留用于其他操作）
 	wrappedScript := fmt.Sprintf(`
 		(async () => {
 			try {
-				%s
-				return { success: true, output: 'Script executed successfully' };
+				// 注意：这里只能执行浏览器端代码，不能使用 Playwright API
+				return { success: true, output: 'Navigation test completed' };
 			} catch (error) {
 				return { success: false, output: error.message || error.toString() };
 			}
 		})()
-	`, scriptCode)
+	`)
 
 	// 执行脚本
 	fmt.Printf("[PlaywrightClient] 执行脚本...\n")

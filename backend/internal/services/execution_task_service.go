@@ -68,7 +68,7 @@ type executionTaskService struct {
 	projectRepo repositories.ProjectRepository             // 用于权限验证
 	ecrRepo     repositories.ExecutionCaseResultRepository // 用于级联删除
 	userRepo    repositories.UserRepository                // 用于获取用户名
-	pwClient    *PlaywrightClient                          // Playwright 客户端
+	pwClient    *PlaywrightExecutorClient                  // Playwright 执行器客户端
 }
 
 // NewExecutionTaskService 创建任务服务实例
@@ -78,8 +78,8 @@ func NewExecutionTaskService(
 	ecrRepo repositories.ExecutionCaseResultRepository,
 	userRepo repositories.UserRepository,
 ) ExecutionTaskService {
-	// 初始化 Playwright 客户端
-	pwClient := NewPlaywrightClient(DefaultPlaywrightConfig())
+	// 初始化 Playwright 执行器客户端
+	pwClient := NewPlaywrightExecutorClient(DefaultExecutorConfig())
 
 	return &executionTaskService{
 		repo:        repo,
@@ -409,12 +409,12 @@ func (s *executionTaskService) getRemarkByLang(lang string, success bool, errMsg
 }
 
 // executeViaPlaywright 通过 Playwright Server 执行脚本
-// 使用 WebSocket 连接到 playwright-runner 容器的 run-server 服务
+// 使用 HTTP 调用 playwright-executor 服务
 func (s *executionTaskService) executeViaPlaywright(scriptCode string) (*DockerExecResult, error) {
 	fmt.Printf("[executeViaPlaywright] 开始执行脚本，长度: %d bytes\n", len(scriptCode))
 
 	ctx := context.Background()
-	result, err := s.pwClient.ExecuteScript(ctx, scriptCode)
+	result, err := s.pwClient.Execute(ctx, scriptCode)
 	if err != nil {
 		fmt.Printf("[executeViaPlaywright] 执行失败: %v\n", err)
 		return nil, err

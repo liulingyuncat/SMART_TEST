@@ -1,20 +1,25 @@
 # =============================================================================
 # SMART_TEST (webtest) - Development Docker Compose
 #
-# 开发环境容器编排配置
-# 仅包含 PostgreSQL 数据库，供本地开发使用
+# 开发环境容器编排配置（基于生产环境 docker-compose.yml）
+# 
+# 主要差异：
+#   1. 端口映射到本地（避免与生产环境冲突）
+#   2. PostgreSQL 使用独立端口 5433
+#   3. Playwright 服务暴露到本地端口
+#   4. 不包含 webtest 主服务（本地运行 `go run`）
 #
-# 使用方法:
-#   docker-compose -f docker-compose.dev.yml up -d
+# 使用方式：
+#   make dev-deps    # 启动 Docker 依赖
+#   make dev         # 启动后端 Go 服务
+#   make frontend-dev # 启动前端开发服务器
 # =============================================================================
-
-version: '3.8'
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 开发数据库
+  # PostgreSQL 数据库（开发环境）
   # ---------------------------------------------------------------------------
-  postgres-dev:
+  postgres:
     image: postgres:16-alpine
     container_name: webtest-postgres-dev
     restart: unless-stopped
@@ -23,37 +28,47 @@ services:
     environment:
       - POSTGRES_DB=webtest
       - POSTGRES_USER=webtest
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-webtest_dev_password}
+      - DB_PASSWORD=${DB_PASSWORD:-webtest_default_pass_change_me}
       - TZ=Asia/Shanghai
     volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
+      # 使用本地开发数据目录
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - webtest-dev-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U webtest -d webtest"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   # ---------------------------------------------------------------------------
-  # Playwright 测试运行器 (开发环境 - run-server 模式)
+  # Playwright 测试运行器 (run-server 模式)
   # ---------------------------------------------------------------------------
   playwright-runner:
     image: mcr.microsoft.com/playwright:v1.52.0-noble
-    container_name: playwright-runner
-    # 使用 Playwright 官方 run-server 模式
+    container_name: playwright-runner-dev
     command: >
       /bin/sh -c "
-        npx -y playwright@1.52.0 run-server 
-        --port 3000 
-        --host 0.0.0.0
+        npx -y playwright@1.52.0 run-server --port 3000 --host 0.0.0.0
       "
     restart: unless-stopped
+    ports:
+      - "53729:3000"  # 本地 53729 映射到容器内部 3000 (WebSocket)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports:
-      - "3000:3000"   # 暴露端口供本地开发调试
     volumes:
       - ./scripts:/app/scripts:ro
+    networks:
+      - webtest-dev-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
@@ -63,12 +78,66 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "5m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Playwright 脚本执行器 (Node.js HTTP 服务)
+  # ---------------------------------------------------------------------------
+  playwright-executor:
+    build:
+      context: ./playwright-executor
+      dockerfile: Dockerfile
+    image: smart_test-playwright-executor:latest
+    container_name: playwright-executor-dev
+    restart: unless-stopped
+    ports:
+      - "53730:53730"  # 本地 53730 映射到容器 53730 (HTTP API)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - PLAYWRIGHT_WS=ws://playwright-runner:3000/
+      - PLAYWRIGHT_RUNNER_URL=ws://playwright-runner:3000
+      - PORT=53730
+    depends_on:
+      playwright-runner:
+        condition: service_healthy
+    networks:
+      - webtest-dev-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:53730/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 # -----------------------------------------------------------------------------
-# 数据卷配置
+# 网络配置
 # -----------------------------------------------------------------------------
-volumes:
-  postgres_dev_data:
-    driver: local
+networks:
+  webtest-dev-network:
+    driver: bridge
+    name: smart_test_dev
+
+# -----------------------------------------------------------------------------
+# 说明
+# -----------------------------------------------------------------------------
+# 开发环境端口映射：
+#   - PostgreSQL:           localhost:5433  -> 容器:5432
+#   - Playwright Runner:    localhost:53729 -> 容器:3000 (WebSocket)
+#   - Playwright Executor:  localhost:53730 -> 容器:53730 (HTTP)
+#
+# 与生产环境的区别：
+#   1. 不包含 webtest 主服务（由本地 `go run` 启动）
+#   2. PostgreSQL 端口避免冲突 (5433 vs 5432)
+#   3. Playwright 服务暴露端口，方便本地调试
+#   4. 数据目录独立 (data/postgres-dev vs data/postgres)
+#   5. 使用本地构建的 playwright-executor 镜像

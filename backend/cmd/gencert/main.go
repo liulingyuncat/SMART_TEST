@@ -15,6 +15,11 @@ import (
 )
 
 func main() {
+	// 确保 certs 目录存在
+	if err := os.MkdirAll("certs", 0755); err != nil {
+		log.Fatalf("Failed to create certs directory: %v", err)
+	}
+
 	// 生成私钥
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

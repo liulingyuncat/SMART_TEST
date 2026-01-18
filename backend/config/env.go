@@ -50,6 +50,27 @@ func getEnvInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
+// GetCertFilePath 获取证书文件路径
+func GetCertFilePath() string {
+	return getEnv("CERT_FILE", "certs/server.crt")
+}
+
+// GetKeyFilePath 获取私钥文件路径
+func GetKeyFilePath() string {
+	return getEnv("KEY_FILE", "certs/server.key")
+}
+
+// GetServerPort 获取服务器端口
+func GetServerPort() string {
+	return getEnv("SERVER_PORT", "8443")
+}
+
+// GetServerAddr 获取服务器监听地址
+func GetServerAddr() string {
+	port := GetServerPort()
+	return ":" + port
+}
+
 // getEnvDuration 读取时间间隔类型的环境变量
 // 支持格式: "5m", "1h", "30s" 等
 func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
