@@ -108,7 +108,7 @@ services:
     networks:
       - webtest-dev-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:53730/health"]
+      test: ["CMD", "node", "-e", "const http = require('http'); http.get('http://localhost:53730/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
       interval: 30s
       timeout: 10s
       retries: 3
