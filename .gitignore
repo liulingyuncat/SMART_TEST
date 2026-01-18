@@ -30,6 +30,7 @@ Desktop.ini
 # 脚本文件（仅用于本地开发调试）
 /*.ps1
 /*.bat
+!dev.bat
 /*.sql
 /*.sh
 !install.sh
