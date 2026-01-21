@@ -64,11 +64,12 @@ type ExecutionTaskService interface {
 }
 
 type executionTaskService struct {
-	repo        repositories.ExecutionTaskRepository
-	projectRepo repositories.ProjectRepository             // 用于权限验证
-	ecrRepo     repositories.ExecutionCaseResultRepository // 用于级联删除
-	userRepo    repositories.UserRepository                // 用于获取用户名
-	pwClient    *PlaywrightExecutorClient                  // Playwright 执行器客户端
+	repo            repositories.ExecutionTaskRepository
+	projectRepo     repositories.ProjectRepository             // 用于权限验证
+	ecrRepo         repositories.ExecutionCaseResultRepository // 用于级联删除
+	userRepo        repositories.UserRepository                // 用于获取用户名
+	pwClient        *PlaywrightExecutorClient                  // Playwright 执行器客户端
+	variableService UserDefinedVariableService                 // 用户自定义变量服务
 }
 
 // NewExecutionTaskService 创建任务服务实例
@@ -77,16 +78,18 @@ func NewExecutionTaskService(
 	projectRepo repositories.ProjectRepository,
 	ecrRepo repositories.ExecutionCaseResultRepository,
 	userRepo repositories.UserRepository,
+	variableService UserDefinedVariableService,
 ) ExecutionTaskService {
 	// 初始化 Playwright 执行器客户端
 	pwClient := NewPlaywrightExecutorClient(DefaultExecutorConfig())
 
 	return &executionTaskService{
-		repo:        repo,
-		projectRepo: projectRepo,
-		ecrRepo:     ecrRepo,
-		userRepo:    userRepo,
-		pwClient:    pwClient,
+		repo:            repo,
+		projectRepo:     projectRepo,
+		ecrRepo:         ecrRepo,
+		userRepo:        userRepo,
+		pwClient:        pwClient,
+		variableService: variableService,
 	}
 }
 
@@ -138,6 +141,15 @@ func (s *executionTaskService) CreateTask(projectID uint, userID uint, req Creat
 
 // UpdateTask 更新任务
 func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID string, req UpdateTaskRequest) (*models.ExecutionTask, error) {
+	fmt.Printf("\n========== [UpdateTask START] ==========\n")
+	fmt.Printf("[UpdateTask] projectID=%d, userID=%d, taskUUID=%s\n", projectID, userID, taskUUID)
+	fmt.Printf("[UpdateTask] req.CaseGroupName=%v\n", req.CaseGroupName)
+	if req.CaseGroupName != nil {
+		fmt.Printf("[UpdateTask] req.CaseGroupName value=%s\n", *req.CaseGroupName)
+	}
+	fmt.Printf("[UpdateTask] req.CaseGroupID=%v\n", req.CaseGroupID)
+	fmt.Printf("[UpdateTask] req.DisplayLanguage=%v\n", req.DisplayLanguage)
+
 	// 1. 验证任务存在且属于该项目
 	task, err := s.repo.GetByUUID(taskUUID)
 	if err != nil {
@@ -146,6 +158,8 @@ func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID 
 		}
 		return nil, fmt.Errorf("get task by uuid: %w", err)
 	}
+
+	fmt.Printf("[UpdateTask] Found existing task: case_group_id=%d, case_group_name=%s\n", task.CaseGroupID, task.CaseGroupName)
 
 	if task.ProjectID != projectID {
 		return nil, errors.New("任务不属于该项目")
@@ -184,21 +198,27 @@ func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID 
 
 	if req.TaskName != nil {
 		updates["task_name"] = *req.TaskName
+		fmt.Printf("[UpdateTask] Adding task_name to updates: %s\n", *req.TaskName)
 	}
 	if req.ExecutionType != nil {
 		updates["execution_type"] = *req.ExecutionType
+		fmt.Printf("[UpdateTask] Adding execution_type to updates: %s\n", *req.ExecutionType)
 	}
 	if req.TaskStatus != nil {
 		updates["task_status"] = *req.TaskStatus
+		fmt.Printf("[UpdateTask] Adding task_status to updates: %s\n", *req.TaskStatus)
 	}
 	if req.CaseGroupID != nil {
 		updates["case_group_id"] = *req.CaseGroupID
+		fmt.Printf("[UpdateTask] Adding case_group_id to updates: %d\n", *req.CaseGroupID)
 	}
 	if req.CaseGroupName != nil {
 		updates["case_group_name"] = *req.CaseGroupName
+		fmt.Printf("[UpdateTask] Adding case_group_name to updates: %s\n", *req.CaseGroupName)
 	}
 	if req.DisplayLanguage != nil {
 		updates["display_language"] = *req.DisplayLanguage
+		fmt.Printf("[UpdateTask] Adding display_language to updates: %s\n", *req.DisplayLanguage)
 	}
 	if req.StartDate != nil {
 		updates["start_date"] = *req.StartDate
@@ -222,18 +242,99 @@ func (s *executionTaskService) UpdateTask(projectID uint, userID uint, taskUUID 
 		updates["task_description"] = *req.TaskDescription
 	}
 
+	fmt.Printf("[UpdateTask] Total updates map size: %d\n", len(updates))
+	fmt.Printf("[UpdateTask] Updates map: %+v\n", updates)
+
 	// 5. 执行更新
+	fmt.Printf("[UpdateTask] Calling repo.UpdateByUUID...\n")
 	err = s.repo.UpdateByUUID(taskUUID, updates)
 	if err != nil {
+		fmt.Printf("[UpdateTask] ERROR: Failed to update task: %v\n", err)
 		return nil, fmt.Errorf("update task: %w", err)
+	}
+	fmt.Printf("[UpdateTask] Successfully updated task in database\n")
+
+	// 5.5. 如果更新了case_group_name或case_group_id，从用例集继承变量到任务变量表
+	// 注意：case_group_id是从前端通过case_group_name查找得到的，所以只要case_group_name变化就触发继承
+	fmt.Printf("[UpdateTask] Checking if need to inherit variables...\n")
+	fmt.Printf("[UpdateTask] req.CaseGroupName != nil: %v\n", req.CaseGroupName != nil)
+	if req.CaseGroupName != nil {
+		fmt.Printf("[UpdateTask] CaseGroupName value: '%s', isEmpty: %v\n", *req.CaseGroupName, *req.CaseGroupName == "")
+	}
+
+	if req.CaseGroupName != nil && *req.CaseGroupName != "" {
+		fmt.Printf("[UpdateTask] ✅ case_group_name changed, inheriting variables from case group: %s\n", *req.CaseGroupName)
+
+		// 6. 查询更新后的任务（包含最新的case_group_id）
+		fmt.Printf("[UpdateTask] Fetching updated task to get case_group_id...\n")
+		updatedTask, err := s.repo.GetByUUID(taskUUID)
+		if err != nil {
+			fmt.Printf("[UpdateTask] ERROR: Failed to get updated task: %v\n", err)
+			return nil, fmt.Errorf("get updated task: %w", err)
+		}
+
+		fmt.Printf("[UpdateTask] Updated task retrieved: case_group_id=%d, case_group_name=%s, execution_type=%s\n",
+			updatedTask.CaseGroupID, updatedTask.CaseGroupName, updatedTask.ExecutionType)
+
+		// 如果任务关联了用例集，继承变量
+		if updatedTask.CaseGroupID > 0 {
+			groupType := "web" // 默认web类型
+			if updatedTask.ExecutionType == "api" {
+				groupType = "api"
+			}
+
+			fmt.Printf("[UpdateTask] ✅ Task has case_group_id, starting variable inheritance...\n")
+			fmt.Printf("[UpdateTask] Parameters: group_id=%d, group_type=%s, task_uuid=%s, project_id=%d\n",
+				updatedTask.CaseGroupID, groupType, taskUUID, projectID)
+
+			// 先获取用例集的变量
+			fmt.Printf("[UpdateTask] Step 1: Getting variables from case group...\n")
+			groupVariables, err := s.variableService.GetVariablesByGroup(updatedTask.CaseGroupID, groupType)
+			if err != nil {
+				fmt.Printf("[UpdateTask] ❌ ERROR: Failed to get case group variables: %v\n", err)
+				// 继承变量失败不影响任务更新，只记录日志
+			} else {
+				fmt.Printf("[UpdateTask] ✅ Successfully retrieved %d variables from case group\n", len(groupVariables))
+				if len(groupVariables) > 0 {
+					fmt.Printf("[UpdateTask] Variables from case group:\n")
+					for i, v := range groupVariables {
+						fmt.Printf("[UpdateTask]   [%d] ID=%d, Key=%s, Name=%s, Value=%s\n", i, v.ID, v.VarKey, v.VarName, v.VarValue)
+					}
+
+					fmt.Printf("[UpdateTask] Step 2: Copying variables to task variable table...\n")
+					// 复制变量到任务变量表（清空任务旧变量，使用用例集的最新变量）
+					err = s.variableService.SaveTaskVariables(taskUUID, updatedTask.CaseGroupID, groupType, projectID, groupVariables)
+					if err != nil {
+						fmt.Printf("[UpdateTask] ❌ ERROR: Failed to save task variables: %v\n", err)
+						// 继承变量失败不影响任务更新，只记录日志
+					} else {
+						fmt.Printf("[UpdateTask] ✅✅✅ Successfully inherited %d variables to task!\n", len(groupVariables))
+					}
+				} else {
+					fmt.Printf("[UpdateTask] ⚠️ WARNING: No variables found in case group (empty array)\n")
+				}
+			}
+		} else {
+			fmt.Printf("[UpdateTask] ⚠️ WARNING: case_group_id is 0 or invalid, skipping variable inheritance\n")
+		}
+
+		fmt.Printf("[UpdateTask] Returning updated task\n")
+		fmt.Printf("========== [UpdateTask END] ==========\n\n")
+		return updatedTask, nil
+	} else {
+		fmt.Printf("[UpdateTask] ℹ️ case_group_name not changed, skipping variable inheritance\n")
 	}
 
 	// 6. 查询更新后的任务
+	fmt.Printf("[UpdateTask] Fetching final updated task...\n")
 	updatedTask, err := s.repo.GetByUUID(taskUUID)
 	if err != nil {
+		fmt.Printf("[UpdateTask] ERROR: Failed to get updated task: %v\n", err)
 		return nil, fmt.Errorf("get updated task: %w", err)
 	}
 
+	fmt.Printf("[UpdateTask] Returning updated task\n")
+	fmt.Printf("========== [UpdateTask END] ==========\n\n")
 	return updatedTask, nil
 }
 
@@ -312,6 +413,27 @@ func (s *executionTaskService) ExecuteTask(projectID uint, userID uint, taskUUID
 	}
 	fmt.Printf("[ExecuteTask] 获取到 %d 个用例\n", len(cases))
 
+	// 3B. 获取任务变量用于脚本替换
+	var variables []*models.UserDefinedVariable
+	if task.CaseGroupID > 0 {
+		groupType := "web"
+		if task.ExecutionType == "api" {
+			groupType = "api"
+		}
+		fmt.Printf("[ExecuteTask] 从任务变量表获取变量: taskUUID=%s, groupID=%d, groupType=%s\n", taskUUID, task.CaseGroupID, groupType)
+		variables, err = s.variableService.GetVariablesByTask(taskUUID, task.CaseGroupID, groupType)
+		if err != nil {
+			fmt.Printf("[ExecuteTask] ❌ 警告: 获取变量失败: %v\n", err)
+			variables = []*models.UserDefinedVariable{} // 继续执行，不中断
+		}
+		fmt.Printf("[ExecuteTask] ✅ 获取到 %d 个任务变量\n", len(variables))
+		for i, v := range variables {
+			fmt.Printf("[ExecuteTask]   变量 %d: var_key=%s, var_value=%s (长度:%d)\n", i+1, v.VarKey, maskValue(v.VarKey, v.VarValue), len(v.VarValue))
+		}
+	} else {
+		fmt.Printf("[ExecuteTask] 跳过变量获取 (case_group_id=%d)\n", task.CaseGroupID)
+	}
+
 	// 4. 确定remark语言
 	lang := task.DisplayLanguage
 	if lang == "" {
@@ -329,9 +451,17 @@ func (s *executionTaskService) ExecuteTask(projectID uint, userID uint, taskUUID
 			continue
 		}
 
+		// 替换脚本中的变量
+		fmt.Printf("[ExecuteTask] 用例 %d 脚本替换前长度: %d bytes\n", c.ID, len(c.ScriptCode))
+		replacedScript := s.replaceVariables(c.ScriptCode, variables)
+		fmt.Printf("[ExecuteTask] 用例 %d 脚本替换后长度: %d bytes\n", c.ID, len(replacedScript))
+		if strings.Contains(replacedScript, "${") {
+			fmt.Printf("[ExecuteTask] ⚠️ 用例 %d 脚本仍包含变量占位符！\n", c.ID)
+		}
+
 		// 调用 Playwright Server 执行脚本
 		fmt.Printf("[ExecuteTask] 开始执行 Playwright 脚本...\n")
-		execResult, execErr := s.executeViaPlaywright(c.ScriptCode)
+		execResult, execErr := s.executeViaPlaywright(replacedScript)
 		if execErr != nil {
 			// 执行失败
 			fmt.Printf("[ExecuteTask] 执行失败: %v\n", execErr)
@@ -383,6 +513,56 @@ func (s *executionTaskService) ExecuteTask(projectID uint, userID uint, taskUUID
 		ExecutedAt: now,
 		ExecutedBy: executor,
 	}, nil
+}
+
+// maskValue masks sensitive variable values
+func maskValue(key, value string) string {
+	lowerKey := strings.ToLower(key)
+	if strings.Contains(lowerKey, "password") || strings.Contains(lowerKey, "secret") || strings.Contains(lowerKey, "token") {
+		if len(value) <= 3 {
+			return "***"
+		}
+		return value[:2] + "***"
+	}
+	return value
+}
+
+// replaceVariables 替换脚本中的变量占位符
+// 支持 ${VAR_NAME} 格式（脚本标准格式）和 {{VAR_NAME}} 格式（兼容旧格式）
+func (s *executionTaskService) replaceVariables(script string, variables []*models.UserDefinedVariable) string {
+	if len(variables) == 0 {
+		return script
+	}
+
+	result := script
+	for _, v := range variables {
+		// 1. 使用 VarKey 替换大写格式 "${BASE_URL}"
+		if v.VarKey != "" {
+			upperKey := strings.ToUpper(v.VarKey)
+			placeholder := fmt.Sprintf("${%s}", upperKey)
+			result = strings.ReplaceAll(result, placeholder, v.VarValue)
+		}
+
+		// 2. 同时支持小写格式 "${base_url}" (增强兼容性)
+		if v.VarKey != "" {
+			lowerKey := strings.ToLower(v.VarKey)
+			placeholder := fmt.Sprintf("${%s}", lowerKey)
+			result = strings.ReplaceAll(result, placeholder, v.VarValue)
+		}
+
+		// 3. 兼容：使用 VarName 字段
+		if v.VarName != "" {
+			result = strings.ReplaceAll(result, v.VarName, v.VarValue)
+		}
+
+		// 4. 兼容：{{key}} 格式
+		if v.VarKey != "" {
+			placeholder := fmt.Sprintf("{{%s}}", v.VarKey)
+			result = strings.ReplaceAll(result, placeholder, v.VarValue)
+		}
+	}
+
+	return result
 }
 
 // getRemarkByLang 根据语言生成remark
@@ -476,6 +656,35 @@ func (s *executionTaskService) ExecuteSingleCase(projectID uint, userID uint, ta
 		return nil, errors.New("用例没有脚本代码，无法执行")
 	}
 
+	// 4B. 获取任务变量用于脚本替换
+	var variables []*models.UserDefinedVariable
+	if task.CaseGroupID > 0 {
+		groupType := "web"
+		if task.ExecutionType == "api" {
+			groupType = "api"
+		}
+		fmt.Printf("[ExecuteSingleCase] 从任务变量表获取变量: taskUUID=%s, groupID=%d, groupType=%s\n", taskUUID, task.CaseGroupID, groupType)
+		variables, err = s.variableService.GetVariablesByTask(taskUUID, task.CaseGroupID, groupType)
+		if err != nil {
+			fmt.Printf("[ExecuteSingleCase] ❌ 警告: 获取变量失败: %v\n", err)
+			variables = []*models.UserDefinedVariable{} // 继续执行，不中断
+		}
+		fmt.Printf("[ExecuteSingleCase] ✅ 获取到 %d 个任务变量\n", len(variables))
+		for i, v := range variables {
+			fmt.Printf("[ExecuteSingleCase]   变量 %d: var_key=%s, var_value=%s (长度:%d)\n", i+1, v.VarKey, maskValue(v.VarKey, v.VarValue), len(v.VarValue))
+		}
+	} else {
+		fmt.Printf("[ExecuteSingleCase] 跳过变量获取 (case_group_id=%d)\n", task.CaseGroupID)
+	}
+
+	// 4C. 替换脚本中的变量
+	fmt.Printf("[ExecuteSingleCase] 脚本替换前长度: %d bytes\n", len(c.ScriptCode))
+	replacedScript := s.replaceVariables(c.ScriptCode, variables)
+	fmt.Printf("[ExecuteSingleCase] 脚本替换后长度: %d bytes\n", len(replacedScript))
+	if strings.Contains(replacedScript, "${") {
+		fmt.Printf("[ExecuteSingleCase] ⚠️ 脚本仍包含变量占位符！\n")
+	}
+
 	// 5. 确定remark语言
 	lang := task.DisplayLanguage
 	if lang == "" {
@@ -484,7 +693,7 @@ func (s *executionTaskService) ExecuteSingleCase(projectID uint, userID uint, ta
 
 	// 6. 执行用例
 	fmt.Printf("[ExecuteSingleCase] 开始执行 Playwright 脚本...\n")
-	execResult, execErr := s.executeViaPlaywright(c.ScriptCode)
+	execResult, execErr := s.executeViaPlaywright(replacedScript)
 	var okCount, ngCount, blockCount int
 	if execErr != nil {
 		// 执行失败

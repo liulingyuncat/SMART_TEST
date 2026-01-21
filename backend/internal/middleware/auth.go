@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"strings"
 	"webtest/internal/services"
 	"webtest/internal/utils"
@@ -67,7 +68,13 @@ func DualAuthMiddleware(authService services.AuthService, userService services.U
 					c.Next()
 					return
 				}
+				// JWT验证失败，记录详细错误日志
+				log.Printf("[DualAuthMiddleware] JWT validation failed for %s %s: %v", c.Request.Method, c.Request.URL.Path, err)
+			} else {
+				log.Printf("[DualAuthMiddleware] Invalid Authorization format for %s %s", c.Request.Method, c.Request.URL.Path)
 			}
+		} else {
+			log.Printf("[DualAuthMiddleware] No Authorization header for %s %s", c.Request.Method, c.Request.URL.Path)
 		}
 
 		// 检查 X-API-Token 头
@@ -84,9 +91,11 @@ func DualAuthMiddleware(authService services.AuthService, userService services.U
 				c.Next()
 				return
 			}
+			log.Printf("[DualAuthMiddleware] API Token validation failed for %s %s: %v", c.Request.Method, c.Request.URL.Path, err)
 		}
 
 		// 两种认证方式都失败
+		log.Printf("[DualAuthMiddleware] Authentication failed for %s %s - No valid JWT or API Token", c.Request.Method, c.Request.URL.Path)
 		utils.ResponseError(c, 401, "authentication required")
 		c.Abort()
 	}

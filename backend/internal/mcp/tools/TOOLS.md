@@ -265,14 +265,14 @@
 
 ### get_web_group_metadata
 
-获取Web用例集的元数据信息
+获取Web用例集的元数据信息和用户自定义变量
 
 **参数**：
 
-- `project_id` (integer, required): 项目ID
 - `group_id` (integer, required): 用例集ID
+- `project_id` (integer, optional): 项目ID（用于获取用户自定义变量）
 
-**返回**：用例集元数据（名称、描述、创建时间等）
+**返回**：用例集元数据（协议、服务器、端口、用户名、密码）和用户自定义变量列表
 
 ### list_web_cases
 
@@ -338,14 +338,24 @@
 
 ### get_api_group_metadata
 
-获取API用例集的元数据信息
+获取API用例集的元数据信息和用户自定义变量
 
 **参数**：
 
-- `project_id` (integer, required): 项目ID
-- `group_id` (integer, required): 用例集ID
+- `group_id` (integer, optional): 用例集ID（与group_name二选一）
+- `group_name` (string, optional): 用例集名称（与group_id二选一）
+- `project_id` (integer, optional): 项目ID（使用group_name时必填，用于查询用例集列表和获取用户自定义变量）
 
-**返回**：用例集元数据
+**返回**：用例集元数据（协议、服务器、端口、用户名、密码）和用户自定义变量列表
+
+**使用示例**：
+```
+// 方式1：通过group_id查询
+get_api_group_metadata(group_id=1, project_id=1)
+
+// 方式2：通过group_name查询
+get_api_group_metadata(group_name="apitest", project_id=1)
+```
 
 ### list_api_cases
 

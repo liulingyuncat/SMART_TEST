@@ -4,6 +4,51 @@ import i18n from '../i18n';
 import store from '../store';
 import { logout } from '../store/authSlice';
 
+// 持久化调试日志工具
+const debugLog = {
+  // 存储日志到 localStorage
+  save: (key, data) => {
+    try {
+      const logs = JSON.parse(localStorage.getItem('_api_debug_logs') || '[]');
+      logs.push({
+        timestamp: new Date().toISOString(),
+        key,
+        data: typeof data === 'object' ? JSON.stringify(data, null, 2) : data
+      });
+      // 只保留最后50条日志
+      if (logs.length > 50) logs.shift();
+      localStorage.setItem('_api_debug_logs', JSON.stringify(logs));
+    } catch (e) {
+      console.error('[debugLog] Failed to save:', e);
+    }
+  },
+  // 获取所有日志
+  getAll: () => {
+    try {
+      return JSON.parse(localStorage.getItem('_api_debug_logs') || '[]');
+    } catch (e) {
+      return [];
+    }
+  },
+  // 清空日志
+  clear: () => {
+    localStorage.removeItem('_api_debug_logs');
+  },
+  // 打印所有日志到控制台
+  print: () => {
+    const logs = debugLog.getAll();
+    console.log('=== API Debug Logs ===');
+    logs.forEach((log, i) => {
+      console.log(`[${i}] ${log.timestamp} - ${log.key}:`, log.data);
+    });
+  }
+};
+
+// 将 debugLog 挂载到 window 上，方便在控制台手动调用
+if (typeof window !== 'undefined') {
+  window._apiDebugLog = debugLog;
+}
+
 // 创建 axios 实例
 const apiClient = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL || '/api/v1',
@@ -23,7 +68,7 @@ apiClient.interceptors.request.use(
     console.log('[请求拦截器] 完整URL:', `${config.baseURL}${config.url}`);
     console.log('[请求拦截器] params:', config.params);
     console.log('[请求拦截器] 请求数据:', config.data);
-    
+
     const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -31,7 +76,7 @@ apiClient.interceptors.request.use(
     } else {
       console.warn('[请求拦截器] 未找到Token');
     }
-    
+
     // 如果数据是FormData，不设置Content-Type（让浏览器自动添加boundary）
     if (!(config.data instanceof FormData)) {
       config.headers['Content-Type'] = 'application/json';
@@ -40,7 +85,7 @@ apiClient.interceptors.request.use(
       delete config.headers['Content-Type'];
       console.log('[请求拦截器] FormData检测到，允许浏览器自动处理Content-Type');
     }
-    
+
     console.log('[请求拦截器] 最终headers:', config.headers);
     return config;
   },
@@ -59,7 +104,7 @@ apiClient.interceptors.response.use(
     console.log('[响应拦截器] response.data:', response.data);
     console.log('[响应拦截器] responseType:', response.config.responseType);
     console.log('[响应拦截器] response.headers:', response.headers);
-    
+
     // 对于 blob 类型的响应（文件下载），返回完整的 response 对象以访问 headers
     if (response.config.responseType === 'blob') {
       console.log('[响应拦截器] blob类型，返回完整response');
@@ -75,17 +120,29 @@ apiClient.interceptors.response.use(
     console.error('=== [apiClient响应拦截器] 请求失败 ===');
     console.error('[响应拦截器] error对象:', error);
     console.error('[响应拦截器] error.message:', error.message);
-    
+
     const { response } = error;
 
     if (response) {
       console.error('[响应拦截器] 服务器响应错误');
       console.error('[响应拦截器] response.status:', response.status);
       console.error('[响应拦截器] response.data:', response.data);
-      
+
       // 服务器返回错误状态码
       switch (response.status) {
         case 401:
+          // 保存详细错误信息到 localStorage
+          debugLog.save('401_ERROR', {
+            url: response.config?.url,
+            method: response.config?.method,
+            status: response.status,
+            statusText: response.statusText,
+            responseData: response.data,
+            headers: response.headers,
+            requestHeaders: response.config?.headers,
+            timestamp: new Date().toISOString()
+          });
+          console.error('[401 ERROR] 详细信息已保存到 localStorage，在登录页面执行: window._apiDebugLog.print()');
           message.error(i18n.t('message.sessionExpired'));
           localStorage.removeItem('auth_token');
           store.dispatch(logout());

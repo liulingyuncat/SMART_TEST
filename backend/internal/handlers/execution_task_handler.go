@@ -128,6 +128,13 @@ func (h *ExecutionTaskHandler) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	log.Printf("[ExecutionTask Update Handler] user_id=%d, project_id=%d, task_uuid=%s", userID, projectID, taskUUID)
+	log.Printf("[ExecutionTask Update Handler] req.CaseGroupName=%v", req.CaseGroupName)
+	if req.CaseGroupName != nil {
+		log.Printf("[ExecutionTask Update Handler] req.CaseGroupName value='%s'", *req.CaseGroupName)
+	}
+	log.Printf("[ExecutionTask Update Handler] req.DisplayLanguage=%v", req.DisplayLanguage)
+
 	// 调用服务
 	task, err := h.service.UpdateTask(uint(projectID), userID, taskUUID, req)
 	if err != nil {

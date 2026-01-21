@@ -79,7 +79,7 @@ func (h *GetExecutionTaskMetadataHandler) Name() string {
 }
 
 func (h *GetExecutionTaskMetadataHandler) Description() string {
-	return "获取指定执行任务的元数据信息，包括任务名称、状态、执行内容、关联用例集、执行进度(OK/NG/NR/Block数量)、通过率等统计信息。当执行类型为api/web时，会自动获取用例集的连接元数据（协议、服务器、端口、用户名、密码）"
+	return "获取指定执行任务的元数据信息，包括任务名称、状态、执行内容、关联用例集、执行进度(OK/NG/NR/Block数量)、通过率等统计信息。当执行类型为api/web时，会自动获取用例集的连接元数据（协议、服务器、端口、用户名、密码）和用户自定义变量"
 }
 
 func (h *GetExecutionTaskMetadataHandler) InputSchema() map[string]interface{} {
@@ -302,22 +302,72 @@ func (h *GetExecutionTaskMetadataHandler) Execute(ctx context.Context, args map[
 		passRate = float64(okCount) / float64(executedCount) * 100
 	}
 
-	// 步骤4: 如果是api/web类型，获取用例集的连接元数据
+	// 步骤4: 如果是api/web/automation类型，获取用例集的连接元数据和用户自定义变量
 	var groupMetadata map[string]interface{}
-	if (foundTask.ExecutionType == "api" || foundTask.ExecutionType == "web") && foundTask.CaseGroupID > 0 {
-		groupPath := fmt.Sprintf("/api/v1/case-groups/%d", foundTask.CaseGroupID)
-		groupData, err := h.client.Get(ctx, groupPath, nil)
-		if err == nil {
-			var groupResp map[string]interface{}
-			if json.Unmarshal(groupData, &groupResp) == nil {
-				groupMetadata = map[string]interface{}{
-					"group_id":      foundTask.CaseGroupID,
-					"group_name":    groupResp["group_name"],
-					"meta_protocol": groupResp["meta_protocol"],
-					"meta_server":   groupResp["meta_server"],
-					"meta_port":     groupResp["meta_port"],
-					"meta_user":     groupResp["meta_user"],
-					"meta_password": groupResp["meta_password"],
+	var taskVariables []interface{}
+
+	// 确定 groupType
+	groupType := "web"
+	if foundTask.ExecutionType == "api" {
+		groupType = "api"
+	}
+
+	// 只对 api/web/automation 类型处理
+	if foundTask.ExecutionType == "api" || foundTask.ExecutionType == "web" || foundTask.ExecutionType == "automation" {
+		// 确定 groupID：优先使用 CaseGroupID，如果为 0 则通过 CaseGroupName 查找
+		groupID := foundTask.CaseGroupID
+		if groupID == 0 && foundTask.CaseGroupName != "" {
+			// 通过用例集名称查找 group_id
+			groupsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups", projectID)
+			groupsParams := map[string]string{"case_type": groupType}
+			groupsData, err := h.client.Get(ctx, groupsPath, groupsParams)
+			if err == nil {
+				var groupsList []map[string]interface{}
+				if json.Unmarshal(groupsData, &groupsList) == nil {
+					for _, g := range groupsList {
+						if name, ok := g["group_name"].(string); ok && name == foundTask.CaseGroupName {
+							if id, ok := g["id"].(float64); ok {
+								groupID = int(id)
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 获取用例集元数据
+		if groupID > 0 {
+			groupPath := fmt.Sprintf("/api/v1/case-groups/%d", groupID)
+			groupData, err := h.client.Get(ctx, groupPath, nil)
+			if err == nil {
+				var groupResp map[string]interface{}
+				if json.Unmarshal(groupData, &groupResp) == nil {
+					groupMetadata = map[string]interface{}{
+						"group_id":      groupID,
+						"group_name":    groupResp["group_name"],
+						"meta_protocol": groupResp["meta_protocol"],
+						"meta_server":   groupResp["meta_server"],
+						"meta_port":     groupResp["meta_port"],
+						"meta_user":     groupResp["meta_user"],
+						"meta_password": groupResp["meta_password"],
+					}
+				}
+			}
+
+			// 获取执行任务的用户自定义变量（优先任务独立变量，没有则使用用例集变量）
+			varsPath := fmt.Sprintf("/api/v1/projects/%d/execution-tasks/%s/variables", projectID, taskUUID)
+			varsParams := map[string]string{
+				"group_id":   fmt.Sprintf("%d", groupID),
+				"group_type": groupType,
+			}
+			varsData, err := h.client.Get(ctx, varsPath, varsParams)
+			if err == nil {
+				var varsResp map[string]interface{}
+				if json.Unmarshal(varsData, &varsResp) == nil {
+					if vars, ok := varsResp["variables"].([]interface{}); ok {
+						taskVariables = vars
+					}
 				}
 			}
 		}
@@ -342,6 +392,11 @@ func (h *GetExecutionTaskMetadataHandler) Execute(ctx context.Context, args map[
 	// 如果获取到了用例集元数据，添加到结果中
 	if groupMetadata != nil {
 		resultData["group_metadata"] = groupMetadata
+	}
+
+	// 如果获取到了用户自定义变量，添加到结果中
+	if len(taskVariables) > 0 {
+		resultData["variables"] = taskVariables
 	}
 
 	result := map[string]interface{}{

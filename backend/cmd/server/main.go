@@ -92,12 +92,13 @@ func main() {
 		&models.DefectSubject{},
 		&models.DefectPhase{},
 		&models.DefectComment{},
-		&models.CaseReviewItem{}, // T44: 审阅条目表
-		&models.CaseGroup{},      // 用例集表
-		&models.WebCaseVersion{}, // T45: Web用例版本表
-		&models.AIReport{},       // T47: AI质量报告表
-		&models.RawDocument{},    // T48: 原始需求文档表
-		&models.Prompt{},         // 提示词表
+		&models.CaseReviewItem{},      // T44: 审阅条目表
+		&models.CaseGroup{},           // 用例集表
+		&models.WebCaseVersion{},      // T45: Web用例版本表
+		&models.AIReport{},            // T47: AI质量报告表
+		&models.RawDocument{},         // T48: 原始需求文档表
+		&models.Prompt{},              // 提示词表
+		&models.UserDefinedVariable{}, // 用户自定义变量表
 	); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
@@ -135,6 +136,9 @@ func main() {
 	// 原始需求文档相关Repository (T48)
 	rawDocumentRepo := repositories.NewRawDocumentRepository(db)
 
+	// 用户自定义变量相关Repository
+	userDefinedVarRepo := repositories.NewUserDefinedVariableRepository(db)
+
 	authService := services.NewAuthService(userRepo)
 	projectService := services.NewProjectService(projectRepo, memberRepo, userRepo, db)
 	manualCaseService := services.NewManualTestCaseService(manualCaseRepo, projectService)
@@ -159,7 +163,11 @@ func main() {
 	storageDir := "storage"
 	requirementItemService := services.NewRequirementItemService(requirementItemRepo, versionRepo, storageDir)
 	viewpointItemService := services.NewViewpointItemService(viewpointItemRepo, versionRepo, storageDir)
-	executionTaskService := services.NewExecutionTaskService(executionTaskRepo, projectRepo, executionCaseResultRepo, userRepo)
+
+	// 用户自定义变量相关Service (需要在executionTaskService之前初始化)
+	userDefinedVarService := services.NewUserDefinedVariableService(userDefinedVarRepo)
+
+	executionTaskService := services.NewExecutionTaskService(executionTaskRepo, projectRepo, executionCaseResultRepo, userRepo, userDefinedVarService)
 	executionCaseResultService := services.NewExecutionCaseResultService(
 		executionCaseResultRepo,
 		executionTaskRepo,
@@ -230,6 +238,13 @@ func main() {
 
 	// T51: 提示词管理相关Handler
 	promptHandler := handlers.NewPromptHandler(promptService)
+
+	// 用户自定义变量相关Handler
+	userDefinedVarHandler := handlers.NewUserDefinedVariableHandler(userDefinedVarService)
+
+	// 脚本测试服务和Handler
+	scriptTestService := services.NewScriptTestService(userDefinedVarService)
+	scriptTestHandler := handlers.NewScriptTestHandler(scriptTestService)
 
 	// 初始化管理员账号
 	if err := authService.InitAdminUsers(); err != nil {
@@ -452,6 +467,23 @@ func main() {
 			projects.POST("/:id/case-groups",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				caseGroupHandler.CreateCaseGroup)
+
+			// 用户自定义变量路由
+			projects.GET("/:id/case-groups/:groupId/variables",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.GetVariables)
+			projects.PUT("/:id/case-groups/:groupId/variables",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.SaveVariables)
+			projects.POST("/:id/case-groups/:groupId/variables",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.AddVariable)
+			projects.PUT("/:id/case-groups/:groupId/variables/:varId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.UpdateVariable)
+			projects.DELETE("/:id/case-groups/:groupId/variables/:varId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.DeleteVariable)
 
 			// 手工测试用例路由 - 允许PM和PM Member访问
 			projects.GET("/:id/manual-cases/metadata",
@@ -743,6 +775,19 @@ func main() {
 			projects.POST("/:id/execution-tasks/:task_uuid/cases/:case_result_id/execute",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				executionTaskHandler.ExecuteSingleCase)
+
+			// 执行任务变量路由
+			projects.GET("/:id/execution-tasks/:task_uuid/variables",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.GetTaskVariables)
+			projects.PUT("/:id/execution-tasks/:task_uuid/variables",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				userDefinedVarHandler.SaveTaskVariables)
+
+			// 脚本测试路由 - 用于用例详情页面的脚本测试功能
+			projects.POST("/:id/script-test",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				scriptTestHandler.TestScript)
 
 			// 缺陷管理路由 - 允许PM和PM Member访问
 			projects.GET("/:id/defects",

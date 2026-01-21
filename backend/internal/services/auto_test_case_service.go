@@ -79,9 +79,9 @@ type ImportResultDTO struct {
 
 // CreateAutoCaseRequest 创建自动化用例请求
 type CreateAutoCaseRequest struct {
-	CaseType   string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web"`
-	CaseGroup  string `json:"case_group" binding:"max=100"`       // 用例集名称(web类型时使用)
-	GroupID    int    `json:"group_id" binding:"omitempty,min=1"` // 用例集ID(web类型时使用，如果提供则转换为case_group)
+	CaseType   string `json:"case_type" binding:"required,oneof=role1 role2 role3 role4 web api"`
+	CaseGroup  string `json:"case_group" binding:"max=100"`       // 用例集名称(web/api类型时使用)
+	GroupID    int    `json:"group_id" binding:"omitempty,min=1"` // 用例集ID(web/api类型时使用，如果提供则转换为case_group)
 	CaseNum    string `json:"case_num" binding:"max=50"`
 	CaseNumber string `json:"case_number" binding:"max=50"` // 支持case_number字段名(与case_num二选一)
 

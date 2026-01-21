@@ -33,7 +33,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
     try {
       const data = await fetchPromptById(prompt.id);
       // 解析 arguments JSON 字符串为数组
-      const parsedArguments = data.arguments 
+      const parsedArguments = data.arguments
         ? (typeof data.arguments === 'string' ? JSON.parse(data.arguments) : data.arguments)
         : [];
       setDetailPrompt({ ...data, arguments: parsedArguments });
@@ -84,7 +84,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
           scope: values.scope, // 发送scope字段
           arguments: JSON.stringify(processedArguments), // 转换为JSON字符串
         };
-        
+
         // 详细调试日志
         console.log('=== [PromptDetail] 创建提示词 ===');
         console.log('[调试] scope:', values.scope);
@@ -96,7 +96,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
         console.log('[调试] arguments:', createData.arguments, '类型:', typeof createData.arguments, '长度:', createData.arguments?.length);
         console.log('[调试] scope:', createData.scope, '类型:', typeof createData.scope);
         console.log('[调试] Object.keys:', Object.keys(createData));
-        
+
         await createPrompt(createData);
         message.success(t('prompts.createSuccess'));
         onSuccess();
@@ -122,7 +122,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
         console.error('[错误] error.response?.data?.message:', error.response?.data?.message);
         console.error('[错误] error.response?.data?.data:', error.response?.data?.data);
         console.error('[错误] error.message:', error.message);
-        
+
         const errorMsg = error.response?.data?.message || error.message;
         message.error(errorMsg || (mode === 'create' ? t('prompts.createFailed') : t('prompts.updateFailed')));
       }
@@ -244,8 +244,8 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
             name="scope"
             label={t('prompts.scope')}
           >
-            <Input 
-              disabled 
+            <Input
+              disabled
               value={scope}
               style={{ backgroundColor: '#f5f5f5' }}
             />
@@ -257,10 +257,10 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
               {isEditing && (
                 <Button type="primary" size="small" onClick={() => {
                   const currentArgs = form.getFieldValue('arguments') || [];
-                  const newArg = { 
-                    name: `param_${currentArgs.length + 1}`, 
-                    description: '', 
-                    required: false 
+                  const newArg = {
+                    name: `param_${currentArgs.length + 1}`,
+                    description: '',
+                    required: false
                   };
                   form.setFieldValue('arguments', [...currentArgs, newArg]);
                 }}>
@@ -368,8 +368,8 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
         <Space>
           {canEdit() && (
             <>
-              <Button 
-                type="primary" 
+              <Button
+                type="primary"
                 icon={<EditOutlined />}
                 onClick={() => setIsEditing(true)}
               >
@@ -379,7 +379,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                 title={t('prompts.deleteConfirm')}
                 onConfirm={handleDelete}
               >
-                <Button 
+                <Button
                   type="primary"
                   danger
                   icon={<DeleteOutlined />}
@@ -404,8 +404,8 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                 detailPrompt?.scope === 'system'
                   ? 'green'
                   : detailPrompt?.scope === 'project'
-                  ? 'blue'
-                  : 'orange'
+                    ? 'blue'
+                    : 'orange'
               }
             >
               {detailPrompt?.scope === 'system' && t('prompts.systemPrompts')}
@@ -436,7 +436,17 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
         </div>
 
         <div>
-          <h4>{t('prompts.content')}</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h4 style={{ margin: 0 }}>{t('prompts.content')}</h4>
+            <Button
+              type="default"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={handleCopy}
+            >
+              {t('prompts.copyContent')}
+            </Button>
+          </div>
           <div
             style={{
               border: '1px solid #d9d9d9',
@@ -448,12 +458,12 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
             }}
           >
             {detailPrompt?.content ? (
-              <ReactMarkdown 
+              <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 skipHtml={false}
                 components={{
                   // 支持表格样式
-                  table: ({node, ...props}) => (
+                  table: ({ node, ...props }) => (
                     <table style={{
                       borderCollapse: 'collapse',
                       width: '100%',
@@ -463,21 +473,21 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                       border: '1px solid #d9d9d9'
                     }} {...props} />
                   ),
-                  thead: ({node, ...props}) => (
+                  thead: ({ node, ...props }) => (
                     <thead style={{
                       backgroundColor: '#fafafa',
                       borderBottom: '2px solid #d9d9d9'
                     }} {...props} />
                   ),
-                  tbody: ({node, ...props}) => (
+                  tbody: ({ node, ...props }) => (
                     <tbody {...props} />
                   ),
-                  tr: ({node, ...props}) => (
+                  tr: ({ node, ...props }) => (
                     <tr style={{
                       borderBottom: '1px solid #e8e8e8'
                     }} {...props} />
                   ),
-                  th: ({node, ...props}) => (
+                  th: ({ node, ...props }) => (
                     <th style={{
                       border: '1px solid #d9d9d9',
                       padding: '10px 12px',
@@ -487,7 +497,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                       color: '#333'
                     }} {...props} />
                   ),
-                  td: ({node, ...props}) => (
+                  td: ({ node, ...props }) => (
                     <td style={{
                       border: '1px solid #e8e8e8',
                       padding: '10px 12px',
@@ -495,18 +505,18 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                     }} {...props} />
                   ),
                   // 只支持 ``` 包裹的代码块
-                  code: ({node, inline, className, children, ...props}) => {
+                  code: ({ node, inline, className, children, ...props }) => {
                     // 只有带 className (language-*) 的才是代码块
                     const match = /language-(\w+)/.exec(className || '');
-                    
+
                     if (!inline && match) {
                       const lang = match[1];
-                      
+
                       // 如果是 SVG 代码块，直接渲染 SVG
                       if (lang === 'svg') {
                         const svgCode = String(children).replace(/\n$/, '');
                         return (
-                          <div 
+                          <div
                             style={{
                               border: '1px solid #e8e8e8',
                               borderRadius: '4px',
@@ -521,7 +531,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                           />
                         );
                       }
-                      
+
                       // 其他代码块正常显示
                       return (
                         <pre style={{
@@ -539,7 +549,7 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                         </pre>
                       );
                     }
-                    
+
                     // 行内代码
                     return (
                       <code style={{
@@ -554,17 +564,17 @@ const PromptDetail = ({ prompt, mode, onBack, scope, onSuccess }) => {
                     );
                   },
                   // 禁用缩进代码块，保留正常段落
-                  pre: ({node, children, ...props}) => {
+                  pre: ({ node, children, ...props }) => {
                     // 检查是否是代码块的 pre 标签
                     const codeChild = React.Children.toArray(children).find(
                       child => child?.props?.node?.tagName === 'code'
                     );
-                    
+
                     // 如果包含 code 标签且有 className，说明是 ``` 代码块，保留
                     if (codeChild?.props?.className) {
                       return <pre {...props}>{children}</pre>;
                     }
-                    
+
                     // 否则作为普通文本处理（禁用缩进代码块）
                     return <div {...props}>{children}</div>;
                   }

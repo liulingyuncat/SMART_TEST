@@ -92,8 +92,8 @@ const ToolList = () => {
             { name: 'list_api_groups', description: t('prompts.toolDescriptions.list_api_groups'), params: 'project_id(required)', returns: 'API用例集列表' },
             { name: 'get_api_group_metadata', description: t('prompts.toolDescriptions.get_api_group_metadata'), params: 'project_id(required), group_id(required)', returns: '用例集元数据' },
             { name: 'list_api_cases', description: t('prompts.toolDescriptions.list_api_cases'), params: 'project_id(required), group_id(required)', returns: 'API用例列表' },
-            { name: 'create_api_case', description: t('prompts.toolDescriptions.create_api_case'), params: 'project_id(required), group_id(required), case_data(required)', returns: '新创建的用例ID和详细信息' },
-            { name: 'update_api_case', description: t('prompts.toolDescriptions.update_api_case'), params: 'project_id(required), case_id(required), case_data(required)', returns: '更新后的用例信息' },
+            { name: 'create_api_cases', description: t('prompts.toolDescriptions.create_api_cases'), params: 'project_id(required), group_id(required), cases(required)', returns: '创建结果（逐条处理）' },
+            { name: 'update_api_cases', description: t('prompts.toolDescriptions.update_api_cases'), params: 'project_id(required), group_id(required), cases(required)', returns: '更新后的用例信息' },
           ]
         },
         {

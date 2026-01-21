@@ -132,9 +132,18 @@ const CaseSelectionPanel = ({ task, projectId, onConfirm }) => {
     setLoading(true);
     try {
       let cases = [];
+      // 查找选中用例集的ID
+      const selectedGroup = caseGroups.find(g => 
+        (g.group_name || g) === selectedCaseGroup
+      );
+      const caseGroupId = selectedGroup?.id || 0;
+      
+      console.log('🔵 [CaseSelectionPanel] Selected group ID:', caseGroupId);
+      
       let filterConditions = {
         execution_type: task.execution_type,
-        case_group: selectedCaseGroup
+        case_group: selectedCaseGroup,
+        case_group_id: caseGroupId  // 添加用例集ID
       };
 
       if (task.execution_type === 'automation') {
@@ -238,6 +247,13 @@ const CaseSelectionPanel = ({ task, projectId, onConfirm }) => {
         return;
       }
 
+      // 查找选中用例集的ID
+      const selectedGroup = caseGroups.find(g => 
+        (g.group_name || g) === selectedCaseGroup
+      );
+      const caseGroupId = selectedGroup?.id || 0;
+      console.log('🔵 [CaseSelectionPanel] Manual selected group ID:', caseGroupId);
+
       if (onConfirm) {
         const resultData = {
           cases: allCases,
@@ -246,7 +262,8 @@ const CaseSelectionPanel = ({ task, projectId, onConfirm }) => {
             language: 'cn',
             languageDisplay: '中文',
             execution_type: 'manual',
-            case_group: selectedCaseGroup
+            case_group: selectedCaseGroup,
+            case_group_id: caseGroupId  // 添加用例集ID
           }
         };
         console.log('🔵 [CaseSelectionPanel] Calling onConfirm with:', resultData);

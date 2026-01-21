@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button, Space, Popconfirm, message, Input, Row, Col } from 'antd';
-import { DeleteOutlined, EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, SaveOutlined, CloseOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import WebLeftSidePanel from '../components/WebLeftSidePanel';
 import LanguageFilter from '../../ManualTestTabs/components/LanguageFilter';
 import EditableTable from '../../ManualTestTabs/components/EditableTable';
 import ReorderModal from '../../ManualTestTabs/components/ReorderModal';
+import VariablesModal from '../../../../components/VariablesModal';
 import { updateCaseGroup } from '../../../../api/manualCase';
+import { getVariables, saveVariables } from '../../../../api/variable';
 import './WebCaseManagementTab.css';
 
 /**
@@ -23,7 +25,7 @@ const WebCaseManagementTab = ({ projectId }) => {
   const [casesForReorder, setCasesForReorder] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [batchDeleteInfo, setBatchDeleteInfo] = useState(null); // 批量删除信息
-  
+
   // 元数据状态
   const [metadata, setMetadata] = useState({
     protocol: 'https',
@@ -36,7 +38,49 @@ const WebCaseManagementTab = ({ projectId }) => {
   const [metadataBackup, setMetadataBackup] = useState(null); // 编辑前的备份
   const [metadataSaving, setMetadataSaving] = useState(false); // 保存中状态
 
-  // 当选中用例集变化时，加载该用例集的元数据
+  // 用户自定义变量状态
+  const [variablesModalVisible, setVariablesModalVisible] = useState(false);
+  const [userVariables, setUserVariables] = useState([]);
+  const [variablesLoading, setVariablesLoading] = useState(false);
+
+  // 加载用户自定义变量
+  const loadUserVariables = useCallback(async (groupId) => {
+    if (!groupId || !projectId) return;
+    setVariablesLoading(true);
+    try {
+      const response = await getVariables(projectId, groupId, 'web');
+      setUserVariables(response.variables || []);
+    } catch (error) {
+      console.error('[WebCaseManagementTab] Failed to load variables:', error);
+      setUserVariables([]);
+    } finally {
+      setVariablesLoading(false);
+    }
+  }, [projectId]);
+
+  // 保存用户自定义变量
+  const handleSaveVariables = async (vars) => {
+    if (!selectedCaseGroup?.id || !projectId) return;
+    try {
+      await saveVariables(projectId, selectedCaseGroup.id, 'web', vars);
+      setUserVariables(vars);
+      message.success(t('message.saveSuccess'));
+    } catch (error) {
+      console.error('[WebCaseManagementTab] Failed to save variables:', error);
+      message.error(t('message.saveFailed'));
+      throw error; // 重新抛出让调用方知道保存失败
+    }
+  };
+
+  // 打开变量弹窗时刷新数据
+  const handleOpenVariablesModal = () => {
+    if (selectedCaseGroup?.id) {
+      loadUserVariables(selectedCaseGroup.id);
+    }
+    setVariablesModalVisible(true);
+  };
+
+  // 当选中用例集变化时，加载该用例集的元数据和变量
   useEffect(() => {
     if (selectedCaseGroup) {
       setMetadata({
@@ -46,10 +90,13 @@ const WebCaseManagementTab = ({ projectId }) => {
         user: selectedCaseGroup.meta_user || '',
         password: selectedCaseGroup.meta_password || ''
       });
+      // 加载用户自定义变量
+      loadUserVariables(selectedCaseGroup.id);
     } else {
       setMetadata({ protocol: 'https', server: '', port: '', user: '', password: '' });
+      setUserVariables([]);
     }
-  }, [selectedCaseGroup]);
+  }, [selectedCaseGroup, loadUserVariables]);
 
   // 元数据变更处理
   const handleMetadataChange = (field, value) => {
@@ -77,7 +124,7 @@ const WebCaseManagementTab = ({ projectId }) => {
   // 保存元数据到后端
   const handleSaveMetadata = async () => {
     if (!selectedCaseGroup) return;
-    
+
     setMetadataSaving(true);
     try {
       await updateCaseGroup(selectedCaseGroup.id, {
@@ -93,7 +140,7 @@ const WebCaseManagementTab = ({ projectId }) => {
       selectedCaseGroup.meta_port = metadata.port;
       selectedCaseGroup.meta_user = metadata.user;
       selectedCaseGroup.meta_password = metadata.password;
-      
+
       message.success(t('message.saveSuccess'));
       setMetadataEditing(false);
       setMetadataBackup(null);
@@ -188,18 +235,18 @@ const WebCaseManagementTab = ({ projectId }) => {
       {/* 右栏内容区 */}
       <div className={`right-content-panel ${collapsed ? 'full-width' : ''}`}>
         {/* 顶部工具栏：语言切换 + 批量删除按钮 */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '8px',
           padding: '0 8px'
         }}>
-          <LanguageFilter 
+          <LanguageFilter
             value={language}
             onChange={handleLanguageChange}
           />
-          
+
           {/* 右侧操作按钮 */}
           <Space size={8}>
             <Popconfirm
@@ -209,8 +256,8 @@ const WebCaseManagementTab = ({ projectId }) => {
               cancelText={t('common.cancel')}
               disabled={!selectedCaseGroup || !batchDeleteInfo || batchDeleteInfo.selectedCount === 0}
             >
-              <Button 
-                danger 
+              <Button
+                danger
                 icon={<DeleteOutlined />}
                 disabled={!selectedCaseGroup || !batchDeleteInfo || batchDeleteInfo.selectedCount === 0}
               >
@@ -231,8 +278,8 @@ const WebCaseManagementTab = ({ projectId }) => {
             <div style={{ fontSize: '13px', fontWeight: 500, color: 'rgba(0,0,0,0.85)' }}>Web Server</div>
             <Space size={4}>
               {!metadataEditing ? (
-                <Button 
-                  size="small" 
+                <Button
+                  size="small"
                   icon={<EditOutlined />}
                   onClick={handleEditMetadata}
                   disabled={!selectedCaseGroup}
@@ -241,15 +288,15 @@ const WebCaseManagementTab = ({ projectId }) => {
                 </Button>
               ) : (
                 <>
-                  <Button 
-                    size="small" 
+                  <Button
+                    size="small"
                     icon={<CloseOutlined />}
                     onClick={handleCancelEditMetadata}
                   >
                     {t('common.cancel')}
                   </Button>
-                  <Button 
-                    size="small" 
+                  <Button
+                    size="small"
                     type="primary"
                     icon={<SaveOutlined />}
                     onClick={handleSaveMetadata}
@@ -300,7 +347,7 @@ const WebCaseManagementTab = ({ projectId }) => {
               </div>
             </Col>
           </Row>
-          {/* 第二行: User 和 Password */}
+          {/* 第二行: User 和 Password 和 变量按钮 */}
           <Row gutter={[12, 8]} style={{ marginTop: '8px' }}>
             <Col>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -326,6 +373,16 @@ const WebCaseManagementTab = ({ projectId }) => {
                 />
               </div>
             </Col>
+            <Col flex="auto" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                size="small"
+                icon={<SettingOutlined />}
+                onClick={handleOpenVariablesModal}
+                disabled={!selectedCaseGroup}
+              >
+                {t('variables.button', '变量')}
+              </Button>
+            </Col>
           </Row>
         </div>
 
@@ -343,6 +400,7 @@ const WebCaseManagementTab = ({ projectId }) => {
               caseType="web"
               language={language}
               caseGroupFilter={selectedCaseGroup.case_group}
+              caseGroupId={selectedCaseGroup.id}
               onReorderClick={handleReorderClick}
               onCaseCreated={handleCaseCreated}
               onCaseUpdated={handleCaseUpdated}
@@ -365,6 +423,18 @@ const WebCaseManagementTab = ({ projectId }) => {
         language={language}
         onSuccess={handleReorderSuccess}
         onCancel={() => setReorderModalVisible(false)}
+      />
+
+      {/* 用户自定义变量Modal */}
+      <VariablesModal
+        visible={variablesModalVisible}
+        onClose={() => setVariablesModalVisible(false)}
+        groupId={selectedCaseGroup?.id}
+        groupName={selectedCaseGroup?.case_group}
+        groupType="web"
+        projectId={projectId}
+        variables={userVariables}
+        onSave={handleSaveVariables}
       />
     </div>
   );

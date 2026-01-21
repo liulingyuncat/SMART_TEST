@@ -54,13 +54,13 @@ services:
     image: mcr.microsoft.com/playwright:v1.52.0-noble
     container_name: playwright-runner-dev
     command: >
-      /bin/sh -c "
-        npx -y playwright@1.52.0 run-server --port 3000 --host 0.0.0.0
-      "
+      npx playwright@1.52.0 run-server --port 3000 --host 0.0.0.0
     restart: unless-stopped
     ports:
-      - "53729:3000"  # 本地 53729 映射到容器内部 3000 (WebSocket)
+      - "53729:3000"
     dns:
+      - 223.5.5.5
+      - 119.29.29.29
       - 8.8.8.8
       - 8.8.4.4
     extra_hosts:
@@ -73,8 +73,8 @@ services:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 10
+      start_period: 180s
     logging:
       driver: json-file
       options:

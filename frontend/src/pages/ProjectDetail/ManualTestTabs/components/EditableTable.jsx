@@ -27,7 +27,7 @@ const { TextArea } = Input;
 const copyClassificationFields = (sourceCase, caseType) => {
   console.log('[copyClassificationFields] called with caseType:', caseType);
   console.log('[copyClassificationFields] sourceCase:', sourceCase);
-  
+
   if (!sourceCase) {
     console.log('[copyClassificationFields] sourceCase is null/undefined, returning {}');
     return {};
@@ -42,7 +42,7 @@ const copyClassificationFields = (sourceCase, caseType) => {
         middle_function: sourceCase.middle_function || '',
       };
       break;
-    
+
     case 'overall':
     case 'change':
     case 'acceptance':
@@ -56,12 +56,12 @@ const copyClassificationFields = (sourceCase, caseType) => {
         middle_function_en: sourceCase.middle_function_en || '',
       };
       break;
-    
+
     default:
       // 未知类型返回空对象
       result = {};
   }
-  
+
   console.log('[copyClassificationFields] returning fields:', result);
   return result;
 };
@@ -126,20 +126,21 @@ const getCellStyle = (currentCase, previousCase, fieldName) => {
  * @param {string} props.caseGroupFilter - 用例集过滤器，只显示指定用例集的用例
  * @param {Function} props.onBatchDeleteRequest - 批量删除请求回调，返回{selectedCount, executeDelete}对象
  * @param {Array<string>} props.knownPasswords - 已知密码列表（用于脱敏显示）
+ * @param {number} props.caseGroupId - 用例集ID（用于脚本测试时获取变量）
  */
-const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, projectId: propsProjectId, executionMode = false, selectionMode = false, taskUuid, onResultsChange, onCasesLoaded, hiddenButtons = [], caseGroupFilter = null, onBatchDeleteRequest, knownPasswords = [] }) => {
+const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, projectId: propsProjectId, executionMode = false, selectionMode = false, taskUuid, onResultsChange, onCasesLoaded, hiddenButtons = [], caseGroupFilter = null, onBatchDeleteRequest, knownPasswords = [], caseGroupId }) => {
   const { t } = useTranslation();
-  
+
   // 调试日志
-  console.log('[EditableTable] Props:', { caseType, language, caseGroupFilter });
+  console.log('[EditableTable] Props:', { caseType, language, caseGroupFilter, caseGroupId });
   const { id: paramProjectId } = useParams();
   const projectId = propsProjectId || paramProjectId; // 优先使用props传入的projectId
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   // 执行模式：存储执行结果 (Map: case_id -> {test_result, bug_id, remark})
   const [executionResults, setExecutionResults] = useState(new Map());
-  
+
   // 从 sessionStorage 恢复页码，实现F5刷新后保持当前页
   const getStorageKey = () => `editable_table_page_${projectId}_${caseType}_${language}`;
   const getSavedPage = () => {
@@ -150,7 +151,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       return 1;
     }
   };
-  
+
   const [pagination, setPagination] = useState({
     current: getSavedPage(),
     pageSize: 10,
@@ -158,13 +159,13 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   });
   const [editingKey, setEditingKey] = useState('');
   const [form] = Form.useForm();
-  
+
   // 存储所有删除按钮的 ref
   const deleteButtonRefs = useRef({});
-  
+
   // 追踪是否是组件初始挂载
   const isInitialMount = useRef(true);
-  
+
   // 多语言编辑对话框状态
   const [multiLangModalVisible, setMultiLangModalVisible] = useState(false);
   const [multiLangData, setMultiLangData] = useState({
@@ -175,22 +176,22 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     jp: '',
     en: '',
   });
-  
+
   // T44: 移除批量修改确认对话框状态
   // const [batchConfirmVisible, setBatchConfirmVisible] = useState(false);
   // const [batchConfirmData, setBatchConfirmData] = useState({...});
-  
+
   // 标记是否有编辑变更
   const [hasEditChanges, setHasEditChanges] = useState(false);
-  
+
   // API用例详情弹窗状态
   const [apiDetailModalVisible, setApiDetailModalVisible] = useState(false);
   const [apiDetailCaseData, setApiDetailCaseData] = useState(null);
-  
+
   // Web用例详情弹窗状态
   const [webDetailModalVisible, setWebDetailModalVisible] = useState(false);
   const [webDetailCaseData, setWebDetailCaseData] = useState(null);
-  
+
   // 批量删除选择状态
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
@@ -204,16 +205,16 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRowKeys, onBatchDeleteRequest]);
-  
+
   // 高亮显示的行ID
   const [highlightedRowId, setHighlightedRowId] = useState(null);
-  
+
   // 记录本地插入的空行位置 {targetCaseId: string, position: 'before'|'after'}[]
   const [pendingInserts, setPendingInserts] = useState([]);
-  
+
   // 表格容器ref，用于滚动
   const tableContainerRef = useRef(null);
-  
+
   // 统一的更新用例API方法(根据caseType选择调用manualCase或autoCase或apiCase)
   const updateCaseAPI = useCallback(async (caseId, updates) => {
     console.log('[updateCaseAPI] caseId:', caseId, 'updates:', updates);
@@ -235,7 +236,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   const fetchCases = useCallback(async (page = pagination.current, customPageSize = null) => {
     try {
       setLoading(true);
-      
+
       // 判断使用哪个API: api-cases模块 > role类型 > manual类型
       let apiCall;
       if (apiModule === 'api-cases') {
@@ -244,10 +245,10 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
         apiCall = isAutoType ? getAutoCasesList : getCasesList;
       }
-      
+
       // 如果指定了自定义页面大小，使用自定义大小，否则使用当前pageSize
       const requestSize = customPageSize || pagination.pageSize;
-      
+
       const data = await apiCall(projectId, {
         caseType,
         language,
@@ -255,20 +256,20 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         size: requestSize,
         caseGroup: caseGroupFilter, // 传递用例集过滤参数到后端
       });
-      
+
       console.log('[EditableTable] API返回数据:', { total: data.total, casesCount: data.cases?.length, caseGroupFilter });
       console.log('[EditableTable] API返回的前3条数据:', data.cases?.slice(0, 3));
-      
+
       // 如果没有数据，显示空表格（不自动创建空行）
       let casesData = data.cases || [];
-      
+
       // 根据用例集过滤 - 后端已经按 case_group 过滤了，这里只需要处理 null 的情况
       if (caseGroupFilter === null) {
         // 没有选中用例集时，显示空表格
         console.log('[EditableTable] 没有选中用例集，显示空表格');
         casesData = [];
       }
-      
+
       // 执行模式：加载执行结果并合并到用例数据
       if (executionMode && taskUuid) {
         try {
@@ -282,7 +283,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             });
           });
           setExecutionResults(resultsMap);
-          
+
           // 合并执行结果到用例数据
           casesData = casesData.map(c => {
             const execResult = resultsMap.get(c.case_id);
@@ -301,7 +302,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           message.error('加载执行结果失败');
         }
       }
-      
+
       console.log('[EditableTable] 设置cases数据，数量:', casesData.length);
       setCases(casesData);
       setPagination(prev => ({
@@ -312,20 +313,20 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         pageSize: requestSize,
       }));
       console.log('[EditableTable] 设置pagination:', { current: page, total: data.total, pageSize: requestSize });
-      
+
       // 选择模式：通知父组件用例数据已加载
       if (selectionMode && onCasesLoaded) {
         // 传递所有用例数据（包含total信息）
         onCasesLoaded(casesData, data.total || 0);
       }
-      
+
       // 保存当前页码到 sessionStorage，实现F5刷新后保持当前页
       try {
         sessionStorage.setItem(getStorageKey(), String(page));
       } catch (e) {
         console.warn('Failed to save page to sessionStorage:', e);
       }
-      
+
       // 重新加载数据后,清除编辑变更标记
       setHasEditChanges(false);
     } catch (error) {
@@ -334,7 +335,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, caseType, language, pagination.current, pagination.pageSize, executionMode, selectionMode, taskUuid, onCasesLoaded, caseGroupFilter]);
 
   // 防抖保存 (保留用于未来实现内联编辑功能)
@@ -403,7 +404,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     try {
       let createAPI;
       let createData;
-      
+
       if (apiModule === 'api-cases') {
         // API测试用例
         createAPI = createApiCase;
@@ -430,9 +431,9 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           createData.case_group = caseGroupFilter;
         }
       }
-      
+
       console.log('[createDefaultEmptyRow] Creating with data:', createData);
-      
+
       // 创建一条空记录
       const newCase = await createAPI(projectId, createData);
       console.log('[createDefaultEmptyRow] Created case:', newCase);
@@ -449,11 +450,11 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   const handleFillClassification = async () => {
     try {
       setLoading(true);
-      
+
       const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
       const listAPI = isAutoType ? getAutoCasesList : getCasesList;
       const updateAPI = isAutoType ? updateAutoCase : updateCase;
-      
+
       // 获取所有用例(不分页)
       const allCasesData = await listAPI(projectId, {
         caseType,
@@ -461,24 +462,24 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         page: 1,
         size: 9999, // 获取所有用例
       });
-      
+
       let allCases = allCasesData.cases || [];
-      
+
       if (allCases.length <= 1) {
         message.info('至少需要2条用例才能执行补足操作');
         setLoading(false);
         return;
       }
-      
+
       let updateCount = 0;
-      
+
       // 遍历所有用例,从第2条开始(第1条没有上一条可复制)
       for (let i = 1; i < allCases.length; i++) {
         const currentCase = allCases[i];
         const previousCase = allCases[i - 1];
-        
+
         const updates = {};
-        
+
         if (caseType === 'ai') {
           // AI用例:检查单语言字段是否为空
           if (!currentCase.major_function && previousCase.major_function) {
@@ -508,7 +509,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             updates.middle_function_en = previousCase.middle_function_en;
           }
         }
-        
+
         // 如果有需要更新的字段,调用API更新
         if (Object.keys(updates).length > 0) {
           console.log(`[用例补足] 更新用例 No.${i + 1}:`, updates);
@@ -518,14 +519,14 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           } else {
             await updateAPI(projectId, currentCase.case_id, updates);
           }
-          
+
           // 【关键修复】立即更新内存中的数据,确保后续遍历使用最新值
           allCases[i] = { ...currentCase, ...updates };
-          
+
           updateCount++;
         }
       }
-      
+
       if (updateCount > 0) {
         message.success(`已补足 ${updateCount} 条用例的分类字段`);
         // 刷新当前页
@@ -548,7 +549,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       try {
         await clearAICases(projectId);
         message.success('清空成功');
-        
+
         // 清空后创建一条默认空行
         try {
           const newCase = await createDefaultEmptyRow();
@@ -559,7 +560,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           setCases([]);
           setPagination(prev => ({ ...prev, current: 1, total: 0 }));
         }
-        
+
         if (onRefreshMetadata) {
           onRefreshMetadata();
         }
@@ -574,25 +575,25 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   const fetchExpandedPage = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // 判断是否为role类型
       const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
       const apiCall = isAutoType ? getAutoCasesList : getCasesList;
-      
+
       // 获取当前页的起始位置
       const currentPage = pagination.current || 1;
       const pageSize = pagination.pageSize || 10;
-      
+
       // 简单策略：直接请求当前页+扩展的数据
       const expandedSize = pageSize + 2;
-      
+
       const data = await apiCall(projectId, {
         caseType,
         language,
         page: currentPage,
         size: expandedSize,
       });
-      
+
       // 如果当前页没有数据，说明插入后数据位置发生了变化
       // 尝试获取前一页的数据
       if (!data.cases || data.cases.length === 0) {
@@ -603,7 +604,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           page: prevPage,
           size: expandedSize,
         });
-        
+
         setCases(prevData.cases || []);
         setPagination(prev => ({
           ...prev,
@@ -618,7 +619,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           total: data.total || prev.total + 1,
         }));
       }
-      
+
       setHasEditChanges(true);
     } catch (error) {
       console.error('Failed to load expanded page:', error);
@@ -627,7 +628,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       setLoading(false);
     }
   }, [projectId, caseType, language, pagination]);
-  
+
   // 防抖版本的fetchExpandedPage，用于合并连续的插入操作
   const debouncedFetchExpandedPage = useDebounce(fetchExpandedPage, 300);
 
@@ -637,19 +638,19 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     console.log('[handleDelete] apiModule:', apiModule);
     console.log('[handleDelete] projectId:', projectId);
     console.log('[handleDelete] case_id:', record.case_id);
-    
+
     // 使用原生确认对话框替代 Modal.confirm
     const confirmed = window.confirm(
       t('manualTest.deleteCaseConfirm', { caseName: record.case_number || record.case_num || record.case_id })
     );
-    
+
     if (!confirmed) {
       console.log('[handleDelete] 用户取消删除');
       return;
     }
-    
+
     console.log('[handleDelete] 用户确认删除');
-    
+
     try {
       // 判断使用哪个API
       let apiCall;
@@ -661,22 +662,22 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         apiCall = isAutoType ? deleteAutoCase : deleteCase;
         console.log('[handleDelete] 使用其他删除 API');
       }
-      
+
       console.log('[handleDelete] 调用删除API...');
       await apiCall(projectId, record.case_id);
       console.log('[handleDelete] 删除API调用成功');
       message.success('删除成功');
-      
+
       // 计算删除后应该停留的页码
       const currentPageSize = pagination.pageSize || 10;
       const totalAfterDelete = pagination.total - 1;
       const maxPage = Math.ceil(totalAfterDelete / currentPageSize) || 1;
       const targetPage = pagination.current > maxPage ? maxPage : pagination.current;
-      
+
       console.log('[handleDelete] 当前页:', pagination.current, '总数:', pagination.total);
       console.log('[handleDelete] 删除后总数:', totalAfterDelete, '最大页:', maxPage, '目标页:', targetPage);
       console.log('[handleDelete] 调用fetchCases刷新数据...');
-      
+
       // 立即刷新数据
       await fetchCases(targetPage);
       console.log('[handleDelete] fetchCases完成');
@@ -692,7 +693,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   const createEmptyRowByModule = useCallback(async (targetRow, targetNo) => {
     console.log('[createEmptyRowByModule] targetRow.case_type:', targetRow.case_type);
     console.log('[createEmptyRowByModule] apiModule:', apiModule);
-    
+
     // 对于api-cases，使用临时ID（与其他用例一致）
     if (apiModule === 'api-cases') {
       return {
@@ -800,34 +801,34 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       setEditingKey('');
       form.resetFields();
     }
-    
+
     try {
       setLoading(true);
-      
+
       // 所有模式：使用本地插入模式
       // 先设置hasEditChanges，防止useEffect触发fetchCases
       setHasEditChanges(true);
       setPendingInserts(prev => [...prev, { targetCaseId, position: 'before' }]);
-      
+
       // 找到目标行
       const targetIndex = cases.findIndex(c => c.case_id === targetCaseId);
       if (targetIndex === -1) {
         message.error('未找到目标行');
         return;
       }
-      
+
       const targetRow = cases[targetIndex];
       const targetNo = (pagination.current - 1) * pagination.pageSize + targetIndex + 1;
-      
+
       console.log('[handleInsertAbove] targetIndex:', targetIndex);
       console.log('[handleInsertAbove] targetRow:', JSON.stringify(targetRow, null, 2));
       console.log('[handleInsertAbove] targetRow.case_type:', targetRow.case_type);
       console.log('[handleInsertAbove] caseType prop:', caseType);
-      
+
       // 创建一个空行 - 对于api-cases会调用API创建真实UUID
       let emptyRow = await createEmptyRowByModule(targetRow, targetNo);
       console.log('[handleInsertAbove] emptyRow after create:', emptyRow);
-      
+
       // 【T35需求已修改】不再自动复制分类字段
       // 用户可使用"用例补足"按钮统一填充空的分类字段
       // const sourceIndex = targetIndex - 1;
@@ -836,12 +837,12 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       //   const classificationFields = copyClassificationFields(sourceCase, caseType);
       //   emptyRow = { ...emptyRow, ...classificationFields };
       // }
-      
+
       // 【修正】使用函数式setState，基于最新状态计算
       setCases(prevCases => {
         const newCases = [...prevCases];
         newCases.splice(targetIndex, 0, emptyRow);
-        
+
         // api-cases不需要重新计算No.,No.由后端display_order决定
         // 其他类型保持原逻辑
         if (apiModule !== 'api-cases') {
@@ -853,7 +854,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             };
           }
         }
-        
+
         return newCases;
       });
       message.success('已插入空行，点击保存后生效');
@@ -872,43 +873,43 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       setEditingKey('');
       form.resetFields();
     }
-    
+
     try {
       setLoading(true);
-      
+
       // 所有模式：使用本地插入模式
       // 先设置hasEditChanges，防止useEffect触发fetchCases
       setHasEditChanges(true);
       setPendingInserts(prev => [...prev, { targetCaseId, position: 'after' }]);
-      
+
       // 找到目标行
       const targetIndex = cases.findIndex(c => c.case_id === targetCaseId);
       if (targetIndex === -1) {
         message.error('未找到目标行');
         return;
       }
-      
+
       const targetRow = cases[targetIndex];
       const targetNo = (pagination.current - 1) * pagination.pageSize + targetIndex + 1;
-      
+
       console.log('[handleInsertBelow] targetIndex:', targetIndex);
       console.log('[handleInsertBelow] targetRow.case_type:', targetRow.case_type);
-      
+
       // 创建一个空行 - 对于api-cases会调用API创建真实UUID
       let emptyRow = await createEmptyRowByModule(targetRow, targetNo + 1);
       console.log('[handleInsertBelow] emptyRow after create:', emptyRow);
-      
+
       // 【T35需求已修改】不再自动复制分类字段
       // 用户可使用"用例补足"按钮统一填充空的分类字段
       // const sourceCase = cases[targetIndex];
       // const classificationFields = copyClassificationFields(sourceCase, caseType);
       // emptyRow = { ...emptyRow, ...classificationFields };
-      
+
       // 【修正】使用函数式setState，基于最新状态计算
       setCases(prevCases => {
         const newCases = [...prevCases];
         newCases.splice(targetIndex + 1, 0, emptyRow);
-        
+
         // 重新计算当前页的No.（插入行之后的所有行+1）
         // 注意：api-cases使用UUID，不需要重新计算id
         if (apiModule !== 'api-cases') {
@@ -920,7 +921,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             };
           }
         }
-        
+
         return newCases;
       });
       message.success('已插入空行，点击保存后生效');
@@ -938,7 +939,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       t('manualTest.batchDeleteConfirm', { count: selectedRowKeys.length })
     );
     if (!confirmed) return;
-    
+
     try {
       // 判断使用哪个API
       let apiCall;
@@ -948,22 +949,22 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
         apiCall = isAutoType ? batchDeleteAutoCases : batchDeleteCases;
       }
-      
+
       await apiCall(projectId, {
         caseType,
         caseIds: selectedRowKeys,
       });
-      
+
       message.success(`成功删除${selectedRowKeys.length}条用例`);
       setSelectedRowKeys([]); // 清空选择
-      
+
       // 计算删除后应该停留的页码
       const deletedCount = selectedRowKeys.length;
       const currentPageSize = pagination.pageSize || 10;
       const totalAfterDelete = pagination.total - deletedCount;
       const maxPage = Math.ceil(totalAfterDelete / currentPageSize) || 1;
       const targetPage = pagination.current > maxPage ? maxPage : pagination.current;
-      
+
       // 立即刷新数据
       await fetchCases(targetPage);
     } catch (error) {
@@ -984,7 +985,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       fetchCases(savedPage);
       return;
     }
-    
+
     // 后续触发时,只有在没有未保存变更时才加载数据
     // 切换语言时保持当前页码，切换用例集时重置到第1页
     if (!hasEditChanges) {
@@ -997,17 +998,17 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
   // 为所有删除按钮绑定原生事件监听器(解决 React 合成事件失效问题)
   useEffect(() => {
     const listeners = [];
-    
+
     cases.forEach(record => {
       const buttonEl = deleteButtonRefs.current[`delete-${record.case_id}`];
-      
+
       if (buttonEl && editingKey !== record.case_id) {
         const handleNativeClick = (e) => {
           e.preventDefault();
           e.stopPropagation();
           handleDelete(record);
         };
-        
+
         buttonEl.addEventListener('click', handleNativeClick, true);
         listeners.push({ buttonEl, handler: handleNativeClick });
       }
@@ -1032,7 +1033,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     ...restProps
   }) => {
     let inputNode;
-    
+
     if (inputType === 'textarea') {
       inputNode = <TextArea autoSize={{ minRows: 2, maxRows: 6 }} />;
     } else if (inputType === 'select') {
@@ -1072,12 +1073,12 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       if (value === null || value === undefined) return '';
       return String(value);
     };
-    
+
     // 判断是否为api-cases类型
     const isApiCasesMode = apiModule === 'api-cases';
     // 判断是否为自动化类型(role/web)
     const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
-    
+
     // 根据用例类型和语言决定设置哪些字段
     if (isApiCasesMode) {
       // API测试用例：设置api-cases专属字段
@@ -1108,7 +1109,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     } else if (isAutoType) {
       // 自动化测试用例(role1-4/web)：根据当前语言设置对应的多语言字段
       const langFieldSuffix = language === '中文' ? '_cn' : language === 'English' ? '_en' : '_jp';
-      
+
       const formValues = {
         case_number: getDisplayValue(record.case_number),
         [`screen${langFieldSuffix}`]: getDisplayValue(record[`screen${langFieldSuffix}`]),
@@ -1123,7 +1124,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     } else {
       // 整体用例/变更用例：根据当前语言设置对应的多语言字段
       const langFieldSuffix = language === '中文' ? '_cn' : language === 'English' ? '_en' : '_jp';
-      
+
       const formValues = {
         case_number: getDisplayValue(record.case_number),
         [`major_function${langFieldSuffix}`]: getDisplayValue(record[`major_function${langFieldSuffix}`]),
@@ -1145,7 +1146,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     try {
       // 先验证表单
       const row = await form.validateFields();
-      
+
       // 从 cases 数组中获取最新的 record 数据
       const currentRecord = cases.find(c => c.case_id === recordParam.case_id);
       if (!currentRecord) {
@@ -1153,20 +1154,20 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         message.error('无法找到当前记录');
         return;
       }
-      
+
       // 字段值规范化函数：统一处理空值
       const normalizeValue = (value) => {
         if (value === null || value === undefined) return '';
         return String(value).trim();
       };
-      
+
       const updates = {};
-      
+
       // 判断是否为自动化类型(role/web)
       const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
       // 判断是否为api-cases类型
       const isApiCasesMode = apiModule === 'api-cases';
-      
+
       // 根据用例类型处理字段映射
       if (isApiCasesMode) {
         // API测试用例：处理api-cases的字段
@@ -1220,9 +1221,9 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             bug_id: updates.bug_id || currentRecord.bug_id || '',
             remark: updates.remark || currentRecord.remark || '',
           };
-          
+
           await saveExecutionCaseResults(taskUuid, [execUpdates]);
-          
+
           // 更新本地executionResults
           setExecutionResults(prev => {
             const newMap = new Map(prev);
@@ -1233,7 +1234,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             });
             return newMap;
           });
-          
+
           // 通知父组件执行结果已变更
           if (onResultsChange) {
             onResultsChange();
@@ -1242,17 +1243,17 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           // 正常模式：保存到用例表
           await updateCaseAPI(currentRecord.case_id, updates);
         }
-        
+
         // 立即退出编辑状态，避免状态冲突
         setEditingKey('');
-        
+
         message.success('保存成功');
-        
+
         // 更新本地数据而不是重新加载整页
         // 这样可以保留通过插入行添加的新用例（即使它的No.不在当前页范围内）
-        setCases(prevCases => 
-          prevCases.map(c => 
-            c.case_id === currentRecord.case_id 
+        setCases(prevCases =>
+          prevCases.map(c =>
+            c.case_id === currentRecord.case_id
               ? { ...c, ...updates }
               : c
           )
@@ -1261,7 +1262,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         // 没有变更时也要退出编辑状态
         setEditingKey('');
       }
-      
+
     } catch (error) {
       console.error('Failed to save edit:', error);
       message.error('保存失败');
@@ -1305,11 +1306,11 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     console.log('=== handleMultiLangSave 开始 ===');
     console.log('data:', data);
     console.log('multiLangData:', multiLangData);
-    
+
     try {
       const { record } = multiLangData;
       console.log('record:', record);
-      
+
       const updates = {
         [`${data.fieldName}_cn`]: data.cn,
         [`${data.fieldName}_jp`]: data.jp,
@@ -1318,13 +1319,13 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       console.log('updates:', updates);
 
       // T44: 已移除批量修改确认逻辑，直接保存当前用例
-      
+
       // 非大功能/中功能字段，或没有匹配的用例，直接保存
       console.log('执行直接保存逻辑');
       await updateCaseAPI(record.case_id, updates);
       console.log('保存完成');
       message.success('保存成功');
-      
+
       // 关闭对话框并刷新数据
       console.log('关闭多语言对话框');
       setMultiLangModalVisible(false);
@@ -1452,7 +1453,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
 
     // 判断是否为自动化用例类型(需要在这里定义，因为caseNumberColumn会用到)
     const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
-    
+
     // CaseID列 - 根据需求FR-03.1和FR-03.2，Title栏显示为英文，可直接点击编辑
     // 自动化用例类型(role/web)使用case_num字段，其他类型使用case_number字段
     const caseNumField = isAutoType ? 'case_num' : 'case_number';
@@ -1467,12 +1468,12 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         const currentValue = isAutoType ? record.case_num : record.case_number;
         if (isEditing) {
           return (
-            <Input 
+            <Input
               defaultValue={currentValue}
               onBlur={(e) => {
                 const newValue = e.target.value;
                 if (newValue !== currentValue) {
-                  const updateData = isAutoType 
+                  const updateData = isAutoType
                     ? { case_num: newValue }
                     : { case_number: newValue };
                   updateCaseAPI(record.case_id, updateData)
@@ -1514,9 +1515,9 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
 
     // 根据caseType和language生成字段列
     let dataColumns = [];
-    
+
     // isAutoType已在上面定义
-    
+
     if (apiModule === 'api-cases') {
       // 接口测试用例: 使用API专属字段(根据需求FR-02)
       dataColumns = [
@@ -1575,7 +1576,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             const isEditing = editingKey === record.case_id;
             if (isEditing) {
               return (
-                <Select 
+                <Select
                   defaultValue={text || 'GET'}
                   style={{ width: '100%' }}
                   onChange={(value) => {
@@ -1674,7 +1675,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (editingKey === record.case_id) {
               return undefined;
             }
-            
+
             // 【新增】非编辑状态：应用颜色样式
             const previousCase = index > 0 ? cases[index - 1] : null;
             const style = getCellStyle(record, previousCase, 'major_function');
@@ -1699,7 +1700,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (editingKey === record.case_id) {
               return undefined;
             }
-            
+
             // 【新增】非编辑状态：应用颜色样式
             const previousCase = index > 0 ? cases[index - 1] : null;
             const style = getCellStyle(record, previousCase, 'middle_function');
@@ -1796,7 +1797,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       const langSuffix = language === '中文' ? 'CN' : language === 'English' ? 'EN' : 'JP';
       const langFieldSuffix = language === '中文' ? '_cn' : language === 'English' ? '_en' : '_jp';
       const isChinese = language === '中文';
-      
+
       dataColumns = [
         {
           title: `Screen${langSuffix}`,
@@ -1810,7 +1811,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`screen${langFieldSuffix}`];
             if (isChinese) {
               return (
@@ -1844,7 +1845,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`function${langFieldSuffix}`];
             if (isChinese) {
               return (
@@ -1877,7 +1878,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`precondition${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -1911,7 +1912,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`test_steps${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -1945,7 +1946,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`expected_result${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -1973,10 +1974,10 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       // 整体用例/变更用例: 使用多语言字段
       const langSuffix = language === '中文' ? 'CN' : language === 'English' ? 'EN' : 'JP';
       const langFieldSuffix = language === '中文' ? '_cn' : language === 'English' ? '_en' : '_jp';
-      
+
       // 中文模式: 点击字段弹出多语言对话框
       const isChinese = language === '中文';
-      
+
       dataColumns = [
         {
           title: `Maj.Category${langSuffix}`,
@@ -1991,14 +1992,14 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             // 直接从record中获取值
             const fieldValue = record[`major_function${langFieldSuffix}`];
-            
+
             // 获取重复字段的颜色样式
             const previousCase = index > 0 ? cases[index - 1] : null;
             const repeatStyle = getCellStyle(record, previousCase, `major_function${langFieldSuffix}`);
-            
+
             // 中文模式: 可点击打开多语言对话框
             if (isChinese) {
               const baseStyle = { cursor: 'pointer', color: '#1890ff' };
@@ -2035,13 +2036,13 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`middle_function${langFieldSuffix}`];
-            
+
             // 获取重复字段的颜色样式
             const previousCase = index > 0 ? cases[index - 1] : null;
             const repeatStyle = getCellStyle(record, previousCase, `middle_function${langFieldSuffix}`);
-            
+
             if (isChinese) {
               const baseStyle = { cursor: 'pointer', color: '#1890ff' };
               const combinedStyle = repeatStyle.color ? { ...baseStyle, color: repeatStyle.color } : baseStyle;
@@ -2077,7 +2078,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`minor_function${langFieldSuffix}`];
             if (isChinese) {
               return (
@@ -2110,7 +2111,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`precondition${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -2144,7 +2145,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`test_steps${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -2178,7 +2179,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             if (isEditing && !isChinese) {
               return undefined;
             }
-            
+
             const fieldValue = record[`expected_result${langFieldSuffix}`];
             const maskedValue = maskKnownPasswords(fieldValue || '', knownPasswords);
             if (isChinese) {
@@ -2215,7 +2216,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         const isEditing = editingKey === record.case_id;
         if (isEditing) {
           return (
-            <Input 
+            <Input
               defaultValue={text}
               onBlur={(e) => {
                 const newValue = e.target.value;
@@ -2280,7 +2281,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         const isEditing = editingKey === record.case_id;
         if (isEditing) {
           return (
-            <TextArea 
+            <TextArea
               defaultValue={text}
               autoSize={{ minRows: 2, maxRows: 6 }}
               onBlur={(e) => {
@@ -2359,29 +2360,29 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       fixed: 'right',
       render: (_, record) => {
         const isCurrentEditing = editingKey === record.case_id;
-        
+
         // 编辑状态: 显示保存/取消按钮 - 根据需求FR-03.1使用英文
         if (isCurrentEditing) {
           return (
             <Space>
-              <Button 
-                type="link" 
+              <Button
+                type="link"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   saveEdit(record);
-                }} 
+                }}
                 size="small"
               >
                 Save
               </Button>
-              <Button 
-                type="link" 
+              <Button
+                type="link"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   cancelEdit();
-                }} 
+                }}
                 size="small"
               >
                 Cancel
@@ -2389,14 +2390,14 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             </Space>
           );
         }
-        
+
         // 中文模式 + 整体/变更/自动化用例: 显示插入+删除按钮
         // api-cases模式: 显示英文的Above/Below按钮
         // web模式: 与api-cases类似的按钮布局，包含详情按钮
         const isMultiLangType = caseType && (caseType.startsWith('role') || caseType === 'overall' || caseType === 'change' || caseType === 'acceptance');
         const isApiCasesMode = apiModule === 'api-cases';
         const isWebCaseMode = caseType === 'web';
-        
+
         if (isApiCasesMode) {
           // API测试用例: 使用图标按钮，参考AIWeb用例库
           const isEditing = record.case_id === editingKey;
@@ -2578,7 +2579,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                 />
               </Tooltip>
               <Tooltip title={hasEditChanges ? '有未保存的插入操作，请先保存' : '删除'}>
-                <button 
+                <button
                   ref={(el) => {
                     if (el) {
                       deleteButtonRefs.current[`delete-${record.case_id}`] = el;
@@ -2596,7 +2597,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
             </Space>
           );
         }
-        
+
         // T44: 操作列按钮图标化
         return (
           <Space size="small">
@@ -2621,16 +2622,16 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
               />
             </Tooltip>
             <Tooltip title={hasEditChanges ? '有未保存的插入操作，请先保存' : '编辑'}>
-              <Button 
-                type="link" 
-                onClick={() => startEdit(record)} 
+              <Button
+                type="link"
+                onClick={() => startEdit(record)}
                 size="small"
                 icon={<SaveOutlined />}
                 disabled={editingKey !== '' || hasEditChanges}
               />
             </Tooltip>
             <Tooltip title={hasEditChanges ? '有未保存的插入操作，请先保存' : '删除'}>
-              <button 
+              <button
                 ref={(el) => {
                   if (el) {
                     deleteButtonRefs.current[`delete-${record.case_id}`] = el;
@@ -2657,10 +2658,10 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     const shouldHideRemark = caseType === 'overall' || caseType === 'acceptance' || caseType === 'change' ||
       caseType === 'role1' || caseType === 'role2' || caseType === 'role3' || caseType === 'role4' ||
       caseType === 'web' || apiModule === 'api-cases';
-    
+
     // 执行模式：构建执行专用列（BugID + Remark）
     const executionColumns = executionMode ? [bugIdColumn, remarkColumn] : [];
-    
+
     // api-cases模式: 不包含CaseID列(case_num/case_number字段)
     let allColumns;
     if (executionMode) {
@@ -2674,14 +2675,14 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         ? [idColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), actionColumn]
         : [idColumn, caseNumberColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), actionColumn];
     }
-    
+
     // 根据用例类型过滤列 - AI用例和role1-4不显示"测试结果"列
-    const shouldHideTestResult = caseType === 'ai' || caseType === 'role1' || caseType === 'role2' || 
+    const shouldHideTestResult = caseType === 'ai' || caseType === 'role1' || caseType === 'role2' ||
       caseType === 'role3' || caseType === 'role4';
     return shouldHideTestResult
       ? allColumns.filter(col => col.key !== 'test_result')
       : allColumns;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseType, editingKey, language, pagination, openMultiLangModal, startEdit, saveEdit, cancelEdit, handleDelete, apiModule, executionMode, taskUuid, onResultsChange]);
 
   // 复选框配置
@@ -2701,7 +2702,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     if (hasEditChanges) {
       return;
     }
-    
+
     // 如果页面大小改变，重置到第一页
     if (newPagination.pageSize !== pagination.pageSize) {
       setPagination({
@@ -2722,16 +2723,16 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           {/* AI用例专属按钮 */}
           {caseType === 'ai' && (
             <>
-              <Button 
-                icon={<DownloadOutlined />} 
+              <Button
+                icon={<DownloadOutlined />}
                 onClick={handleExportAICases}
                 disabled={editingKey !== '' || cases.length === 0}
               >
                 导出用例
               </Button>
-              <Button 
+              <Button
                 danger
-                icon={<DeleteOutlined />} 
+                icon={<DeleteOutlined />}
                 onClick={handleClearAICases}
                 disabled={editingKey !== '' || cases.length === 0}
               >
@@ -2744,8 +2745,8 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           {(caseType === 'overall' || caseType === 'change' || caseType === 'acceptance') && (
             <>
               {!hiddenButtons.includes('aiSupplement') && (
-                <Button 
-                  icon={<CopyOutlined />} 
+                <Button
+                  icon={<CopyOutlined />}
                   onClick={handleFillClassification}
                   disabled={editingKey !== '' || loading || cases.length <= 1}
                   loading={loading}
@@ -2754,8 +2755,8 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                 </Button>
               )}
               {!hiddenButtons.includes('exportCases') && (
-                <Button 
-                  icon={<DownloadOutlined />} 
+                <Button
+                  icon={<DownloadOutlined />}
                   onClick={handleExportCases}
                   disabled={editingKey !== '' || cases.length === 0}
                 >
@@ -2768,7 +2769,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                   beforeUpload={handleImportCases}
                   showUploadList={false}
                 >
-                  <Button 
+                  <Button
                     icon={<UploadOutlined />}
                     disabled={editingKey !== ''}
                   >
@@ -2781,7 +2782,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
 
           {/* T44: saveVersion按钮已移除，版本管理功能已移至独立模块 */}
           {/* T44: 批量删除按钮已移除，由ManualCaseManagementTab工具栏提供 */}
-          
+
           {/* 保存按钮 - 仅在有编辑变更时显示 */}
           {hasEditChanges && (
             <Button
@@ -2791,7 +2792,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
               onClick={async () => {
                 try {
                   setLoading(true);
-                  
+
                   // 判断使用哪个API
                   const isAutoType = caseType && (caseType.startsWith('role') || caseType === 'web');
                   let insertAPI, reassignAPI, updateAPI;
@@ -2804,24 +2805,24 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                     reassignAPI = isAutoType ? reassignAutoIDs : reassignAllIDs;
                     updateAPI = isAutoType ? updateAutoCase : updateCase;
                   }
-                  
+
                   // 依次执行所有插入操作
                   // 策略：找到第一个真实ID，然后按顺序在其之前/之后插入所有临时行
                   const realCases = cases.filter(c => !c.case_id.startsWith('temp_'));
-                  
+
                   if (realCases.length === 0) {
                     // 如果没有真实ID，说明所有行都是新建的，使用createCase而不是insertCase
                     message.error('没有现有用例可作为参考位置，请先创建至少一个用例');
                     setLoading(false);
                     return;
                   }
-                  
+
                   // 使用第一个真实用例作为参考点
                   let referenceId = realCases[0].case_id;
-                  
+
                   // 用于追踪已插入的用例ID，key是临时ID，value是真实ID
                   const insertedIdMap = {};
-                  
+
                   // 按照临时行在cases数组中的顺序插入
                   for (let i = 0; i < cases.length; i++) {
                     const currentCase = cases[i];
@@ -2841,7 +2842,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                           break;
                         }
                       }
-                      
+
                       let insertResult;
                       if (beforeRealId) {
                         // 在找到的真实ID之后插入
@@ -2862,7 +2863,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                           caseGroup: currentCase.case_group || undefined, // 使用临时行的case_group字段
                         });
                       }
-                      
+
                       // 记录插入结果，用于后续临时行的参考
                       // 注意：auto-cases和api-cases返回case_id(UUID)，manual-cases返回id
                       if (insertResult && insertResult.case_id) {
@@ -2872,22 +2873,22 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
                       }
                     }
                   }
-                  
+
                   // 调用API重新分配所有ID（api-cases不需要此操作）
                   if (reassignAPI) {
                     await reassignAPI(projectId, caseType);
                   }
-                  
+
                   console.log('[保存] 开始刷新数据，当前页:', pagination.current);
-                  
+
                   // 刷新当前页（先刷新再清空状态，确保能看到新数据）
                   const currentPage = pagination.current || 1;
                   await fetchCases(currentPage);
-                  
+
                   // 清空待插入列表
                   setPendingInserts([]);
                   setHasEditChanges(false);
-                  
+
                   console.log('[保存] 刷新完成，用例数量:', cases.length);
                   message.success('保存成功');
                 } catch (error) {
@@ -2934,23 +2935,23 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           pagination={
             hasEditChanges
               ? {
-                  ...pagination,
-                  pageSize: cases.length, // 设置为当前数据长度，确保所有数据都显示
-                  total: pagination.total + pendingInserts.length, // 总数 = 原总数 + 待插入数
-                  showTotal: (total) => `${t('common.total')} ${total} ${t('common.items')} (当前页已扩展显示 ${cases.length} 条)`,
-                  pageSizeOptions: ['10', '20', '50', '100'],
-                  showSizeChanger: false,  // 禁用页面大小选择器
-                  simple: false,  // 使用完整分页器显示总数
-                }
+                ...pagination,
+                pageSize: cases.length, // 设置为当前数据长度，确保所有数据都显示
+                total: pagination.total + pendingInserts.length, // 总数 = 原总数 + 待插入数
+                showTotal: (total) => `${t('common.total')} ${total} ${t('common.items')} (当前页已扩展显示 ${cases.length} 条)`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showSizeChanger: false,  // 禁用页面大小选择器
+                simple: false,  // 使用完整分页器显示总数
+              }
               : {
-                  ...pagination,
-                  showTotal: (total) => `${t('common.total')} ${total} ${t('common.items')}`,
-                  pageSizeOptions: ['10', '20', '50', '100'],
-                  showSizeChanger: true,
-                }
+                ...pagination,
+                showTotal: (total) => `${t('common.total')} ${total} ${t('common.items')}`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showSizeChanger: true,
+              }
           }
           onChange={handleTableChange}
-          scroll={{ 
+          scroll={{
             x: 'max-content',
             // 当数据量<=10时不设置y滚动，让表格自适应高度；超过10条时才启用滚动
             ...(cases.length > 10 ? { y: 'calc(100vh - 400px)' } : {})
@@ -3005,6 +3006,8 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         <ApiCaseDetailModal
           visible={apiDetailModalVisible}
           caseData={apiDetailCaseData}
+          projectId={projectId}
+          groupId={caseGroupId}
           onSave={async (data) => {
             try {
               await updateApiCase(projectId, data.case_id, {
@@ -3020,16 +3023,16 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
               setCases(prevCases =>
                 prevCases.map(c =>
                   c.case_id === data.case_id
-                    ? { 
-                        ...c, 
-                        screen: data.screen,
-                        method: data.method,
-                        url: data.url,
-                        header: data.header,
-                        body: data.body,
-                        response: data.response,
-                        script_code: data.script_code,
-                      }
+                    ? {
+                      ...c,
+                      screen: data.screen,
+                      method: data.method,
+                      url: data.url,
+                      header: data.header,
+                      body: data.body,
+                      response: data.response,
+                      script_code: data.script_code,
+                    }
                     : c
                 )
               );
@@ -3051,6 +3054,8 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
           visible={webDetailModalVisible}
           caseData={webDetailCaseData}
           language={language === '中文' ? 'cn' : language === '日本語' ? 'jp' : 'en'}
+          projectId={projectId}
+          groupId={caseGroupId}
           onSave={async (data) => {
             try {
               await updateAutoCase(projectId, data.case_id, data);

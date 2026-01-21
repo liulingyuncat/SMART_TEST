@@ -84,7 +84,7 @@ func (h *GetWebGroupMetadataHandler) Name() string {
 }
 
 func (h *GetWebGroupMetadataHandler) Description() string {
-	return "获取Web用例集的元数据（协议、服务器、端口、用户名、密码），用于自动化执行"
+	return "获取Web用例集的元数据（协议、服务器、端口、用户名、密码）和用户自定义变量，用于自动化执行"
 }
 
 func (h *GetWebGroupMetadataHandler) InputSchema() map[string]interface{} {
@@ -94,6 +94,10 @@ func (h *GetWebGroupMetadataHandler) InputSchema() map[string]interface{} {
 			"group_id": map[string]interface{}{
 				"type":        "integer",
 				"description": "Web用例集ID",
+			},
+			"project_id": map[string]interface{}{
+				"type":        "integer",
+				"description": "项目ID（可选，用于获取用户自定义变量）",
 			},
 		},
 		"required": []interface{}{"group_id"},
@@ -119,6 +123,16 @@ func (h *GetWebGroupMetadataHandler) Execute(ctx context.Context, args map[strin
 		return tools.NewErrorResult(fmt.Sprintf("解析响应失败: %v", err)), nil
 	}
 
+	// 获取project_id（从用例集数据或参数中获取）
+	var projectID int
+	if pid, ok := groupData["project_id"].(float64); ok {
+		projectID = int(pid)
+	}
+	// 如果参数中提供了project_id，优先使用参数中的值
+	if pid, err := GetInt(args, "project_id"); err == nil && pid > 0 {
+		projectID = pid
+	}
+
 	// 构建元数据响应
 	metadata := map[string]interface{}{
 		"group_id":      groupID,
@@ -128,6 +142,21 @@ func (h *GetWebGroupMetadataHandler) Execute(ctx context.Context, args map[strin
 		"meta_port":     groupData["meta_port"],
 		"meta_user":     groupData["meta_user"],
 		"meta_password": groupData["meta_password"],
+	}
+
+	// 获取用户自定义变量
+	if projectID > 0 {
+		varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+		varsParams := map[string]string{"group_type": "web"}
+		varsData, err := h.client.Get(ctx, varsPath, varsParams)
+		if err == nil {
+			var varsResponse map[string]interface{}
+			if json.Unmarshal(varsData, &varsResponse) == nil {
+				if variables, ok := varsResponse["variables"]; ok {
+					metadata["variables"] = variables
+				}
+			}
+		}
 	}
 
 	return tools.NewJSONResult(tools.MustMarshalJSON(metadata)), nil
@@ -316,7 +345,7 @@ func (h *UpdateWebCasesHandler) Name() string {
 }
 
 func (h *UpdateWebCasesHandler) Description() string {
-	return "批量更新指定Web用例集内的所有用例的全部字段(除UUID)，支持更新script_code脚本代码字段"
+	return "批量更新指定Web用例集内的所有用例的全部字段(除UUID)，支持更新script_code脚本代码字段，支持同时写入用户自定义变量"
 }
 
 func (h *UpdateWebCasesHandler) InputSchema() map[string]interface{} {
@@ -347,6 +376,28 @@ func (h *UpdateWebCasesHandler) InputSchema() map[string]interface{} {
 						},
 					},
 					"required": []interface{}{"id"},
+				},
+			},
+			"variables": map[string]interface{}{
+				"type":        "array",
+				"description": "可选，用户自定义变量数组，用于在script_code中使用${VAR_NAME}引用。会自动保存到用例集",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"var_key": map[string]interface{}{
+							"type":        "string",
+							"description": "变量键名（小写，如base_url）",
+						},
+						"var_value": map[string]interface{}{
+							"type":        "string",
+							"description": "变量值",
+						},
+						"var_desc": map[string]interface{}{
+							"type":        "string",
+							"description": "变量描述（可选）",
+						},
+					},
+					"required": []interface{}{"var_key", "var_value"},
 				},
 			},
 		},
@@ -482,11 +533,47 @@ func (h *UpdateWebCasesHandler) Execute(ctx context.Context, args map[string]int
 		})
 	}
 
+	// 如果提供了variables参数，保存用户自定义变量到用例集
+	variablesSaved := false
+	if variablesInterface, ok := args["variables"].([]interface{}); ok && len(variablesInterface) > 0 {
+		// 构建变量保存请求
+		varsToSave := make([]map[string]interface{}, 0, len(variablesInterface))
+		for _, v := range variablesInterface {
+			if varMap, ok := v.(map[string]interface{}); ok {
+				varData := map[string]interface{}{
+					"var_key":   varMap["var_key"],
+					"var_value": varMap["var_value"],
+					"var_type":  "custom",
+				}
+				if desc, ok := varMap["var_desc"].(string); ok {
+					varData["var_desc"] = desc
+				}
+				varsToSave = append(varsToSave, varData)
+			}
+		}
+
+		if len(varsToSave) > 0 {
+			varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+			varsReqBody := map[string]interface{}{
+				"project_id": projectID,
+				"group_type": "web",
+				"variables":  varsToSave,
+			}
+			_, err := h.client.Put(ctx, varsPath, varsReqBody)
+			if err == nil {
+				variablesSaved = true
+			}
+		}
+	}
+
 	// 返回批量更新结果
 	response := map[string]interface{}{
 		"success": successCount,
 		"failed":  failedCount,
 		"results": results,
+	}
+	if variablesSaved {
+		response["variables_saved"] = true
 	}
 
 	responseJSON, _ := json.Marshal(response)
@@ -507,7 +594,7 @@ func (h *CreateWebCasesHandler) Name() string {
 }
 
 func (h *CreateWebCasesHandler) Description() string {
-	return "批量创建Web自动化测试用例，支持script_code脚本代码字段用于自动化执行"
+	return "批量创建Web自动化测试用例，支持script_code脚本代码字段用于自动化执行，支持同时写入用户自定义变量"
 }
 
 func (h *CreateWebCasesHandler) InputSchema() map[string]interface{} {
@@ -541,6 +628,28 @@ func (h *CreateWebCasesHandler) InputSchema() map[string]interface{} {
 							"description": "Playwright脚本代码，格式为async (page) => { ... }，用于自动化执行",
 						},
 					},
+				},
+			},
+			"variables": map[string]interface{}{
+				"type":        "array",
+				"description": "可选，用户自定义变量数组，用于在script_code中使用${VAR_NAME}引用。会自动保存到用例集",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"var_key": map[string]interface{}{
+							"type":        "string",
+							"description": "变量键名（小写，如base_url）",
+						},
+						"var_value": map[string]interface{}{
+							"type":        "string",
+							"description": "变量值",
+						},
+						"var_desc": map[string]interface{}{
+							"type":        "string",
+							"description": "变量描述（可选）",
+						},
+					},
+					"required": []interface{}{"var_key", "var_value"},
 				},
 			},
 			"continue_on_error": map[string]interface{}{
@@ -768,10 +877,46 @@ func (h *CreateWebCasesHandler) Execute(ctx context.Context, args map[string]int
 		}
 	}
 
+	// 如果提供了variables参数，保存用户自定义变量到用例集
+	variablesSaved := false
+	if variablesInterface, ok := args["variables"].([]interface{}); ok && len(variablesInterface) > 0 {
+		// 构建变量保存请求
+		varsToSave := make([]map[string]interface{}, 0, len(variablesInterface))
+		for _, v := range variablesInterface {
+			if varMap, ok := v.(map[string]interface{}); ok {
+				varData := map[string]interface{}{
+					"var_key":   varMap["var_key"],
+					"var_value": varMap["var_value"],
+					"var_type":  "custom",
+				}
+				if desc, ok := varMap["var_desc"].(string); ok {
+					varData["var_desc"] = desc
+				}
+				varsToSave = append(varsToSave, varData)
+			}
+		}
+
+		if len(varsToSave) > 0 {
+			varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+			varsReqBody := map[string]interface{}{
+				"project_id": projectID,
+				"group_type": "web",
+				"variables":  varsToSave,
+			}
+			_, err := h.client.Put(ctx, varsPath, varsReqBody)
+			if err == nil {
+				variablesSaved = true
+			}
+		}
+	}
+
 	resultData := map[string]interface{}{
 		"success": successCount,
 		"failed":  failedCount,
 		"results": results,
+	}
+	if variablesSaved {
+		resultData["variables_saved"] = true
 	}
 
 	return tools.NewJSONResult(tools.MustMarshalJSON(resultData)), nil

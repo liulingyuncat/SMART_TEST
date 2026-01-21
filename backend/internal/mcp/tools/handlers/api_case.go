@@ -254,7 +254,7 @@ func (h *GetApiGroupMetadataHandler) Name() string {
 }
 
 func (h *GetApiGroupMetadataHandler) Description() string {
-	return "获取接口用例集的元数据（协议、服务器、端口、用户名、密码），用于自动化执行"
+	return "获取接口用例集的元数据（协议、服务器、端口、用户名、密码）和用户自定义变量，用于自动化执行"
 }
 
 func (h *GetApiGroupMetadataHandler) InputSchema() map[string]interface{} {
@@ -263,30 +263,92 @@ func (h *GetApiGroupMetadataHandler) InputSchema() map[string]interface{} {
 		"properties": map[string]interface{}{
 			"group_id": map[string]interface{}{
 				"type":        "integer",
-				"description": "接口用例集ID",
+				"description": "接口用例集ID（与group_name二选一）",
+			},
+			"group_name": map[string]interface{}{
+				"type":        "string",
+				"description": "接口用例集名称（与group_id二选一）",
+			},
+			"project_id": map[string]interface{}{
+				"type":        "integer",
+				"description": "项目ID（当使用group_name时必填，用于查询用例集列表）",
 			},
 		},
-		"required": []interface{}{"group_id"},
 	}
 }
 
 func (h *GetApiGroupMetadataHandler) Execute(ctx context.Context, args map[string]interface{}) (tools.ToolResult, error) {
-	groupID, err := GetInt(args, "group_id")
+	// 支持两种查询方式：1) 通过group_id直接查询  2) 通过group_name查询
+	var groupID int
+	var err error
+
+	// 尝试获取group_id
+	groupID, err = GetInt(args, "group_id")
 	if err != nil {
-		return tools.NewErrorResult(err.Error()), nil
+		// 如果没有group_id，尝试通过group_name查询
+		groupName, ok := args["group_name"].(string)
+		if !ok || groupName == "" {
+			return tools.NewErrorResult("必须提供 group_id 或 group_name"), nil
+		}
+
+		// 获取project_id用于查询用例集列表
+		projectID, err := GetInt(args, "project_id")
+		if err != nil {
+			return tools.NewErrorResult("使用 group_name 查询时必须提供 project_id"), nil
+		}
+
+		// 查询项目的所有API用例集
+		listPath := fmt.Sprintf("/api/v1/projects/%d/case-groups", projectID)
+		listParams := map[string]string{"case_type": "api"}
+		listData, err := h.client.Get(ctx, listPath, listParams)
+		if err != nil {
+			return tools.NewErrorResult(fmt.Sprintf("查询用例集列表失败: %v", err)), nil
+		}
+
+		// 解析列表找到匹配的用例集
+		var groups []map[string]interface{}
+		if err := json.Unmarshal(listData, &groups); err != nil {
+			return tools.NewErrorResult(fmt.Sprintf("解析用例集列表失败: %v", err)), nil
+		}
+
+		// 查找匹配的用例集
+		found := false
+		for _, group := range groups {
+			if name, ok := group["group_name"].(string); ok && name == groupName {
+				if id, ok := group["id"].(float64); ok {
+					groupID = int(id)
+					found = true
+					break
+				}
+			}
+		}
+
+		if !found {
+			return tools.NewErrorResult(fmt.Sprintf("未找到名称为 '%s' 的API用例集", groupName)), nil
+		}
 	}
 
 	// 获取用例集详情
 	path := fmt.Sprintf("/api/v1/case-groups/%d", groupID)
 	data, err := h.client.Get(ctx, path, nil)
 	if err != nil {
-		return tools.NewErrorResult(err.Error()), nil
+		return tools.NewErrorResult(fmt.Sprintf("获取用例集详情失败: %v", err)), nil
 	}
 
 	// 解析响应，提取元数据字段
 	var groupData map[string]interface{}
 	if err := json.Unmarshal(data, &groupData); err != nil {
 		return tools.NewErrorResult(fmt.Sprintf("解析响应失败: %v", err)), nil
+	}
+
+	// 获取project_id（从用例集数据或参数中获取）
+	var projectID int
+	if pid, ok := groupData["project_id"].(float64); ok {
+		projectID = int(pid)
+	}
+	// 如果参数中提供了project_id，优先使用参数中的值
+	if pid, err := GetInt(args, "project_id"); err == nil && pid > 0 {
+		projectID = pid
 	}
 
 	// 构建元数据响应
@@ -298,6 +360,21 @@ func (h *GetApiGroupMetadataHandler) Execute(ctx context.Context, args map[strin
 		"meta_port":     groupData["meta_port"],
 		"meta_user":     groupData["meta_user"],
 		"meta_password": groupData["meta_password"],
+	}
+
+	// 获取用户自定义变量
+	if projectID > 0 {
+		varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+		varsParams := map[string]string{"group_type": "api"}
+		varsData, err := h.client.Get(ctx, varsPath, varsParams)
+		if err == nil {
+			var varsResponse map[string]interface{}
+			if json.Unmarshal(varsData, &varsResponse) == nil {
+				if variables, ok := varsResponse["variables"]; ok {
+					metadata["variables"] = variables
+				}
+			}
+		}
 	}
 
 	return tools.NewJSONResult(tools.MustMarshalJSON(metadata)), nil
@@ -392,11 +469,11 @@ func NewCreateApiCaseHandler(c *client.BackendClient) *CreateApiCaseHandler {
 }
 
 func (h *CreateApiCaseHandler) Name() string {
-	return "create_api_cases"
+	return "create_api_case"
 }
 
 func (h *CreateApiCaseHandler) Description() string {
-	return "批量创建API接口测试用例"
+	return "创建AI接口测试用例，支持同时写入用户自定义变量"
 }
 
 func (h *CreateApiCaseHandler) InputSchema() map[string]interface{} {
@@ -420,6 +497,28 @@ func (h *CreateApiCaseHandler) InputSchema() map[string]interface{} {
 				"description": "用例数据数组，每个元素包含用例字段(screen, url, method, header, body, response等)",
 				"items": map[string]interface{}{
 					"type": "object",
+				},
+			},
+			"variables": map[string]interface{}{
+				"type":        "array",
+				"description": "可选，用户自定义变量数组，用于在script_code中使用${VAR_NAME}引用。会自动保存到用例集",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"var_key": map[string]interface{}{
+							"type":        "string",
+							"description": "变量键名（小写，如base_url）",
+						},
+						"var_value": map[string]interface{}{
+							"type":        "string",
+							"description": "变量值",
+						},
+						"var_desc": map[string]interface{}{
+							"type":        "string",
+							"description": "变量描述（可选）",
+						},
+					},
+					"required": []interface{}{"var_key", "var_value"},
 				},
 			},
 			"continue_on_error": map[string]interface{}{
@@ -561,112 +660,10 @@ func (h *CreateApiCaseHandler) Execute(ctx context.Context, args map[string]inte
 	successCount := 0
 	failedCount := 0
 
-	// 获取该用例集的所有用例，以便获取第一个用例作为插入的目标
-	listPath := fmt.Sprintf("/api/v1/projects/%d/api-cases", projectID)
-	listParams := map[string]string{
-		"case_type":  "api",
-		"case_group": groupName,
-		"page":       "1",
-		"size":       "1",
-	}
-	listData, err := h.client.Get(ctx, listPath, listParams)
-	if err != nil {
-		return tools.NewErrorResult(fmt.Sprintf("获取用例列表失败: %v", err)), nil
-	}
+	// 🚨 使用API专用接口创建用例（api-cases，不是auto-cases）
+	path := fmt.Sprintf("/api/v1/projects/%d/api-cases", projectID)
 
-	// 解析用例列表获取第一个用例
-	var listResponse struct {
-		Data struct {
-			Cases []struct {
-				CaseID string `json:"case_id"`
-			} `json:"cases"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(listData, &listResponse); err != nil {
-		return tools.NewErrorResult(fmt.Sprintf("解析用例列表失败: %v", err)), nil
-	}
-
-	// 如果用例集为空，需要先创建一个初始用例
-	var targetCaseID string
-	if len(listResponse.Data.Cases) == 0 {
-		// 用例集为空，用第一条用例的数据先创建初始用例，然后更新其字段
-		if len(casesInterface) == 0 {
-			return tools.NewErrorResult("cases array cannot be empty"), nil
-		}
-
-		firstCaseData, ok := casesInterface[0].(map[string]interface{})
-		if !ok {
-			return tools.NewErrorResult("first case item must be an object"), nil
-		}
-
-		// 第1步：用CreateCase创建基础初始用例
-		initPath := fmt.Sprintf("/api/v1/projects/%d/api-cases", projectID)
-		initRequestData := map[string]interface{}{
-			"case_type":   "api",
-			"case_group":  groupName,
-			"method":      "GET",
-			"test_result": "NR",
-		}
-
-		initResp, err := h.client.Post(ctx, initPath, initRequestData)
-		if err != nil {
-			return tools.NewErrorResult(fmt.Sprintf("创建初始用例失败: %v", err)), nil
-		}
-
-		// 解析响应获取初始用例ID
-		var initRespData map[string]interface{}
-		if err := json.Unmarshal(initResp, &initRespData); err == nil {
-			if dataVal, ok := initRespData["data"].(map[string]interface{}); ok {
-				if id, ok := dataVal["case_id"].(string); ok {
-					targetCaseID = id
-				}
-			}
-		}
-
-		if targetCaseID == "" {
-			return tools.NewErrorResult("创建初始用例失败，无法获取case_id"), nil
-		}
-
-		// 第2步：用UpdateCase更新第一条用例的所有字段
-		updatePath := fmt.Sprintf("/api/v1/projects/%d/api-cases/%s", projectID, targetCaseID)
-		updateData := make(map[string]interface{})
-
-		// 复制第一条用例的所有字段
-		for key, value := range firstCaseData {
-			if key != "case_group" && key != "case_id" {
-				updateData[key] = value
-			}
-		}
-
-		_, err = h.client.Patch(ctx, updatePath, updateData)
-		if err != nil {
-			return tools.NewErrorResult(fmt.Sprintf("更新初始用例字段失败: %v", err)), nil
-		}
-
-		successCount++
-		results = append(results, map[string]interface{}{
-			"index":  0,
-			"status": "success",
-		})
-	} else {
-		// 获取用例集中的第一个用例作为目标
-		targetCaseID = listResponse.Data.Cases[0].CaseID
-	}
-
-	if targetCaseID == "" {
-		return tools.NewErrorResult("无法获取目标用例ID，无法插入新用例"), nil
-	}
-
-	// 确定从哪个索引开始处理用例（如果用例集为空，第一条已在初始化时处理）
-	var startIdx int = 0
-	if len(listResponse.Data.Cases) == 0 && targetCaseID != "" {
-		startIdx = 1
-	}
-
-	path := fmt.Sprintf("/api/v1/projects/%d/api-cases/insert", projectID)
-
-	for i, caseItem := range casesInterface[startIdx:] {
-		idx := i + startIdx
+	for idx, caseItem := range casesInterface {
 		data, ok := caseItem.(map[string]interface{})
 		if !ok {
 			failedCount++
@@ -681,43 +678,17 @@ func (h *CreateApiCaseHandler) Execute(ctx context.Context, args map[string]inte
 			continue
 		}
 
-		// 为insert接口创建请求数据，使用case_data字段包含所有自定义字段
-		requestData := map[string]interface{}{
-			"case_type":      "api",
-			"case_group":     groupName,
-			"position":       "after",
-			"target_case_id": targetCaseID,
-			"case_data":      make(map[string]interface{}),
+		// 添加必填的case_type字段（API用例类型）
+		data["case_type"] = "api"
+		// 添加case_group字段（用例集名称，用于关联用例到用例集）
+		data["case_group"] = groupName
+
+		// 确保script_code字段存在（即使为空）
+		if _, exists := data["script_code"]; !exists {
+			data["script_code"] = ""
 		}
 
-		// 获取case_data map
-		caseDataMap := requestData["case_data"].(map[string]interface{})
-
-		// 设置默认method
-		if _, exists := data["method"]; !exists {
-			data["method"] = "GET"
-		}
-
-		// 复制所有输入字段到case_data中
-		for key, value := range data {
-			caseDataMap[key] = value
-		}
-
-		// 确保必要的字段存在（即使为空）
-		ensureFieldExists := func(field string) {
-			if _, exists := caseDataMap[field]; !exists {
-				caseDataMap[field] = ""
-			}
-		}
-		ensureFieldExists("screen")
-		ensureFieldExists("url")
-		ensureFieldExists("header")
-		ensureFieldExists("body")
-		ensureFieldExists("response")
-		ensureFieldExists("method")
-		ensureFieldExists("script_code")
-
-		resp, err := h.client.Post(ctx, path, requestData)
+		resp, err := h.client.Post(ctx, path, data)
 		if err != nil {
 			failedCount++
 			results = append(results, map[string]interface{}{
@@ -731,38 +702,121 @@ func (h *CreateApiCaseHandler) Execute(ctx context.Context, args map[string]inte
 			continue
 		}
 
-		// 解析响应获取case_id
+		// 解析响应以获取创建的用例ID
 		var respData map[string]interface{}
-		caseID := ""
-		if err := json.Unmarshal(resp, &respData); err == nil {
+		err = json.Unmarshal(resp, &respData)
+		if err == nil {
+			successCount++
+			// 如果响应包含data字段（如{"code":0,"data":{...}}）
 			if dataVal, ok := respData["data"].(map[string]interface{}); ok {
-				if id, ok := dataVal["case_id"].(string); ok {
-					caseID = id
+				if id, ok := dataVal["id"].(float64); ok {
+					if uuid, ok := dataVal["uuid"].(string); ok {
+						results = append(results, map[string]interface{}{
+							"index":   idx,
+							"status":  "success",
+							"case_id": uuid,
+							"id":      int(id),
+						})
+					} else {
+						results = append(results, map[string]interface{}{
+							"index":   idx,
+							"status":  "success",
+							"case_id": "",
+							"id":      int(id),
+						})
+					}
+				} else if uuid, ok := dataVal["uuid"].(string); ok {
+					// 直接返回UUID
+					results = append(results, map[string]interface{}{
+						"index":   idx,
+						"status":  "success",
+						"case_id": uuid,
+					})
+				} else {
+					results = append(results, map[string]interface{}{
+						"index":  idx,
+						"status": "success",
+						"data":   dataVal,
+					})
 				}
+			} else if id, ok := respData["id"].(float64); ok {
+				// 如果直接返回用例对象
+				if uuid, ok := respData["uuid"].(string); ok {
+					results = append(results, map[string]interface{}{
+						"index":   idx,
+						"status":  "success",
+						"case_id": uuid,
+						"id":      int(id),
+					})
+				} else {
+					results = append(results, map[string]interface{}{
+						"index":  idx,
+						"status": "success",
+						"id":     int(id),
+					})
+				}
+			} else {
+				results = append(results, map[string]interface{}{
+					"index":  idx,
+					"status": "success",
+					"data":   respData,
+				})
+			}
+		} else {
+			failedCount++
+			results = append(results, map[string]interface{}{
+				"index":  idx,
+				"status": "failed",
+				"error":  fmt.Sprintf("failed to parse response: %v", err),
+				"data":   string(resp),
+			})
+			if !continueOnError {
+				break
+			}
+			continue
+		}
+	}
+
+	// 如果提供了variables参数，保存用户自定义变量到用例集
+	variablesSaved := false
+	if variablesInterface, ok := args["variables"].([]interface{}); ok && len(variablesInterface) > 0 {
+		// 构建变量保存请求
+		varsToSave := make([]map[string]interface{}, 0, len(variablesInterface))
+		for _, v := range variablesInterface {
+			if varMap, ok := v.(map[string]interface{}); ok {
+				varData := map[string]interface{}{
+					"var_key":   varMap["var_key"],
+					"var_value": varMap["var_value"],
+					"var_type":  "custom",
+				}
+				if desc, ok := varMap["var_desc"].(string); ok {
+					varData["var_desc"] = desc
+				}
+				varsToSave = append(varsToSave, varData)
 			}
 		}
 
-		// 更新targetCaseID为刚插入的用例ID，确保下一个用例插入在它后面
-		// 这样可以保持用例的正确顺序（按数组顺序依次追加）
-		if caseID != "" {
-			targetCaseID = caseID
+		if len(varsToSave) > 0 {
+			varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+			varsReqBody := map[string]interface{}{
+				"project_id": projectID,
+				"group_type": "api",
+				"variables":  varsToSave,
+			}
+			_, err := h.client.Put(ctx, varsPath, varsReqBody)
+			if err == nil {
+				variablesSaved = true
+			}
 		}
-
-		successCount++
-		result := map[string]interface{}{
-			"index":  idx,
-			"status": "success",
-		}
-		if caseID != "" {
-			result["case_id"] = caseID
-		}
-		results = append(results, result)
 	}
 
 	response := map[string]interface{}{
 		"success": successCount,
 		"failed":  failedCount,
 		"results": results,
+	}
+	if variablesSaved {
+		response["variables_saved"] = true
 	}
 
 	responseJSON, _ := json.Marshal(response)
@@ -783,7 +837,7 @@ func (h *UpdateApiCaseHandler) Name() string {
 }
 
 func (h *UpdateApiCaseHandler) Description() string {
-	return "批量更新API接口测试用例"
+	return "批量更新API接口测试用例，支持同时写入用户自定义变量"
 }
 
 func (h *UpdateApiCaseHandler) InputSchema() map[string]interface{} {
@@ -803,6 +857,28 @@ func (h *UpdateApiCaseHandler) InputSchema() map[string]interface{} {
 				"description": "要更新的用例数据数组，每个用例对象需包含case_id(UUID)或id(数字ID)和其他要更新的字段",
 				"items": map[string]interface{}{
 					"type": "object",
+				},
+			},
+			"variables": map[string]interface{}{
+				"type":        "array",
+				"description": "可选，用户自定义变量数组，用于在script_code中使用${VAR_NAME}引用。会自动保存到用例集",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"var_key": map[string]interface{}{
+							"type":        "string",
+							"description": "变量键名（小写，如base_url）",
+						},
+						"var_value": map[string]interface{}{
+							"type":        "string",
+							"description": "变量值",
+						},
+						"var_desc": map[string]interface{}{
+							"type":        "string",
+							"description": "变量描述（可选）",
+						},
+					},
+					"required": []interface{}{"var_key", "var_value"},
 				},
 			},
 			"continue_on_error": map[string]interface{}{
@@ -982,10 +1058,46 @@ func (h *UpdateApiCaseHandler) Execute(ctx context.Context, args map[string]inte
 		})
 	}
 
+	// 如果提供了variables参数，保存用户自定义变量到用例集
+	variablesSaved := false
+	if variablesInterface, ok := args["variables"].([]interface{}); ok && len(variablesInterface) > 0 {
+		// 构建变量保存请求
+		varsToSave := make([]map[string]interface{}, 0, len(variablesInterface))
+		for _, v := range variablesInterface {
+			if varMap, ok := v.(map[string]interface{}); ok {
+				varData := map[string]interface{}{
+					"var_key":   varMap["var_key"],
+					"var_value": varMap["var_value"],
+					"var_type":  "custom",
+				}
+				if desc, ok := varMap["var_desc"].(string); ok {
+					varData["var_desc"] = desc
+				}
+				varsToSave = append(varsToSave, varData)
+			}
+		}
+
+		if len(varsToSave) > 0 {
+			varsPath := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/variables", projectID, groupID)
+			varsReqBody := map[string]interface{}{
+				"project_id": projectID,
+				"group_type": "api",
+				"variables":  varsToSave,
+			}
+			_, err := h.client.Put(ctx, varsPath, varsReqBody)
+			if err == nil {
+				variablesSaved = true
+			}
+		}
+	}
+
 	response := map[string]interface{}{
 		"success": successCount,
 		"failed":  failedCount,
 		"results": results,
+	}
+	if variablesSaved {
+		response["variables_saved"] = true
 	}
 
 	responseJSON, _ := json.Marshal(response)

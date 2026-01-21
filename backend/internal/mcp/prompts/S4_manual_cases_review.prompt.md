@@ -278,10 +278,10 @@ arguments:
 5. 用户选择观点文档 → 调用 `get_viewpoint_item` 获取内容
 6. 调用 `list_manual_groups` → 显示用例集列表
 7. 调用 `list_manual_cases(project_id=1, group_name="登录功能")`
-9. 执行评审分析，对比需求、观点与用例
-10. 生成评审报告
-11. 调用 `create_review_item` 创建评审文档
-12. 向用户展示评审结果摘要
+8. 执行评审分析，对比需求、观点与用例
+9. 生成评审报告
+10. 调用 `create_review_item` 创建评审文档
+11. 向用户展示评审结果摘要
 
 ---
 

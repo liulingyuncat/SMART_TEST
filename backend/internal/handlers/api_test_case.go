@@ -88,8 +88,17 @@ func (h *ApiTestCaseHandler) CreateCase(c *gin.Context) {
 	var req struct {
 		CaseType   string `json:"case_type"`
 		CaseGroup  string `json:"case_group"`
+		GroupID    int    `json:"group_id"` // 支持通过group_id传入
+		CaseNumber string `json:"case_number"`
+		Screen     string `json:"screen"`
+		URL        string `json:"url"`
 		Method     string `json:"method"`
+		Header     string `json:"header"`
+		Body       string `json:"body"`
+		Response   string `json:"response"`
 		TestResult string `json:"test_result"`
+		Remark     string `json:"remark"`
+		ScriptCode string `json:"script_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败")
@@ -101,8 +110,16 @@ func (h *ApiTestCaseHandler) CreateCase(c *gin.Context) {
 		ProjectID:    uint(projectID),
 		CaseType:     req.CaseType,
 		CaseGroup:    req.CaseGroup,
+		CaseNumber:   req.CaseNumber,
+		Screen:       req.Screen,
+		URL:          req.URL,
 		Method:       req.Method,
+		Header:       req.Header,
+		Body:         req.Body,
+		Response:     req.Response,
 		TestResult:   req.TestResult,
+		Remark:       req.Remark,
+		ScriptCode:   req.ScriptCode,
 		DisplayOrder: 1, // 默认为1,后续会重新分配
 	}
 

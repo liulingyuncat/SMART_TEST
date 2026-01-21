@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Form, Input, Select, DatePicker, Button, Space, Empty, message, Row, Col, Modal, Table, Radio, Progress, Tooltip, Tag } from 'antd';
-import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { updateExecutionTask, executeExecutionTask, executeSingleCase } from '../../../api/executionTask';
 import { saveExecutionCaseResults, getExecutionCaseResults } from '../../../api/executionCaseResult';
+import { getWebCaseGroups, getApiCaseGroupsFromTable } from '../../../api/autoCase';
+import { getTaskVariables, saveTaskVariables } from '../../../api/variable';
 import CaseSelectionPanel from './CaseSelectionPanel';
 import CaseDetailModal from './CaseDetailModal';
+import VariablesModal from '../../../components/VariablesModal';
 import { maskKnownPasswords } from '../../../utils/maskPassword';
 import './TaskMetadataPanel.css';
 
@@ -40,6 +43,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   // 执行完成对话框状态
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
   const [completionModalConfig, setCompletionModalConfig] = useState({ type: 'success', title: '', content: '' });
+  
+  // 用户自定义变量状态
+  const [variablesModalVisible, setVariablesModalVisible] = useState(false);
+  const [userVariables, setUserVariables] = useState([]);
+  const [taskGroupId, setTaskGroupId] = useState(null); // 任务关联的用例集ID
   
   // 用于防抖自动保存的ref
   const saveTimeoutRef = useRef(null);
@@ -159,6 +167,64 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       }
     };
   }, [task?.task_uuid, flushPendingSave]);
+
+  // 加载执行任务的用户自定义变量（持久化：优先加载任务变量，没有则从用例集继承）
+  useEffect(() => {
+    const loadTaskVariables = async () => {
+      // 仅对 automation(web) 和 api 类型任务加载变量
+      if (!task || !task.task_uuid || !task.case_group_name || 
+          (task.execution_type !== 'automation' && task.execution_type !== 'api')) {
+        console.log('🔧 [TaskMetadataPanel] Skip loading variables: no task_uuid/case_group_name or not automation/api task');
+        setUserVariables([]);
+        setTaskGroupId(null);
+        return;
+      }
+      
+      console.log('🔧 [TaskMetadataPanel] Loading variables for task:', task.task_name);
+      console.log('🔧 [TaskMetadataPanel] task_uuid:', task.task_uuid);
+      console.log('🔧 [TaskMetadataPanel] case_group_name:', task.case_group_name);
+      console.log('🔧 [TaskMetadataPanel] execution_type:', task.execution_type);
+      
+      try {
+        // 1. 根据 case_group_name 查找 group_id
+        const groupType = task.execution_type === 'automation' ? 'web' : 'api';
+        const getCaseGroups = groupType === 'web' ? getWebCaseGroups : getApiCaseGroupsFromTable;
+        
+        console.log('🔧 [TaskMetadataPanel] Fetching case groups for projectId:', projectId);
+        const groups = await getCaseGroups(projectId);
+        console.log('🔧 [TaskMetadataPanel] Found case groups:', groups);
+        
+        // 查找匹配的用例集
+        const matchedGroup = groups.find(g => g.group_name === task.case_group_name);
+        
+        if (!matchedGroup) {
+          console.warn('🔧 [TaskMetadataPanel] Case group not found:', task.case_group_name);
+          setUserVariables([]);
+          setTaskGroupId(null);
+          return;
+        }
+        
+        console.log('🔧 [TaskMetadataPanel] Matched group:', matchedGroup);
+        console.log('🔧 [TaskMetadataPanel] group_id:', matchedGroup.id);
+        setTaskGroupId(matchedGroup.id);
+        
+        // 2. 加载任务变量（优先任务独立变量，没有则返回用例集变量）
+        const response = await getTaskVariables(projectId, task.task_uuid, matchedGroup.id, groupType);
+        const variables = response?.variables || [];
+        console.log('🔧 [TaskMetadataPanel] Loaded variables:', variables);
+        
+        setUserVariables(variables);
+        message.success(`已加载 ${variables.length} 个变量`);
+      } catch (error) {
+        console.error('🔧 [TaskMetadataPanel] Failed to load variables:', error);
+        message.error('加载变量失败: ' + (error.message || '未知错误'));
+        setUserVariables([]);
+        setTaskGroupId(null);
+      }
+    };
+    
+    loadTaskVariables();
+  }, [task?.task_uuid, task?.case_group_name, task?.execution_type, projectId]);
 
   // 加载已保存的用例执行结果
   const loadSavedCaseResults = async () => {
@@ -1182,25 +1248,77 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     return (execType === 'automation' || execType === 'api') && hasCases;
   };
 
-  // 执行测试任务
+  // 执行测试任务（逐条执行）
   const handleExecuteTask = async () => {
     console.log('🎯 [TaskMetadataPanel] handleExecuteTask called');
     if (!canExecute()) return;
 
     setExecuting(true);
+    let okCount = 0;
+    let ngCount = 0;
+    let blockCount = 0;
+    let totalCases = caseTableData.length;
+
     try {
-      console.log('🎯 [TaskMetadataPanel] Calling executeExecutionTask API...');
-      const result = await executeExecutionTask(task.project_id, task.task_uuid);
-      console.log('🎯 [TaskMetadataPanel] API result:', result);
+      console.log('🎯 [TaskMetadataPanel] Starting sequential execution of', totalCases, 'cases');
       
-      // 重新加载用例结果
-      await loadSavedCaseResults(task.task_uuid);
+      // 逐条执行每个用例
+      for (let i = 0; i < caseTableData.length; i++) {
+        const caseData = caseTableData[i];
+        console.log(`🎯 [TaskMetadataPanel] Executing case ${i + 1}/${totalCases}:`, caseData.case_num);
+        
+        // 如果没有脚本代码，跳过
+        if (!caseData.script_code) {
+          console.log(`🎯 [TaskMetadataPanel] Case ${caseData.case_num} has no script, marking as Block`);
+          blockCount++;
+          continue;
+        }
+
+        // 计算该用例应该在哪一页
+        const targetPage = Math.ceil((i + 1) / pageSize);
+        if (targetPage !== currentPage) {
+          console.log(`🎯 [TaskMetadataPanel] Switching to page ${targetPage} for case ${i + 1}`);
+          setCurrentPage(targetPage);
+        }
+
+        // 设置当前执行的用例
+        setExecutingSingleCase(caseData.id);
+
+        try {
+          // 调用单条执行API（每条有独立的120秒超时）
+          console.log(`🎯 [TaskMetadataPanel] Calling executeSingleCase API for case ${caseData.id}`);
+          const result = await executeSingleCase(task.project_id, task.task_uuid, caseData.id);
+          console.log(`🎯 [TaskMetadataPanel] Case ${caseData.case_num} result:`, result);
+          
+          // 统计结果
+          if (result.ok_count > 0) {
+            okCount++;
+          } else if (result.ng_count > 0) {
+            ngCount++;
+          } else if (result.block_count > 0) {
+            blockCount++;
+          }
+
+          // 立即刷新结果（只刷新当前执行的用例）
+          await loadSavedCaseResults(task.task_uuid);
+          
+        } catch (error) {
+          console.error(`🎯 [TaskMetadataPanel] Error executing case ${caseData.case_num}:`, error);
+          ngCount++;
+          // 即使失败也要刷新，显示错误结果
+          await loadSavedCaseResults(task.task_uuid);
+        } finally {
+          setExecutingSingleCase(null);
+        }
+
+        // 短暂延迟，让UI有时间更新
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
       // 显示执行完成对话框
-      console.log('🎯 [TaskMetadataPanel] Showing Modal.success...');
+      console.log('🎯 [TaskMetadataPanel] All cases executed. OK:', okCount, 'NG:', ngCount, 'Block:', blockCount);
       
-      // 构造统计信息文本
-      const statsText = `${t('common.total')} ${result.total}${t('common.items')}：OK ${result.ok_count}${t('common.items')}、NG ${result.ng_count}${t('common.items')}、Block ${result.block_count || 0}${t('common.items')}、NR ${(result.total - result.ok_count - result.ng_count - (result.block_count || 0))}${t('common.items')}`;
+      const statsText = `${t('common.total')} ${totalCases}${t('common.items')}：OK ${okCount}${t('common.items')}、NG ${ngCount}${t('common.items')}、Block ${blockCount}${t('common.items')}、NR ${(totalCases - okCount - ngCount - blockCount)}${t('common.items')}`;
       
       setCompletionModalConfig({
         type: 'success',
@@ -1214,6 +1332,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       message.error(t('testExecution.execute.failed') + ': ' + (error.message || error));
     } finally {
       setExecuting(false);
+      setExecutingSingleCase(null);
     }
   };
 
@@ -1391,6 +1510,15 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           >
             {t('testExecution.metadata.download')}
           </Button>
+          {/* 变量按钮 - 仅对automation(web)和api类型任务显示 */}
+          {(task?.execution_type === 'automation' || task?.execution_type === 'api') && (
+            <Button
+              icon={<SettingOutlined />}
+              onClick={() => setVariablesModalVisible(true)}
+            >
+              {t('variables.button', '变量')}
+            </Button>
+          )}
           {!isEditing ? (
             <>
               <Button
@@ -1648,6 +1776,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             
             // 更新任务的用例集信息和显示语言到数据库
             const caseGroupName = data.filterConditions?.case_group || '';
+            const caseGroupId = data.filterConditions?.case_group_id || 0;
             const selectedLanguage = data.filterConditions?.language || '';
             // 根据执行类型确定保存的语言值
             let displayLangToSave = '';
@@ -1661,15 +1790,16 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             
             if (task?.task_uuid) {
               try {
-                console.log('💾 [TaskMetadataPanel] Updating task case_group_name:', caseGroupName, 'display_language:', displayLangToSave);
+                console.log('💾 [TaskMetadataPanel] Updating task case_group_name:', caseGroupName, 'case_group_id:', caseGroupId, 'display_language:', displayLangToSave);
                 await updateExecutionTask(projectId, task.task_uuid, {
                   case_group_name: caseGroupName,
+                  case_group_id: caseGroupId,
                   display_language: displayLangToSave
                 });
-                console.log('✅ [TaskMetadataPanel] Task case_group_name and display_language updated successfully');
+                console.log('✅ [TaskMetadataPanel] Task case_group_name, case_group_id and display_language updated successfully');
                 // 通知父组件更新任务信息
                 if (onSave) {
-                  onSave({ ...task, case_group_name: caseGroupName, display_language: displayLangToSave });
+                  onSave({ ...task, case_group_name: caseGroupName, case_group_id: caseGroupId, display_language: displayLangToSave });
                 }
               } catch (error) {
                 console.error('❌ [TaskMetadataPanel] Failed to update task:', error);
@@ -1820,6 +1950,33 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           </div>
         )}
       </Modal>
+
+      {/* 用户自定义变量Modal - 仅对automation(web)和api类型任务显示 */}
+      {(task?.execution_type === 'automation' || task?.execution_type === 'api') && (
+        <VariablesModal
+          visible={variablesModalVisible}
+          onClose={() => setVariablesModalVisible(false)}
+          groupName={task?.case_group_name}
+          groupType={task?.execution_type === 'automation' ? 'web' : 'api'}
+          projectId={projectId}
+          variables={userVariables}
+          readOnly={false}
+          onSave={async (vars) => {
+            // 持久化保存任务变量到后端（独立于用例集变量）
+            const groupType = task.execution_type === 'automation' ? 'web' : 'api';
+            try {
+              await saveTaskVariables(projectId, task.task_uuid, taskGroupId || 0, groupType, vars);
+              setUserVariables(vars);
+              message.success('变量已保存');
+              console.log('[TaskMetadataPanel] Variables saved to backend:', vars);
+            } catch (error) {
+              console.error('[TaskMetadataPanel] Failed to save variables:', error);
+              message.error('保存变量失败: ' + (error.message || '未知错误'));
+              throw error; // 让 VariablesModal 知道保存失败
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -63,6 +63,6 @@ export const executeExecutionTask = (projectId, taskUuid) => {
  */
 export const executeSingleCase = (projectId, taskUuid, caseResultId) => {
   return apiClient.post(`/projects/${projectId}/execution-tasks/${taskUuid}/cases/${caseResultId}/execute`, null, {
-    timeout: 60000, // 60秒超时
+    timeout: 120000, // 120秒超时（每条用例独立计时）
   });
 };

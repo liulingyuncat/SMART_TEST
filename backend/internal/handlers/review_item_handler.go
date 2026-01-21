@@ -193,7 +193,7 @@ func (h *ReviewItemHandler) DownloadReviewItem(c *gin.Context) {
 	}
 
 	// 获取用户ID
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 
 	// 获取项目名称
 	project, _, err := h.projectService.GetByID(uint(projectID), userID.(uint))
