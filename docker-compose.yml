@@ -54,6 +54,8 @@ services:
       # TLS 证书配置（容器内使用绝对路径）
       - CERT_FILE=/app/certs/server.crt
       - KEY_FILE=/app/certs/server.key
+      # 提示词目录路径（容器内使用绝对路径）
+      - PROMPTS_DIR=/app/internal/mcp/prompts
     volumes:
       # 持久化存储
       - ./storage:/app/storage

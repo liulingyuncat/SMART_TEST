@@ -97,14 +97,6 @@ const ToolList = () => {
           ]
         },
         {
-          key: 'review',
-          title: t('prompts.categoryReview'),
-          icon: '✅',
-          tools: [
-            { name: 'create_review_item', description: t('prompts.toolDescriptions.create_review_item'), params: 'project_id(required), name(required), content(optional)', returns: '新创建的评审条目ID和详细信息' },
-          ]
-        },
-        {
           key: 'execution',
           title: t('prompts.categoryExecution'),
           icon: '▶️',
@@ -129,8 +121,18 @@ const ToolList = () => {
           title: t('prompts.categoryReports'),
           icon: '📊',
           tools: [
-            { name: 'create_ai_report', description: t('prompts.toolDescriptions.create_ai_report'), params: 'project_id(required), title(required), content(required)', returns: '新创建的报告ID和详细信息' },
-            { name: 'update_ai_report', description: t('prompts.toolDescriptions.update_ai_report'), params: 'project_id(required), report_id(optional), report_name(optional), content(optional), new_name(optional)', returns: '更新后的报告信息' },
+            { 
+              name: 'create_ai_report', 
+              description: t('prompts.toolDescriptions.create_ai_report'), 
+              params: 'project_id(required), report_type(required: R-用例审阅/A-品质分析/T-测试结果/O-其他), case_group_name(仅R类型必填), content(required, Markdown格式)', 
+              returns: '报告ID和详情，名称自动生成（如：用例集名_Review_时间戳）' 
+            },
+            { 
+              name: 'update_ai_report', 
+              description: t('prompts.toolDescriptions.update_ai_report'), 
+              params: 'project_id(required), id或title(二选一用于定位报告), content(optional, Markdown), name(optional, 重命名)', 
+              returns: '更新后的报告信息' 
+            },
           ]
         },
       ];

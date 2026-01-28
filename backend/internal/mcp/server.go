@@ -102,23 +102,25 @@ func NewServer(configPath string) (*Server, error) {
 	// Try multiple possible paths
 	possiblePaths := []string{}
 
+	// 1. First check PROMPTS_DIR environment variable (highest priority for deployment)
+	if envPromptsDir := os.Getenv("PROMPTS_DIR"); envPromptsDir != "" {
+		possiblePaths = append(possiblePaths, envPromptsDir)
+		logger.Printf("DEBUG: Possible path 1 (from PROMPTS_DIR env): %s", envPromptsDir)
+	}
+
+	// 2. Try relative to executable
 	if err == nil {
 		exeDir := filepath.Dir(exePath)
 		// The executable is in backend/ directory, so prompts are in backend/internal/mcp/prompts/
 		path1 := filepath.Join(exeDir, "internal", "mcp", "prompts")
 		possiblePaths = append(possiblePaths, path1)
-		logger.Printf("DEBUG: Possible path 1 (relative to exe): %s", path1)
+		logger.Printf("DEBUG: Possible path 2 (relative to exe): %s", path1)
 	}
 
-	// Try relative to cwd
+	// 3. Try relative to cwd
 	path2 := filepath.Join(cwd, "internal", "mcp", "prompts")
 	possiblePaths = append(possiblePaths, path2)
-	logger.Printf("DEBUG: Possible path 2 (relative to cwd): %s", path2)
-
-	// Try from project root
-	path3 := filepath.Join("D:\\VSCode\\webtest\\backend", "internal", "mcp", "prompts")
-	possiblePaths = append(possiblePaths, path3)
-	logger.Printf("DEBUG: Possible path 3 (absolute): %s", path3)
+	logger.Printf("DEBUG: Possible path 3 (relative to cwd): %s", path2)
 
 	// Find the first valid path
 	for _, p := range possiblePaths {

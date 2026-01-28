@@ -1,0 +1,191 @@
+/* 手工用例左侧面板 - 参考WebLeftSidePanel设计风格 */
+.manual-left-side-panel {
+    min-width: 200px;
+    max-width: 200px;
+    width: 200px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    background: #fff;
+    transition: width 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.manual-left-side-panel.collapsed {
+    width: 40px;
+    min-width: 40px;
+    border: none;
+    background: transparent;
+}
+
+/* 收束状态触发器 */
+.manual-left-side-panel .collapsed-trigger {
+    width: 100%;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #fafafa;
+    border: 1px solid #e8e8e8;
+    border-radius: 4px;
+    transition: background 0.3s;
+    margin-top: 50%;
+}
+
+.manual-left-side-panel .collapsed-trigger:hover {
+    background: #e6f7ff;
+}
+
+/* 功能区通用样式 */
+.manual-left-side-panel .function-area {
+    padding: 4px 6px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+/* 创建用例集区域 */
+.manual-left-side-panel .create-case-group {
+    padding: 6px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.manual-left-side-panel .create-case-group .ant-btn {
+    font-size: 12px;
+    height: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* 版本保存区域 - 白色按钮 */
+.manual-left-side-panel .version-save {
+    padding: 4px 6px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.manual-left-side-panel .version-save .ant-btn {
+    font-size: 12px;
+    height: 24px;
+    border-color: #d9d9d9;
+}
+
+.manual-left-side-panel .version-save .ant-btn:hover {
+    color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+/* 版本一览区域 - 白色按钮 */
+.manual-left-side-panel .version-list {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.manual-left-side-panel .version-list .ant-btn {
+    font-size: 12px;
+    height: 24px;
+    border-color: #d9d9d9;
+}
+
+.manual-left-side-panel .version-list .ant-btn:hover {
+    color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+/* 模版下载区域 - 白色按钮 */
+.manual-left-side-panel .template-download .ant-btn {
+    font-size: 12px;
+    height: 24px;
+    border-color: #d9d9d9;
+}
+
+.manual-left-side-panel .template-download .ant-btn:hover {
+    color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+/* 用例导入区域 - 白色按钮 */
+.manual-left-side-panel .case-import .ant-btn {
+    font-size: 12px;
+    height: 24px;
+    border-color: #d9d9d9;
+}
+
+.manual-left-side-panel .case-import .ant-btn:hover {
+    color: #40a9ff;
+    border-color: #40a9ff;
+}
+
+/* 用例集一览区域 */
+.manual-left-side-panel .case-group-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.manual-left-side-panel .case-group-list-header {
+    padding: 4px 6px;
+    font-weight: 500;
+    font-size: 12px;
+    color: #666;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.manual-left-side-panel .case-group-list-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.manual-left-side-panel .empty-tip {
+    padding: 20px 10px;
+    text-align: center;
+    color: #bfbfbf;
+    font-size: 12px;
+}
+
+/* 滚动条样式 */
+.manual-left-side-panel .case-group-list-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.manual-left-side-panel .case-group-list-content::-webkit-scrollbar-thumb {
+    background: #d9d9d9;
+    border-radius: 3px;
+}
+
+.manual-left-side-panel .case-group-list-content::-webkit-scrollbar-thumb:hover {
+    background: #bfbfbf;
+}
+
+.manual-left-side-panel .case-group-list-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* CaseListItem 在左侧面板中的样式优化 */
+.manual-left-side-panel .case-list-item {
+    cursor: pointer;
+    transition: all 0.3s;
+    padding: 4px 6px !important;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.manual-left-side-panel .case-list-item:hover {
+    background: #f5f5f5;
+}
+
+.manual-left-side-panel .case-list-item.item-selected {
+    background: #e6f7ff;
+    border-left: 3px solid #1890ff;
+    padding-left: 3px !important;
+}
+
+.manual-left-side-panel .case-list-item .ant-list-item-meta-title {
+    font-size: 12px;
+    font-weight: 400;
+    margin-bottom: 0;
+    color: #262626;
+}

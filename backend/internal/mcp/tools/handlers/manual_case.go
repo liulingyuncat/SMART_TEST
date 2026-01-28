@@ -856,8 +856,27 @@ func (h *UpdateManualCasesHandler) Execute(ctx context.Context, args map[string]
 				continue
 			}
 
-			path := fmt.Sprintf("/api/v1/projects/%d/case-groups/%d/manual-cases/%d", projectID, groupID, caseID)
-			_, err := h.client.Put(ctx, path, updateDataInterface)
+			// 获取用例的UUID
+			caseUUID := ""
+			if uuid, ok := c["case_id"].(string); ok {
+				caseUUID = uuid
+			}
+			if caseUUID == "" {
+				failedCount++
+				results = append(results, map[string]interface{}{
+					"index":   idx,
+					"case_id": caseID,
+					"status":  "failed",
+					"error":   "无法获取用例UUID",
+				})
+				if !continueOnError {
+					break
+				}
+				continue
+			}
+
+			path := fmt.Sprintf("/api/v1/projects/%d/manual-cases/%s", projectID, caseUUID)
+			_, err := h.client.Patch(ctx, path, updateDataInterface)
 			if err != nil {
 				failedCount++
 				results = append(results, map[string]interface{}{
@@ -917,7 +936,7 @@ func (h *UpdateManualCasesHandler) Execute(ctx context.Context, args map[string]
 			continue
 		}
 
-		// 获取case id
+		// 获取case id（整数型，用于查询UUID）
 		idInterface, ok := data["id"]
 		if !ok {
 			failedCount++
@@ -951,20 +970,86 @@ func (h *UpdateManualCasesHandler) Execute(ctx context.Context, args map[string]
 			continue
 		}
 
+		// 通过整数ID从用例列表中查找对应的UUID
+		listPath := fmt.Sprintf("/api/v1/projects/%d/manual-cases", projectID)
+		listData, listErr := h.client.Get(ctx, listPath, map[string]string{
+			"size":              "99999",
+			"return_all_fields": "true",
+		})
+		if listErr != nil {
+			failedCount++
+			results = append(results, map[string]interface{}{
+				"index":   idx,
+				"case_id": caseID,
+				"status":  "failed",
+				"error":   fmt.Sprintf("无法获取用例列表: %v", listErr),
+			})
+			if !continueOnError {
+				break
+			}
+			continue
+		}
+
+		// 解析用例列表找到对应的UUID
+		var listResp map[string]interface{}
+		if err := json.Unmarshal(listData, &listResp); err != nil {
+			failedCount++
+			results = append(results, map[string]interface{}{
+				"index":   idx,
+				"case_id": caseID,
+				"status":  "failed",
+				"error":   fmt.Sprintf("解析用例列表失败: %v", err),
+			})
+			if !continueOnError {
+				break
+			}
+			continue
+		}
+
+		caseUUID := ""
+		if dataVal, ok := listResp["data"].(map[string]interface{}); ok {
+			if casesArray, ok := dataVal["cases"].([]interface{}); ok {
+				for _, c := range casesArray {
+					if caseMap, ok := c.(map[string]interface{}); ok {
+						if id, ok := caseMap["id"].(float64); ok && int(id) == caseID {
+							if uuid, ok := caseMap["case_id"].(string); ok {
+								caseUUID = uuid
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if caseUUID == "" {
+			failedCount++
+			results = append(results, map[string]interface{}{
+				"index":   idx,
+				"case_id": caseID,
+				"status":  "failed",
+				"error":   fmt.Sprintf("未找到ID为 %d 的用例UUID", caseID),
+			})
+			if !continueOnError {
+				break
+			}
+			continue
+		}
+
 		// 创建更新数据（不包含id，包含所有其他字段）
 		updateData := make(map[string]interface{})
 		for k, v := range data {
-			if k != "id" {
+			if k != "id" && k != "case_id" {
 				// 包括所有字段，包括 case_number 和所有其他字段
 				// v 可能是 nil、""、0 等，我们需要包括它们以支持清空字段操作
 				updateData[k] = v
 			}
 		}
 
-		// 使用不带 group_id 的路径（更可靠）
-		path := fmt.Sprintf("/api/v1/projects/%d/manual-cases/%d", projectID, caseID)
+		// 使用PATCH方法和UUID
+		path := fmt.Sprintf("/api/v1/projects/%d/manual-cases/%s", projectID, caseUUID)
 
-		_, err := h.client.Put(ctx, path, updateData)
+		_, err = h.client.Patch(ctx, path, updateData)
 		if err != nil {
 			failedCount++
 			results = append(results, map[string]interface{}{

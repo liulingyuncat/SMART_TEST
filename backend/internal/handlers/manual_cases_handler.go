@@ -643,17 +643,16 @@ func (h *ManualCasesHandler) SaveMultiLangVersion(c *gin.Context) {
 	}
 	userID := userIDVal.(uint)
 
-	// TODO: SaveMultiLangVersion方法未实现，使用SaveVersion代替
-	// 调用版本服务保存多语言版本
-	log.Printf("[SaveVersion Start] user_id=%d, project_id=%d", userID, projectID)
-	filename, err := h.versionService.SaveVersion(uint(projectID), userID, "overall") // 使用overall类型
+	// 调用版本服务保存多语言版本 (生成CN/JP/EN/ALL 4个xlsx打包成zip)
+	log.Printf("[SaveMultiLangVersion Start] user_id=%d, project_id=%d", userID, projectID)
+	filename, err := h.versionService.SaveMultiLangVersion(uint(projectID), userID, "overall")
 	if err != nil {
-		log.Printf("[SaveVersion Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
+		log.Printf("[SaveMultiLangVersion Failed] user_id=%d, project_id=%d, error=%v", userID, projectID, err)
 		utils.ErrorResponse(c, http.StatusInternalServerError, "版本保存失败: "+err.Error())
 		return
 	}
 
-	log.Printf("[SaveVersion Success] user_id=%d, project_id=%d, filename=%s", userID, projectID, filename)
+	log.Printf("[SaveMultiLangVersion Success] user_id=%d, project_id=%d, filename=%s", userID, projectID, filename)
 	utils.SuccessResponse(c, gin.H{
 		"filename": filename,
 		"message":  "版本保存成功",

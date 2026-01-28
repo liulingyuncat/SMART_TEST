@@ -257,7 +257,7 @@ const VariablesModal = ({
   // 非只读模式添加操作列
   if (!readOnly) {
     columns.push({
-      title: t('common.action', '操作'),
+      title: t('common.actions', '操作'),
       width: 80,
       align: 'center',
       render: (_, record) => {

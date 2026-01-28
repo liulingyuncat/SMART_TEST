@@ -17,7 +17,7 @@ const ProjectInfoTab = ({ projectId }) => {
   const { t } = useTranslation();
   const { user } = useSelector(state => state.auth);
   const [form] = Form.useForm();
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -25,7 +25,7 @@ const ProjectInfoTab = ({ projectId }) => {
   const [projectManagers, setProjectManagers] = useState([]);
   const [canEdit, setCanEdit] = useState(false);
   const [ownerName, setOwnerName] = useState('');
-  
+
   // 任务相关状态
   const [tasks, setTasks] = useState([]);
   const [taskLoading, setTaskLoading] = useState(false);
@@ -60,10 +60,10 @@ const ProjectInfoTab = ({ projectId }) => {
         console.log('[ProjectInfoTab] Project data received:', project);
         console.log('[ProjectInfoTab] owner_name:', project.owner_name);
         setProjectData(project);
-        
+
         // 直接使用后端返回的owner_name
         setOwnerName(project.owner_name || '');
-        
+
         form.setFieldsValue({
           name: project.name,
           description: project.description || '',
@@ -145,6 +145,36 @@ const ProjectInfoTab = ({ projectId }) => {
     };
   }, [tasks]);
 
+  // 计算所有进行中任务的总统计
+  const totalStats = useMemo(() => {
+    let total_ok = 0, total_ng = 0, total_block = 0, total_nr = 0;
+
+    inProgressTasks.forEach(task => {
+      const stats = statsMap[task.task_uuid];
+      if (stats) {
+        total_ok += stats.ok_count || 0;
+        total_ng += stats.ng_count || 0;
+        total_block += stats.block_count || 0;
+        total_nr += stats.nr_count || 0;
+      }
+    });
+
+    const total = total_ok + total_ng + total_block + total_nr;
+    const executed = total - total_nr;
+    const progress = total > 0 ? Math.round((executed / total) * 100) : 0;
+    const passRate = executed > 0 ? Math.round((total_ok / executed) * 100) : 0;
+
+    return {
+      ok: total_ok,
+      ng: total_ng,
+      block: total_block,
+      nr: total_nr,
+      total,
+      progress,
+      passRate,
+    };
+  }, [inProgressTasks, statsMap]);
+
   // 开始编辑
   const handleEdit = () => {
     setEditing(true);
@@ -176,11 +206,11 @@ const ProjectInfoTab = ({ projectId }) => {
       };
 
       await updateProject(projectId, updates);
-      
+
       // 更新本地数据
       const updatedProject = await getProjectById(projectId);
       setProjectData(updatedProject);
-      
+
       message.success(t('project.updateSuccess') || '保存成功');
       setEditing(false);
     } catch (error) {
@@ -245,9 +275,200 @@ const ProjectInfoTab = ({ projectId }) => {
     return Math.round((ok_count / executed) * 100);
   };
 
+  // 渲染总统计区域
+  const renderTotalStatistics = () => {
+    if (inProgressTasks.length === 0 || totalStats.total === 0) return null;
+
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg, #f6f9fc 0%, #eef2f7 100%)',
+        borderRadius: '8px',
+        padding: '16px 20px',
+        marginBottom: '16px',
+        border: '1px solid #e3e8ef',
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}>
+          {/* 左侧：总统计标题 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <div style={{
+              width: '4px',
+              height: '20px',
+              background: 'linear-gradient(180deg, #1890ff 0%, #096dd9 100%)',
+              borderRadius: '2px',
+            }} />
+            <span style={{
+              fontSize: '14px',
+              fontWeight: 600,
+              color: '#1f2937',
+            }}>
+              {t('projectInfo.totalStatistics')}
+            </span>
+            <span style={{
+              fontSize: '12px',
+              color: 'rgba(0,0,0,0.45)',
+              marginLeft: '4px',
+            }}>
+              ({t('common.total')} {totalStats.total} {t('projectInfo.cases')})
+            </span>
+          </div>
+
+          {/* 中间：测试结果统计 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '24px',
+          }}>
+            {/* OK */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '50px',
+            }}>
+              <span style={{ fontSize: '11px', color: 'rgba(0,0,0,0.45)', marginBottom: '2px' }}>OK</span>
+              <span style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#52c41a',
+                lineHeight: 1,
+              }}>
+                {totalStats.ok}
+              </span>
+            </div>
+
+            {/* NG */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '50px',
+            }}>
+              <span style={{ fontSize: '11px', color: 'rgba(0,0,0,0.45)', marginBottom: '2px' }}>NG</span>
+              <span style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#ff4d4f',
+                lineHeight: 1,
+              }}>
+                {totalStats.ng}
+              </span>
+            </div>
+
+            {/* Block */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '50px',
+            }}>
+              <span style={{ fontSize: '11px', color: 'rgba(0,0,0,0.45)', marginBottom: '2px' }}>Block</span>
+              <span style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#faad14',
+                lineHeight: 1,
+              }}>
+                {totalStats.block}
+              </span>
+            </div>
+
+            {/* NR */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '50px',
+            }}>
+              <span style={{ fontSize: '11px', color: 'rgba(0,0,0,0.45)', marginBottom: '2px' }}>NR</span>
+              <span style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: '#8c8c8c',
+                lineHeight: 1,
+              }}>
+                {totalStats.nr}
+              </span>
+            </div>
+          </div>
+
+          {/* 右侧：进度和通过率 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '20px',
+          }}>
+            {/* 执行进度 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)' }}>
+                {t('testExecution.statistics.progress')}
+              </span>
+              <Progress
+                percent={totalStats.progress}
+                size="small"
+                style={{ width: 80, margin: 0 }}
+                strokeColor="#1890ff"
+                showInfo={false}
+              />
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#1890ff',
+                minWidth: '36px',
+                textAlign: 'right',
+              }}>
+                {totalStats.progress}%
+              </span>
+            </div>
+
+            {/* 通过率 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)' }}>
+                {t('testExecution.statistics.passRate')}
+              </span>
+              <Progress
+                percent={totalStats.passRate}
+                size="small"
+                style={{ width: 80, margin: 0 }}
+                strokeColor={totalStats.passRate >= 80 ? '#52c41a' : totalStats.passRate >= 60 ? '#faad14' : '#ff4d4f'}
+                showInfo={false}
+              />
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: totalStats.passRate >= 80 ? '#52c41a' : totalStats.passRate >= 60 ? '#faad14' : '#ff4d4f',
+                minWidth: '36px',
+                textAlign: 'right',
+              }}>
+                {totalStats.passRate}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // 渲染任务卡片
   const renderTaskCard = () => (
-    <Card 
+    <Card
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <span style={{ fontSize: '16px', fontWeight: 600 }}>{t('projectInfo.taskSection')}</span>
@@ -266,7 +487,7 @@ const ProjectInfoTab = ({ projectId }) => {
             </span>
           </div>
         </div>
-      } 
+      }
       style={{ marginBottom: 16 }}
       bodyStyle={{ padding: '20px 24px' }}
     >
@@ -276,6 +497,8 @@ const ProjectInfoTab = ({ projectId }) => {
         </div>
       ) : (
         <>
+          {/* 总统计区域 */}
+          {renderTotalStatistics()}
 
           {/* 进行中任务列表 */}
           {inProgressTasks.length === 0 ? (
@@ -286,13 +509,13 @@ const ProjectInfoTab = ({ projectId }) => {
                 const stats = statsMap[task.task_uuid];
                 const executionProgress = calculateExecutionProgress(stats);
                 const passRate = calculatePassRate(stats);
-                
+
                 return (
-                  <div 
-                    key={task.task_uuid} 
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
+                  <div
+                    key={task.task_uuid}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 10,
                       padding: '10px 14px',
                       background: '#fff',
@@ -302,10 +525,10 @@ const ProjectInfoTab = ({ projectId }) => {
                     }}
                   >
                     {/* 任务名称 */}
-                    <Text 
-                      strong 
-                      style={{ 
-                        width: 120, 
+                    <Text
+                      strong
+                      style={{
+                        width: 120,
                         flexShrink: 0,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -319,7 +542,7 @@ const ProjectInfoTab = ({ projectId }) => {
                     <Tag color="processing" style={{ flexShrink: 0, margin: 0, fontSize: '12px' }}>
                       {t('testExecution.taskList.inProgress')}
                     </Tag>
-                    
+
                     {stats ? (
                       <>
                         {/* 执行结果统计 */}
@@ -335,7 +558,7 @@ const ProjectInfoTab = ({ projectId }) => {
                         <span style={{ whiteSpace: 'nowrap', flexShrink: 0, fontSize: '12px', color: 'rgba(0,0,0,0.65)' }}>
                           <span style={{ color: 'rgba(0,0,0,0.45)' }}>NR:</span> {stats.nr_count || 0}
                         </span>
-                        
+
                         {/* 进度条 */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                           <span style={{ whiteSpace: 'nowrap', fontSize: '12px', color: 'rgba(0,0,0,0.45)' }}>{t('testExecution.statistics.progress')}</span>
@@ -344,8 +567,8 @@ const ProjectInfoTab = ({ projectId }) => {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                           <span style={{ whiteSpace: 'nowrap', fontSize: '12px', color: 'rgba(0,0,0,0.45)' }}>{t('testExecution.statistics.passRate')}</span>
-                          <Progress 
-                            percent={passRate} 
+                          <Progress
+                            percent={passRate}
                             size="small"
                             style={{ width: 60, margin: 0 }}
                             strokeColor={passRate >= 80 ? '#52c41a' : passRate >= 60 ? '#faad14' : '#ff4d4f'}
@@ -397,13 +620,13 @@ const ProjectInfoTab = ({ projectId }) => {
               <div style={{ color: 'rgba(0, 0, 0, 0.85)' }}>{projectData.name}</div>
               <div style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.65)' }}>{t('project.status')}</div>
               <div style={{ color: 'rgba(0, 0, 0, 0.85)' }}>{getStatusText(projectData.status)}</div>
-              
+
               <div style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.65)' }}>{t('project.owner')}</div>
               <div style={{ color: 'rgba(0, 0, 0, 0.85)' }}>{getOwnerName()}</div>
               <div style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.65)' }}>{t('project.createdAt')}</div>
               <div style={{ color: 'rgba(0, 0, 0, 0.85)' }}>{formatDate(projectData.created_at)}</div>
             </div>
-            
+
             <div style={{ borderTop: '1px solid #e8e8e8', paddingTop: '12px', marginTop: '4px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '12px 20px', fontSize: '13px' }}>
                 <div style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.65)' }}>{t('project.introduction')}</div>
@@ -412,9 +635,9 @@ const ProjectInfoTab = ({ projectId }) => {
             </div>
           </div>
         </Card>
-        
+
         {renderTaskCard()}
-        
+
         {/* 缺陷趋势图 */}
         <DefectTrendChart projectId={projectId} />
       </Fragment>
@@ -482,9 +705,9 @@ const ProjectInfoTab = ({ projectId }) => {
               { max: 500, message: t('project.descTooLong') },
             ]}
           >
-            <TextArea 
-              rows={4} 
-              placeholder={t('project.descPlaceholder')} 
+            <TextArea
+              rows={4}
+              placeholder={t('project.descPlaceholder')}
             />
           </Form.Item>
         </Form>

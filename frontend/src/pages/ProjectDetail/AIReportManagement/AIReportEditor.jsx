@@ -10,10 +10,10 @@ import ChartRenderer from './ChartRenderer';
 import 'react-markdown-editor-lite/lib/index.css';
 import './AIReportEditor.css';
 
-const AIReportEditor = ({ 
-  report, 
+const AIReportEditor = ({
+  report,
   projectName,
-  onSave, 
+  onSave,
   onContentChange,
   onNameChange,
   loading = false
@@ -32,11 +32,11 @@ const AIReportEditor = ({
   const previewRef = useRef(null);
 
   // 初始化日志
-  console.log('[AIReportEditor] Component initialized with props:', { 
-    reportId: report?.id, 
+  console.log('[AIReportEditor] Component initialized with props:', {
+    reportId: report?.id,
     reportName: report?.name,
-    projectName, 
-    loading 
+    projectName,
+    loading
   });
 
   // 将标题转换为ID
@@ -50,10 +50,10 @@ const AIReportEditor = ({
   // 解析Markdown生成目录
   const generateTOC = useCallback((markdown) => {
     if (!markdown) return [];
-    
+
     const headings = [];
     const lines = markdown.split('\n');
-    
+
     lines.forEach((line) => {
       const match = line.match(/^(#{1,6})\s+(.+)$/);
       if (match) {
@@ -63,7 +63,7 @@ const AIReportEditor = ({
         headings.push({ level, title, id });
       }
     });
-    
+
     return headings;
   }, [titleToId]);
 
@@ -136,19 +136,19 @@ const AIReportEditor = ({
 
       const dataKey = config.dataKey || 'value';
       const headers = Object.keys(config.data[0]);
-      
+
       let html = `<table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
         <thead>
           <tr style="background-color: #f6f8fa;">`;
-      
+
       headers.forEach(header => {
         html += `<th style="border: 1px solid #dfe2e5; padding: 8px; text-align: left; font-weight: 600;">${header}</th>`;
       });
-      
+
       html += `</tr>
         </thead>
         <tbody>`;
-      
+
       config.data.forEach((row, idx) => {
         html += `<tr style="background-color: ${idx % 2 === 0 ? '#fff' : '#f9f9f9'};">`;
         headers.forEach(header => {
@@ -156,10 +156,10 @@ const AIReportEditor = ({
         });
         html += `</tr>`;
       });
-      
+
       html += `</tbody>
       </table>`;
-      
+
       return html;
     } catch (error) {
       console.error('[AIReportEditor] Chart to table conversion error:', error);
@@ -171,7 +171,7 @@ const AIReportEditor = ({
   const preprocessMarkdownForDownload = (md) => {
     let result = md;
     const chartRegex = /```chart:(\w+)\s*\n([\s\S]*?)\n```/g;
-    
+
     result = result.replace(chartRegex, (match, chartType, configStr) => {
       try {
         const config = JSON.parse(configStr.trim());
@@ -184,7 +184,7 @@ const AIReportEditor = ({
         return match; // 保留原始代码块
       }
     });
-    
+
     return result;
   };
 
@@ -193,7 +193,7 @@ const AIReportEditor = ({
     const processedContent = preprocessMarkdownForDownload(content);
     const renderedContent = mdParser.current.render(processedContent);
     const timestamp = new Date().toLocaleString('zh-CN');
-    
+
     // 构建完整的 HTML 文档
     let htmlContent = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -356,17 +356,17 @@ const AIReportEditor = ({
         </div>
         <div class="content">
 `;
-    
+
     // 添加渲染后的内容
     htmlContent += renderedContent;
-    
+
     // 关闭 HTML 文档
     htmlContent += `
         </div>
     </div>
 </body>
 </html>`;
-    
+
     return htmlContent;
   };
 
@@ -386,18 +386,18 @@ const AIReportEditor = ({
       }
 
       console.log('[AIReportEditor] Getting preview content');
-      
+
       // 获取完整的HTML内容（包括所有部分，不仅仅是当前可见区域）
       const reportContent = previewRef.current.innerHTML;
-      
+
       // 收集所有样式（包括Ant Design样式）
       const styles = [];
-      
+
       // 获取所有link标签的样式
       for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
         styles.push(`<link rel="stylesheet" href="${link.href}">`);
       }
-      
+
       // 获取所有style标签的内容
       for (const styleTag of document.querySelectorAll('style')) {
         styles.push(`<style>${styleTag.innerHTML}</style>`);
@@ -478,8 +478,7 @@ const AIReportEditor = ({
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      const filename = `${projectName}-${report.name}-${dateStr}.html`;
+      const filename = `${projectName}_${report.name}.html`;
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
@@ -511,29 +510,27 @@ const AIReportEditor = ({
         message.error('报告不可用');
         return;
       }
-      
+
       console.log('[AIReportEditor] Content length:', content.length);
-      
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-      const filename = `${projectName}-${report.name}-${dateStr}.md`;
+
+      const filename = `${projectName}_${report.name}.md`;
       console.log('[AIReportEditor] Download filename:', filename);
-      
+
       const element = document.createElement('a');
       element.setAttribute('href', 'data:text/markdown;charset=utf-8,' + encodeURIComponent(content));
       element.setAttribute('download', filename);
       element.style.display = 'none';
       console.log('[AIReportEditor] Download element created');
-      
+
       document.body.appendChild(element);
       console.log('[AIReportEditor] Element appended to body');
-      
+
       element.click();
       console.log('[AIReportEditor] Click triggered, download should start');
-      
+
       document.body.removeChild(element);
       console.log('[AIReportEditor] Element removed from body');
-      
+
       message.success('Markdown 报告下载成功');
       console.log('[AIReportEditor] Markdown download completed successfully');
     } catch (error) {
@@ -671,7 +668,7 @@ const AIReportEditor = ({
                 </div>
               </div>
             )}
-            
+
             {/* 右侧内容 */}
             <div className="markdown-preview" ref={previewRef}>
               {content ? (
@@ -688,13 +685,13 @@ const AIReportEditor = ({
                     code({ node, inline, className, children, ...props }) {
                       const language = className ? className.replace(/language-/, '') : '';
                       const codeString = String(children).trim();
-                      
-                      console.log('[AIReportEditor] Code block detected:', { 
-                        language, 
-                        codeLength: codeString.length, 
-                        inline 
+
+                      console.log('[AIReportEditor] Code block detected:', {
+                        language,
+                        codeLength: codeString.length,
+                        inline
                       });
-                      
+
                       // 检测是否是 Recharts 图表 (chart:type 格式)
                       if (language.startsWith('chart:')) {
                         const chartType = language.replace('chart:', '');
@@ -702,9 +699,9 @@ const AIReportEditor = ({
                         try {
                           console.log('[AIReportEditor] Parsing JSON config for chart:', chartType);
                           const config = JSON.parse(codeString);
-                          console.log('[AIReportEditor] Chart config parsed successfully:', { 
-                            type: chartType, 
-                            dataPoints: config.data?.length 
+                          console.log('[AIReportEditor] Chart config parsed successfully:', {
+                            type: chartType,
+                            dataPoints: config.data?.length
                           });
                           return <ChartRenderer type={chartType} config={config} />;
                         } catch (error) {
@@ -719,7 +716,7 @@ const AIReportEditor = ({
                           );
                         }
                       }
-                      
+
                       // 检测是否是 SVG 代码
                       if ((language === 'html' || language === 'svg' || language === 'xml') && codeString.includes('<svg')) {
                         console.log('[AIReportEditor] SVG code block detected');
@@ -745,7 +742,7 @@ const AIReportEditor = ({
                           // 降级处理：显示为普通代码块
                         }
                       }
-                      
+
                       // 普通代码块处理
                       return (
                         <code className={className} {...props}>

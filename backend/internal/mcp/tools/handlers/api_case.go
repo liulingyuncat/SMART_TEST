@@ -469,11 +469,11 @@ func NewCreateApiCaseHandler(c *client.BackendClient) *CreateApiCaseHandler {
 }
 
 func (h *CreateApiCaseHandler) Name() string {
-	return "create_api_case"
+	return "create_api_cases"
 }
 
 func (h *CreateApiCaseHandler) Description() string {
-	return "创建AI接口测试用例，支持同时写入用户自定义变量"
+	return "批量创建API接口测试用例，支持同时写入用户自定义变量"
 }
 
 func (h *CreateApiCaseHandler) InputSchema() map[string]interface{} {

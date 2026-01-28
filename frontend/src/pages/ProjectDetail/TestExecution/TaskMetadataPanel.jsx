@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Form, Input, Select, DatePicker, Button, Space, Empty, message, Row, Col, Modal, Table, Radio, Progress, Tooltip, Tag } from 'antd';
-import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, SettingOutlined } from '@ant-design/icons';
+import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, SettingOutlined, RightOutlined, LeftOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 import dayjs from 'dayjs';
@@ -28,31 +28,34 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   const [selectedCasesData, setSelectedCasesData] = useState(null);
   const [caseTableData, setCaseTableData] = useState([]);
   const [displayLanguage, setDisplayLanguage] = useState(null); // 显示语言筛选，初始为null以便使用task.display_language作为后备
-  
+
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+
   // 用例详细弹窗状态
   const [caseDetailVisible, setCaseDetailVisible] = useState(false);
   const [selectedCaseForDetail, setSelectedCaseForDetail] = useState(null);
-  
+
   // 单条用例执行状态
   const [executingSingleCase, setExecutingSingleCase] = useState(null); // 正在执行的用例ID
-  
+
   // 执行完成对话框状态
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
   const [completionModalConfig, setCompletionModalConfig] = useState({ type: 'success', title: '', content: '' });
-  
+
   // 用户自定义变量状态
   const [variablesModalVisible, setVariablesModalVisible] = useState(false);
   const [userVariables, setUserVariables] = useState([]);
   const [taskGroupId, setTaskGroupId] = useState(null); // 任务关联的用例集ID
-  
+
+  // BugID/Remark列展开收起状态
+  const [showExtraColumns, setShowExtraColumns] = useState(false);
+
   // 用于防抖自动保存的ref
   const saveTimeoutRef = useRef(null);
   const pendingSaveRef = useRef(null);
-  
+
   console.log('🟡 [TaskMetadataPanel] Render with projectId:', projectId, 'task:', task?.task_name);
 
   // 打开用例详细弹窗
@@ -70,12 +73,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   // 从用例详细弹窗保存数据
   const handleSaveCaseDetail = async (data) => {
     // 更新表格数据
-    setCaseTableData(prev => prev.map(c => 
-      c.case_id === data.case_id 
-        ? { ...c, test_result: data.test_result, bug_id: data.bug_id, remark: data.remark } 
+    setCaseTableData(prev => prev.map(c =>
+      c.case_id === data.case_id
+        ? { ...c, test_result: data.test_result, bug_id: data.bug_id, remark: data.remark }
         : c
     ));
-    
+
     // 触发自动保存
     if (data.test_result) {
       await autoSaveCaseResult(data.case_id, 'test_result', data.test_result);
@@ -86,7 +89,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     if (data.remark !== undefined) {
       await autoSaveCaseResult(data.case_id, 'remark', data.remark);
     }
-    
+
     message.success(t('testExecution.caseDetail.saveSuccess'));
   };
 
@@ -95,12 +98,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     if (!pendingSaveRef.current || Object.keys(pendingSaveRef.current).length === 0) {
       return;
     }
-    
+
     const dataToSave = Object.values(pendingSaveRef.current);
     pendingSaveRef.current = {};
-    
+
     if (dataToSave.length === 0 || !taskUuid) return;
-    
+
     try {
       console.log('💾 [TaskMetadataPanel] Flushing pending save:', dataToSave.length, 'items');
       await saveExecutionCaseResults(taskUuid, dataToSave);
@@ -112,10 +115,10 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
   // 任务切换时，先保存当前任务的待保存数据，再加载新任务的执行结果
   const prevTaskUuidRef = useRef(null);
-  
+
   useEffect(() => {
     console.log('🔄 [TaskMetadataPanel] useEffect triggered, task_uuid:', task?.task_uuid, 'task_name:', task?.task_name);
-    
+
     // 如果任务切换了，先保存之前任务的待保存数据
     if (prevTaskUuidRef.current && prevTaskUuidRef.current !== task?.task_uuid) {
       console.log('🔄 [TaskMetadataPanel] Task changed, flushing pending save for:', prevTaskUuidRef.current);
@@ -126,13 +129,13 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         saveTimeoutRef.current = null;
       }
     }
-    
+
     prevTaskUuidRef.current = task?.task_uuid;
-    
+
     if (task && task.task_uuid) {
       console.log('🔄 [TaskMetadataPanel] Calling loadSavedCaseResults for task:', task.task_name);
       console.log('🔄 [TaskMetadataPanel] task.display_language:', task.display_language);
-      
+
       // 恢复语言设置：优先 localStorage，其次 task.display_language，最后默认 cn
       const savedFilter = localStorage.getItem(`execution_filter_${task.task_uuid}`);
       if (savedFilter) {
@@ -146,12 +149,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         setDisplayLanguage(task.display_language);
       } else {
         // 都没有，根据执行类型设置默认值
-        const defaultLang = task.execution_type === 'manual' ? 'all' : 
-                           task.execution_type === 'api' ? 'en' : 'cn';
+        const defaultLang = task.execution_type === 'manual' ? 'all' :
+          task.execution_type === 'api' ? 'en' : 'cn';
         console.log('🔄 [TaskMetadataPanel] Setting default language:', defaultLang);
         setDisplayLanguage(defaultLang);
       }
-      
+
       loadSavedCaseResults();
     } else {
       console.log('🔄 [TaskMetadataPanel] No task, clearing data');
@@ -159,7 +162,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       setSelectedCasesData(null);
       setCaseTableData([]);
     }
-    
+
     // 组件卸载时保存待保存的数据
     return () => {
       if (task?.task_uuid) {
@@ -172,47 +175,47 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   useEffect(() => {
     const loadTaskVariables = async () => {
       // 仅对 automation(web) 和 api 类型任务加载变量
-      if (!task || !task.task_uuid || !task.case_group_name || 
-          (task.execution_type !== 'automation' && task.execution_type !== 'api')) {
+      if (!task || !task.task_uuid || !task.case_group_name ||
+        (task.execution_type !== 'automation' && task.execution_type !== 'api')) {
         console.log('🔧 [TaskMetadataPanel] Skip loading variables: no task_uuid/case_group_name or not automation/api task');
         setUserVariables([]);
         setTaskGroupId(null);
         return;
       }
-      
+
       console.log('🔧 [TaskMetadataPanel] Loading variables for task:', task.task_name);
       console.log('🔧 [TaskMetadataPanel] task_uuid:', task.task_uuid);
       console.log('🔧 [TaskMetadataPanel] case_group_name:', task.case_group_name);
       console.log('🔧 [TaskMetadataPanel] execution_type:', task.execution_type);
-      
+
       try {
         // 1. 根据 case_group_name 查找 group_id
         const groupType = task.execution_type === 'automation' ? 'web' : 'api';
         const getCaseGroups = groupType === 'web' ? getWebCaseGroups : getApiCaseGroupsFromTable;
-        
+
         console.log('🔧 [TaskMetadataPanel] Fetching case groups for projectId:', projectId);
         const groups = await getCaseGroups(projectId);
         console.log('🔧 [TaskMetadataPanel] Found case groups:', groups);
-        
+
         // 查找匹配的用例集
         const matchedGroup = groups.find(g => g.group_name === task.case_group_name);
-        
+
         if (!matchedGroup) {
           console.warn('🔧 [TaskMetadataPanel] Case group not found:', task.case_group_name);
           setUserVariables([]);
           setTaskGroupId(null);
           return;
         }
-        
+
         console.log('🔧 [TaskMetadataPanel] Matched group:', matchedGroup);
         console.log('🔧 [TaskMetadataPanel] group_id:', matchedGroup.id);
         setTaskGroupId(matchedGroup.id);
-        
+
         // 2. 加载任务变量（优先任务独立变量，没有则返回用例集变量）
         const response = await getTaskVariables(projectId, task.task_uuid, matchedGroup.id, groupType);
         const variables = response?.variables || [];
         console.log('🔧 [TaskMetadataPanel] Loaded variables:', variables);
-        
+
         setUserVariables(variables);
         message.success(`已加载 ${variables.length} 个变量`);
       } catch (error) {
@@ -222,7 +225,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         setTaskGroupId(null);
       }
     };
-    
+
     loadTaskVariables();
   }, [task?.task_uuid, task?.case_group_name, task?.execution_type, projectId]);
 
@@ -230,30 +233,30 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   const loadSavedCaseResults = async () => {
     console.log('📥 [TaskMetadataPanel] loadSavedCaseResults called');
     console.log('📥 [TaskMetadataPanel] task:', task?.task_name, 'task_uuid:', task?.task_uuid);
-    
+
     if (!task || !task.task_uuid) {
       console.log('📥 [TaskMetadataPanel] No task or task_uuid, skipping load');
       return;
     }
-    
+
     try {
       console.log('📥 [TaskMetadataPanel] Calling getExecutionCaseResults API...');
       const results = await getExecutionCaseResults(task.task_uuid);
       console.log('📥 [TaskMetadataPanel] API returned results:', results);
       console.log('📥 [TaskMetadataPanel] Results length:', results?.length);
       console.log('📥 [TaskMetadataPanel] Results[0]:', results?.[0]);
-      
+
       if (results && results.length > 0) {
         // 从localStorage恢复筛选条件
         const savedFilter = localStorage.getItem(`execution_filter_${task.task_uuid}`);
         console.log('📥 [TaskMetadataPanel] savedFilter from localStorage:', savedFilter);
         // 注意：默认值不设置language，让它回退到task.display_language
         const parsedFilter = savedFilter ? JSON.parse(savedFilter) : { case_type: 'role1' };
-        
+
         // 语言优先级：1. localStorage中保存的语言 2. 任务中保存的语言(display_language) 3. 默认cn
         const taskLang = task.display_language || '';
         const effectiveLanguage = parsedFilter.language || taskLang || 'cn';
-        
+
         // 确保case_group和language优先使用task中保存的值，防止清除缓存后丢失
         const filterConditions = {
           ...parsedFilter,
@@ -262,11 +265,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         };
         console.log('📥 [TaskMetadataPanel] filterConditions with task fallback:', filterConditions);
         console.log('📥 [TaskMetadataPanel] task.display_language:', task.display_language);
-        
+
         // 同步设置displayLanguage状态
         setDisplayLanguage(effectiveLanguage);
         console.log('📥 [TaskMetadataPanel] setDisplayLanguage:', effectiveLanguage);
-        
+
         // 将结果转换为表格数据
         // 使用后端返回的 display_id 作为 No.（已按 display_id 排序）
         const tableData = results.map((r, index) => ({
@@ -277,10 +280,10 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           bug_id: r.bug_id || '',
           remark: r.remark || '',
         }));
-        
+
         console.log('📥 [TaskMetadataPanel] Setting selectedCasesData and caseTableData');
         console.log('📥 [TaskMetadataPanel] tableData[0]:', tableData[0]);
-        
+
         setSelectedCasesData({
           cases: results,
           filterConditions: filterConditions,
@@ -308,7 +311,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       console.log('🔵 [TaskMetadataPanel] Initializing table data');
       console.log('🔵 [TaskMetadataPanel] selectedCasesData.cases[0]:', selectedCasesData.cases[0]);
       console.log('🔵 [TaskMetadataPanel] execution_type:', selectedCasesData.filterConditions?.execution_type);
-      
+
       const tableData = selectedCasesData.cases.map((c, index) => ({
         ...c,
         key: c.case_id || c.id || index,
@@ -317,7 +320,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         bug_id: c.bug_id || '',
         remark: c.remark || '',
       }));
-      
+
       console.log('✅ [TaskMetadataPanel] tableData[0]:', tableData[0]);
       console.log('✅ [TaskMetadataPanel] tableData.length:', tableData.length);
       setCaseTableData(tableData);
@@ -327,14 +330,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   // 自动保存单条记录（防抖）
   const autoSaveCaseResult = useCallback(async (caseId, field, value) => {
     if (!task || !task.task_uuid) return;
-    
+
     // 从当前表格数据中获取完整的用例信息
     const caseRecord = caseTableData.find(c => c.case_id === caseId);
     if (!caseRecord) {
       console.log('⚠️ [TaskMetadataPanel] Case not found for auto-save:', caseId);
       return;
     }
-    
+
     // 更新待保存数据
     if (!pendingSaveRef.current) {
       pendingSaveRef.current = {};
@@ -342,7 +345,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     if (!pendingSaveRef.current[caseId]) {
       // 获取当前的用例类型
       const currentCaseType = selectedCasesData?.filterConditions?.case_type || 'overall';
-      
+
       // 初始化时复制完整用例数据（包含手工测试、AI Web和API的所有字段）
       // 注意：display_id 使用 no（当前显示序号），不能使用原始用例的 id
       pendingSaveRef.current[caseId] = {
@@ -392,19 +395,19 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     }
     // 更新变更的字段
     pendingSaveRef.current[caseId][field] = value;
-    
+
     // 清除之前的定时器
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    
+
     // 设置新的防抖定时器（500ms）
     saveTimeoutRef.current = setTimeout(async () => {
       const dataToSave = Object.values(pendingSaveRef.current);
       pendingSaveRef.current = {};
-      
+
       if (dataToSave.length === 0) return;
-      
+
       try {
         console.log('💾 [TaskMetadataPanel] Auto-saving:', dataToSave);
         await saveExecutionCaseResults(task.task_uuid, dataToSave);
@@ -418,7 +421,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
   // 更新单条用例的执行结果并自动保存
   const handleCaseFieldChange = useCallback((caseId, field, value) => {
-    setCaseTableData(prev => prev.map(c => 
+    setCaseTableData(prev => prev.map(c =>
       c.case_id === caseId ? { ...c, [field]: value } : c
     ));
     // 触发自动保存
@@ -431,7 +434,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     console.log('💾 [TaskMetadataPanel] task:', task?.task_name, 'task_uuid:', task?.task_uuid);
     console.log('💾 [TaskMetadataPanel] cases count:', cases?.length);
     console.log('💾 [TaskMetadataPanel] filterConditions:', filterConditions);
-    
+
     if (!task || !task.task_uuid) {
       console.error('💾 [TaskMetadataPanel] ERROR: No task or task_uuid!');
       message.error('任务信息缺失');
@@ -442,12 +445,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       message.error('没有用例可保存');
       return;
     }
-    
+
     try {
       // 保存筛选条件到localStorage
       localStorage.setItem(`execution_filter_${task.task_uuid}`, JSON.stringify(filterConditions));
       console.log('💾 [TaskMetadataPanel] Filter saved to localStorage');
-      
+
       // 先从后端加载已有的执行结果，以便合并已保存的 test_result、bug_id、remark
       let existingResults = [];
       try {
@@ -456,7 +459,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       } catch (e) {
         console.log('💾 [TaskMetadataPanel] No existing results found');
       }
-      
+
       // 创建已有结果的映射 (case_id -> result)
       const existingMap = new Map();
       if (existingResults && existingResults.length > 0) {
@@ -464,31 +467,31 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           existingMap.set(r.case_id, r);
         });
       }
-      
+
       const isManual = filterConditions?.execution_type === 'manual';
       // 获取用例类型：手工测试用 case_type (overall/acceptance/change)，AI测试用 role
-      const caseType = isManual 
+      const caseType = isManual
         ? (filterConditions?.case_type || 'overall')
         : (filterConditions?.case_type || 'role1');
-      
+
       // 构造保存数据，合并已有的执行结果
       // 按选择顺序重新生成 No.（display_id）
       const dataToSave = cases.map((c, index) => {
         // 查找已有的执行结果
         const existing = existingMap.get(c.case_id);
-        
+
         // 判断是否保留已有的test_result：只有OK/NG才保留（已执行过的结果）
         // NR和Block都视为未执行，重新选择时重置为Block
         const preservedResults = ['OK', 'NG'];
         const shouldPreserveResult = existing?.test_result && preservedResults.includes(existing.test_result);
-        
+
         // 🔍 调试: 打印源用例的 script_code
         if (index === 0) {
           console.log('🔍 [saveAllCasesToBackend] c (source case):', c);
           console.log('🔍 [saveAllCasesToBackend] c.script_code:', c.script_code);
           console.log('🔍 [saveAllCasesToBackend] c keys:', Object.keys(c));
         }
-        
+
         const item = {
           case_id: c.case_id,
           display_id: index + 1, // 按选择顺序重新生成序号（从1开始）
@@ -499,7 +502,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           bug_id: existing?.bug_id || c.bug_id || '',
           remark: existing?.remark || c.remark || '',
         };
-        
+
         if (isManual) {
           // 手工测试用例的字段
           item.major_function_cn = c.major_function_cn || c.major_function || '';
@@ -554,14 +557,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           item.expected_result_en = c.expected_result_en || '';
           item.script_code = c.script_code || ''; // Playwright脚本代码，用于Web自动化执行
         }
-        
+
         return item;
       });
-      
+
       console.log('💾 [TaskMetadataPanel] dataToSave[0]:', dataToSave[0]);
       console.log('💾 [TaskMetadataPanel] dataToSave[0].case_id:', dataToSave[0]?.case_id);
       console.log('💾 [TaskMetadataPanel] Calling saveExecutionCaseResults API...');
-      
+
       await saveExecutionCaseResults(task.task_uuid, dataToSave);
       console.log('✅ [TaskMetadataPanel] All cases saved successfully!');
       message.success(`已保存 ${cases.length} 条用例`);
@@ -595,7 +598,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     if (!hasCases) {
       return '-';
     }
-    
+
     const execType = task?.execution_type;
     if (execType === 'automation') {
       // Web类型：显示选择的语言，优先级：filterConditions > displayLanguage状态 > task.display_language > 默认cn
@@ -639,7 +642,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     const isManual = isManualType();
     const isAIAPI = task?.execution_type === 'api';
     const isAIWeb = task?.execution_type === 'automation';
-    
+
     // 清理项目名和任务名，去除非法字符
     const safeProjectName = (projectName || 'Project')?.replace(/[\\/:*?"<>|]/g, '_');
     const safeTaskName = (task?.task_name || 'Task')?.replace(/[\\/:*?"<>|]/g, '_');
@@ -649,11 +652,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     // 根据执行类型选择不同的表头
     let headers;
     let rows;
-    
+
     if (isManual) {
       // 手工测试用例：No./CaseID/Maj.Category/Mid.Category/Min.Category/Precondition/Test Step/Expect/TestResult/BugID/Remark
       headers = ['No.', 'CaseID', `Maj.Category${langDisplay}`, `Mid.Category${langDisplay}`, `Min.Category${langDisplay}`, `Precondition${langDisplay}`, `Test Step${langDisplay}`, `Expect${langDisplay}`, 'TestResult', 'BugID', 'Remark'];
-      
+
       rows = caseTableData.map((c, index) => [
         index + 1,
         c.case_number || c.case_num || '',
@@ -670,7 +673,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     } else if (isAIAPI) {
       // API 用例：No./CaseID/Screen/URL/Header/Method/Body/Response/ResponseTime/TestResult/BugID/Remark
       headers = ['No.', 'CaseID', 'Screen', 'URL', 'Header', 'Method', 'Body', 'Response', 'ResponseTime', 'TestResult', 'BugID', 'Remark'];
-      
+
       rows = caseTableData.map((c, index) => [
         index + 1,
         c.case_num || c.case_number || '',
@@ -688,7 +691,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     } else {
       // AI Web 用例：No./CaseID/Screen/Function/Precondition/Test Step/Expect/TestResult/BugID/Remark
       headers = ['No.', 'CaseID', `Screen${langDisplay}`, `Function${langDisplay}`, `Precondition${langDisplay}`, `Test Step${langDisplay}`, `Expect${langDisplay}`, 'TestResult', 'BugID', 'Remark'];
-      
+
       rows = caseTableData.map((c, index) => [
         index + 1,
         c.case_num || '',
@@ -703,7 +706,21 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       ]);
     }
 
-    // 构建元数据行
+    // 计算测试结果统计
+    const totalCases = caseTableData.length;
+    const okCount = caseTableData.filter(c => c.test_result === 'OK').length;
+    const ngCount = caseTableData.filter(c => c.test_result === 'NG').length;
+    const blockCount = caseTableData.filter(c => c.test_result === 'Block').length;
+    const nrCount = caseTableData.filter(c => c.test_result === 'NR').length;
+
+    // 实施率: (OK + NG) / 总数 * 100%
+    const executedCount = okCount + ngCount;
+    const executionRate = totalCases > 0 ? ((executedCount / totalCases) * 100).toFixed(1) : '0.0';
+
+    // 进度: OK / 总数 * 100%
+    const progressRate = totalCases > 0 ? ((okCount / totalCases) * 100).toFixed(1) : '0.0';
+
+    // 构建元数据行（移除筛选条件，添加测试结果统计）
     const metadataRows = [
       ['任务名称', task?.task_name || ''],
       ['执行内容', task?.execution_type === 'manual' ? '手工测试' : task?.execution_type === 'automation' ? 'AI Web' : 'AI接口'],
@@ -715,11 +732,16 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       ['测试环境', task?.test_env || ''],
       ['执行人', task?.executor || ''],
       ['任务描述', task?.task_description || ''],
-      ['筛选条件', isManual 
-        ? `${selectedCasesData?.filterConditions?.case_type_display || '整体'}用例` 
-        : role],
       ['语言', langDisplay],
-      ['用例数量', caseTableData.length.toString()],
+      ['用例数量', totalCases.toString()],
+      [], // 空行分隔
+      ['测试结果统计', ''],
+      ['OK', okCount.toString()],
+      ['NG', ngCount.toString()],
+      ['Block', blockCount.toString()],
+      ['NR', nrCount.toString()],
+      ['实施率', `${executionRate}%`],
+      ['进度', `${progressRate}%`],
     ];
 
     // AI 接口测试下载 CSV 格式
@@ -754,7 +776,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     } else {
       // 手工测试和 AI Web 下载 xlsx 格式
       const workbook = XLSX.utils.book_new();
-      
+
       // 构建工作表数据：元数据 + 空行 + 表头 + 数据
       const wsData = [
         ...metadataRows,
@@ -762,17 +784,17 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         headers,
         ...rows
       ];
-      
+
       const worksheet = XLSX.utils.aoa_to_sheet(wsData);
-      
+
       // 设置列宽
-      const colWidths = isManual 
+      const colWidths = isManual
         ? [5, 15, 20, 20, 20, 30, 40, 30, 10, 15, 20]
         : [5, 15, 20, 20, 30, 40, 30, 10, 15, 20];
       worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
-      
+
       XLSX.utils.book_append_sheet(workbook, worksheet, 'TestCases');
-      
+
       // 生成文件名
       let filename;
       if (isManual) {
@@ -782,11 +804,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         // AI Web: {项目名}_{任务名}_Web_{语言}_TestResult_{时间戳}.xlsx
         filename = `${safeProjectName}_${safeTaskName}_Web_${langDisplay}_TestResult_${dateStr}.xlsx`;
       }
-      
+
       // 下载文件
       XLSX.writeFile(workbook, filename);
     }
-    
+
     message.success('下载成功');
   };
 
@@ -802,7 +824,6 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       title: '',
       key: 'expand_action',
       width: 100, // 所有类型都显示执行按钮，需要更宽
-      fixed: 'left',
       render: (_, record) => (
         <Space size="small">
           <Button
@@ -835,10 +856,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         dataIndex: 'no',
         key: 'no',
         width: 60,
-        fixed: 'left',
       },
     ];
-    
+
     // API类型不显示CaseID列
     if (!isAPI) {
       commonStartColumns.push({
@@ -849,108 +869,121 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       });
     }
 
-    // 公共列：TestResult、BugID、Remark
-    const commonEndColumns = [
-      {
-        title: 'TestResult',
-        dataIndex: 'test_result',
-        key: 'test_result',
-        width: 100,
-        fixed: 'right',
-        render: (value, record) => {
-          const getTagColor = (val) => {
-            const colorMap = {
-              'OK': 'success',
-              'NG': 'error',
-              'Block': 'warning',
-              'NR': 'default',
-            };
-            return colorMap[val] || 'default';
-          };
-          
-          return (
-            <Select
-              value={value || 'Block'}
-              size="small"
-              style={{ width: 90 }}
-              onChange={(val) => handleCaseFieldChange(record.case_id, 'test_result', val)}
-            >
-              <Option value="NR"><Tag color="default" style={{ margin: 0 }}>NR</Tag></Option>
-              <Option value="OK"><Tag color="success" style={{ margin: 0 }}>OK</Tag></Option>
-              <Option value="NG"><Tag color="error" style={{ margin: 0 }}>NG</Tag></Option>
-              <Option value="Block"><Tag color="warning" style={{ margin: 0 }}>Block</Tag></Option>
-            </Select>
-          );
-        },
+    // 公共列：TestResult、展开按钮、BugID、Remark
+    // TestResult 列（始终显示）
+    const testResultColumn = {
+      title: 'TestResult',
+      dataIndex: 'test_result',
+      key: 'test_result',
+      width: 100,
+      render: (value, record) => {
+        return (
+          <Select
+            value={value || 'Block'}
+            size="small"
+            style={{ width: 90 }}
+            onChange={(val) => handleCaseFieldChange(record.case_id, 'test_result', val)}
+          >
+            <Option value="NR"><Tag color="default" style={{ margin: 0 }}>NR</Tag></Option>
+            <Option value="OK"><Tag color="success" style={{ margin: 0 }}>OK</Tag></Option>
+            <Option value="NG"><Tag color="error" style={{ margin: 0 }}>NG</Tag></Option>
+            <Option value="Block"><Tag color="warning" style={{ margin: 0 }}>Block</Tag></Option>
+          </Select>
+        );
       },
-      {
-        title: 'BugID',
-        dataIndex: 'bug_id',
-        key: 'bug_id',
-        width: 120,
-        fixed: 'right',
-        render: (value, record) => (
+    };
+
+    // 展开/收起按钮列
+    const expandToggleColumn = {
+      title: (
+        <Tooltip title={showExtraColumns ? t('common.collapse') : t('common.expand')}>
+          <Button
+            type="text"
+            size="small"
+            icon={showExtraColumns ? <LeftOutlined /> : <RightOutlined />}
+            onClick={() => setShowExtraColumns(!showExtraColumns)}
+            style={{ padding: '0 4px' }}
+          />
+        </Tooltip>
+      ),
+      key: 'expand_toggle',
+      width: 40,
+      render: () => null,
+    };
+
+    // BugID 列（可折叠）
+    const bugIdColumn = {
+      title: 'BugID',
+      dataIndex: 'bug_id',
+      key: 'bug_id',
+      width: 120,
+      render: (value, record) => (
+        <Input
+          defaultValue={value || ''}
+          size="small"
+          placeholder="Bug ID"
+          onBlur={(e) => {
+            if (e.target.value !== value) {
+              handleCaseFieldChange(record.case_id, 'bug_id', e.target.value);
+            }
+          }}
+          onPressEnter={(e) => {
+            e.target.blur();
+          }}
+        />
+      ),
+    };
+
+    // Remark 列（可折叠）
+    const remarkColumn = {
+      title: 'Remark',
+      dataIndex: 'remark',
+      key: 'remark',
+      width: isManual ? 200 : 150,
+      render: (value, record) => {
+        // Manual类型使用多行TextArea，其他类型使用单行Input
+        if (isManual) {
+          return (
+            <Input.TextArea
+              defaultValue={value || ''}
+              size="small"
+              placeholder="备注"
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              style={{ resize: 'vertical' }}
+              onBlur={(e) => {
+                if (e.target.value !== value) {
+                  handleCaseFieldChange(record.case_id, 'remark', e.target.value);
+                }
+              }}
+            />
+          );
+        }
+        return (
           <Input
             defaultValue={value || ''}
             size="small"
-            placeholder="Bug ID"
+            placeholder="备注"
             onBlur={(e) => {
               if (e.target.value !== value) {
-                handleCaseFieldChange(record.case_id, 'bug_id', e.target.value);
+                handleCaseFieldChange(record.case_id, 'remark', e.target.value);
               }
             }}
             onPressEnter={(e) => {
               e.target.blur();
             }}
           />
-        ),
+        );
       },
-      {
-        title: 'Remark',
-        dataIndex: 'remark',
-        key: 'remark',
-        width: isManual ? 200 : 150,
-        fixed: 'right',
-        render: (value, record) => {
-          // Manual类型使用多行TextArea，其他类型使用单行Input
-          if (isManual) {
-            return (
-              <Input.TextArea
-                defaultValue={value || ''}
-                size="small"
-                placeholder="备注"
-                autoSize={{ minRows: 2, maxRows: 4 }}
-                style={{ resize: 'vertical' }}
-                onBlur={(e) => {
-                  if (e.target.value !== value) {
-                    handleCaseFieldChange(record.case_id, 'remark', e.target.value);
-                  }
-                }}
-              />
-            );
-          }
-          return (
-            <Input
-              defaultValue={value || ''}
-              size="small"
-              placeholder="备注"
-              onBlur={(e) => {
-                if (e.target.value !== value) {
-                  handleCaseFieldChange(record.case_id, 'remark', e.target.value);
-                }
-              }}
-              onPressEnter={(e) => {
-                e.target.blur();
-              }}
-            />
-          );
-        },
-      },
-    ];
+    };
+
+    // 根据展开状态组合末尾列
+    const commonEndColumns = showExtraColumns
+      ? [testResultColumn, expandToggleColumn, bugIdColumn, remarkColumn]
+      : [testResultColumn, expandToggleColumn];
 
     // 根据执行类型选择中间列
     let middleColumns;
-    
+
     if (isManual) {
       // 手工测试用例的列：大功能/中功能/小功能/前置条件/测试步骤/期望结果
       // 辅助函数：判断是否与上一行相同
@@ -962,7 +995,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         const prevValue = prevRecord[`${field}${langSuffix}`] || prevRecord[`${field}_cn`] || prevRecord[field] || '';
         return currentValue === prevValue && currentValue !== '';
       };
-      
+
       // 判断大功能和中功能都相同
       const isSameMajorAndMiddle = (record) => {
         return isSameAsPrevious(record, 'major_function') && isSameAsPrevious(record, 'middle_function');
@@ -1122,17 +1155,17 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             if (!value || value === '-') {
               return <div className="single-line-cell">-</div>;
             }
-            
+
             const responseTime = Number(value);
             const isSlow = responseTime > 3000; // 超过3秒
-            
+
             return (
-              <Tooltip 
-                title={isSlow ? t('testExecution.responseTime.slowWarning', { time: responseTime }) : `${responseTime} ms`} 
+              <Tooltip
+                title={isSlow ? t('testExecution.responseTime.slowWarning', { time: responseTime }) : `${responseTime} ms`}
                 placement="topLeft"
               >
-                <div 
-                  className="single-line-cell" 
+                <div
+                  className="single-line-cell"
                   style={{
                     color: isSlow ? '#ff4d4f' : '#303133',
                     fontWeight: isSlow ? 600 : 400,
@@ -1261,12 +1294,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
     try {
       console.log('🎯 [TaskMetadataPanel] Starting sequential execution of', totalCases, 'cases');
-      
+
       // 逐条执行每个用例
       for (let i = 0; i < caseTableData.length; i++) {
         const caseData = caseTableData[i];
         console.log(`🎯 [TaskMetadataPanel] Executing case ${i + 1}/${totalCases}:`, caseData.case_num);
-        
+
         // 如果没有脚本代码，跳过
         if (!caseData.script_code) {
           console.log(`🎯 [TaskMetadataPanel] Case ${caseData.case_num} has no script, marking as Block`);
@@ -1289,7 +1322,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           console.log(`🎯 [TaskMetadataPanel] Calling executeSingleCase API for case ${caseData.id}`);
           const result = await executeSingleCase(task.project_id, task.task_uuid, caseData.id);
           console.log(`🎯 [TaskMetadataPanel] Case ${caseData.case_num} result:`, result);
-          
+
           // 统计结果
           if (result.ok_count > 0) {
             okCount++;
@@ -1301,7 +1334,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
           // 立即刷新结果（只刷新当前执行的用例）
           await loadSavedCaseResults(task.task_uuid);
-          
+
         } catch (error) {
           console.error(`🎯 [TaskMetadataPanel] Error executing case ${caseData.case_num}:`, error);
           ngCount++;
@@ -1314,12 +1347,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         // 短暂延迟，让UI有时间更新
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       // 显示执行完成对话框
       console.log('🎯 [TaskMetadataPanel] All cases executed. OK:', okCount, 'NG:', ngCount, 'Block:', blockCount);
-      
+
       const statsText = `${t('common.total')} ${totalCases}${t('common.items')}：OK ${okCount}${t('common.items')}、NG ${ngCount}${t('common.items')}、Block ${blockCount}${t('common.items')}、NR ${(totalCases - okCount - ngCount - blockCount)}${t('common.items')}`;
-      
+
       setCompletionModalConfig({
         type: 'success',
         title: t('testExecution.execute.completeTitle'),
@@ -1340,7 +1373,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   const handleExecuteSingleCase = async (record) => {
     console.log('🎬 [TaskMetadataPanel] handleExecuteSingleCase called');
     console.log('🎬 [TaskMetadataPanel] record:', record);
-    
+
     if (!record.script_code) {
       message.warning(t('testExecution.execute.noScriptCode'));
       return;
@@ -1351,14 +1384,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       console.log('🎬 [TaskMetadataPanel] Calling executeSingleCase API...');
       const result = await executeSingleCase(task.project_id, task.task_uuid, record.id);
       console.log('🎬 [TaskMetadataPanel] API result:', result);
-      
+
       // 重新加载用例结果
       await loadSavedCaseResults(task.task_uuid);
-      
+
       // 显示执行完成对话框
       console.log('🎬 [TaskMetadataPanel] Showing dialog...');
       console.log('🎬 [TaskMetadataPanel] result.ok_count:', result.ok_count);
-      
+
       if (result.ok_count > 0) {
         console.log('🎬 [TaskMetadataPanel] Setting success modal state...');
         setCompletionModalConfig({
@@ -1388,12 +1421,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     console.log('\ud83d\udcbe [TaskMetadataPanel] handleSave called');
     console.log('\ud83d\udcbe [TaskMetadataPanel] Current task:', task);
     console.log('\ud83d\udcbe [TaskMetadataPanel] isEditing:', isEditing);
-    
+
     try {
       console.log('\ud83d\udcbe [TaskMetadataPanel] Validating form fields...');
       const values = await form.validateFields();
       console.log('\u2705 [TaskMetadataPanel] Form validation passed:', values);
-      
+
       // 验证日期范围
       if (values.start_date && values.end_date && dayjs.isDayjs(values.start_date) && dayjs.isDayjs(values.end_date)) {
         if (values.end_date.isBefore(values.start_date)) {
@@ -1408,12 +1441,12 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
       // 转换日期为ISO 8601格式（RFC3339），符合Go后端期望
       const formattedValues = {};
-      
+
       // 只发送被修改的字段（使用表单当前值）
       formattedValues.task_name = values.task_name;
       formattedValues.execution_type = values.execution_type;
       formattedValues.task_status = values.task_status;
-      
+
       // 日期字段：转换为RFC3339格式（Go的time.Time默认格式）
       // 格式：YYYY-MM-DDTHH:mm:ss+08:00 或 YYYY-MM-DDTHH:mm:ssZ
       if (values.start_date) {
@@ -1422,19 +1455,19 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       } else {
         formattedValues.start_date = null;
       }
-      
+
       if (values.end_date) {
         formattedValues.end_date = values.end_date.startOf('day').toISOString();
       } else {
         formattedValues.end_date = null;
       }
-      
+
       if (values.test_date) {
         formattedValues.test_date = values.test_date.startOf('day').toISOString();
       } else {
         formattedValues.test_date = null;
       }
-      
+
       // 其他可选字段：只在有值时发送
       if (values.test_version) {
         formattedValues.test_version = values.test_version;
@@ -1448,18 +1481,18 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       if (values.task_description) {
         formattedValues.task_description = values.task_description;
       }
-      
+
       console.log('\ud83d\udcbe [TaskMetadataPanel] Original values:', values);
       console.log('\ud83d\udcbe [TaskMetadataPanel] Formatted values:', formattedValues);
       console.log('\ud83d\udcbe [TaskMetadataPanel] Calling API with project_id:', task.project_id, 'task_uuid:', task.task_uuid);
 
       const response = await updateExecutionTask(task.project_id, task.task_uuid, formattedValues);
       console.log('\u2705 [TaskMetadataPanel] API response:', response);
-      
+
       message.success(t('testExecution.metadata.saveSuccess'));
       setIsEditing(false);
       console.log('\u2705 [TaskMetadataPanel] Exited editing mode');
-      
+
       if (onSave) {
         console.log('\ud83d\udd04 [TaskMetadataPanel] Calling onSave callback');
         onSave({ ...task, ...formattedValues });
@@ -1471,7 +1504,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       if (error.errorFields) {
         return;
       }
-      
+
       if (error.response?.status === 409) {
         message.error(t('testExecution.metadata.taskNameExists'));
       } else if (error.response?.status === 400) {
@@ -1586,11 +1619,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
                   <span style={{ color: '#ff4d4f' }}>*</span> {t('testExecution.metadata.taskName')}：
                 </span>
                 <Form.Item name="task_name" rules={[{ required: true, message: t('testExecution.metadata.taskNameRequired') }]} style={{ marginBottom: 0 }}>
-                  <Input 
-                    size="small" 
-                    style={{ width: '140px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }} 
-                    maxLength={50} 
-                    disabled={!isEditing} 
+                  <Input
+                    size="small"
+                    style={{ width: '140px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }}
+                    maxLength={50}
+                    disabled={!isEditing}
                   />
                 </Form.Item>
               </div>
@@ -1599,9 +1632,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '60px', textAlign: 'right' }}>{t('testExecution.metadata.taskStatus')}：</span>
                 <Form.Item name="task_status" style={{ marginBottom: 0 }}>
-                  <Select 
-                    size="small" 
-                    style={{ width: '100px', fontSize: '12px' }} 
+                  <Select
+                    size="small"
+                    style={{ width: '100px', fontSize: '12px' }}
                     disabled={!isEditing}
                     className={!isEditing ? 'metadata-select-readonly' : ''}
                   >
@@ -1616,10 +1649,10 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '60px', textAlign: 'right' }}>{t('testExecution.metadata.executionType')}：</span>
                 <Form.Item name="execution_type" style={{ marginBottom: 0 }}>
-                  <Select 
-                    size="small" 
-                    style={{ width: '110px', fontSize: '12px' }} 
-                    disabled 
+                  <Select
+                    size="small"
+                    style={{ width: '110px', fontSize: '12px' }}
+                    disabled
                     className="metadata-select-readonly"
                   >
                     <Option value="manual">Manual Test</Option>
@@ -1633,11 +1666,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '60px', textAlign: 'right' }}>{t('testExecution.metadata.caseGroup')}：</span>
                 <Form.Item style={{ marginBottom: 0 }}>
-                  <Input 
+                  <Input
                     size="small"
                     style={{ width: '100px', fontSize: '12px', backgroundColor: '#f5f5f5' }}
-                    value={selectedCasesData?.filterConditions?.case_group || task?.case_group_name || '-'} 
-                    disabled 
+                    value={selectedCasesData?.filterConditions?.case_group || task?.case_group_name || '-'}
+                    disabled
                   />
                 </Form.Item>
               </div>
@@ -1646,11 +1679,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '60px', textAlign: 'right' }}>{t('testExecution.metadata.executor')}：</span>
                 <Form.Item name="executor" style={{ marginBottom: 0 }}>
-                  <Input 
-                    size="small" 
-                    style={{ width: '100px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }} 
-                    maxLength={50} 
-                    disabled={!isEditing} 
+                  <Input
+                    size="small"
+                    style={{ width: '100px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }}
+                    maxLength={50}
+                    disabled={!isEditing}
                   />
                 </Form.Item>
               </div>
@@ -1659,11 +1692,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '60px', textAlign: 'right' }}>{t('testExecution.metadata.language', '语言')}：</span>
                 <Form.Item style={{ marginBottom: 0 }}>
-                  <Input 
+                  <Input
                     size="small"
                     style={{ width: '100px', fontSize: '12px', backgroundColor: '#f5f5f5' }}
-                    value={getExecutionLanguageDisplay()} 
-                    disabled 
+                    value={getExecutionLanguageDisplay()}
+                    disabled
                   />
                 </Form.Item>
               </div>
@@ -1676,11 +1709,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '70px', textAlign: 'right' }}>{t('testExecution.metadata.testEnv')}：</span>
                 <Form.Item name="test_env" style={{ marginBottom: 0 }}>
-                  <Input 
-                    size="small" 
-                    style={{ width: '140px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }} 
-                    maxLength={100} 
-                    disabled={!isEditing} 
+                  <Input
+                    size="small"
+                    style={{ width: '140px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }}
+                    maxLength={100}
+                    disabled={!isEditing}
                   />
                 </Form.Item>
               </div>
@@ -1689,11 +1722,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '70px', textAlign: 'right' }}>{t('testExecution.metadata.testVersion')}：</span>
                 <Form.Item name="test_version" style={{ marginBottom: 0 }}>
-                  <Input 
-                    size="small" 
-                    style={{ width: '100px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }} 
-                    maxLength={50} 
-                    disabled={!isEditing} 
+                  <Input
+                    size="small"
+                    style={{ width: '100px', fontSize: '12px', backgroundColor: isEditing ? '#fff' : '#f5f5f5' }}
+                    maxLength={50}
+                    disabled={!isEditing}
                   />
                 </Form.Item>
               </div>
@@ -1702,11 +1735,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '70px', textAlign: 'right' }}>{t('testExecution.metadata.startDate')}：</span>
                 <Form.Item name="start_date" style={{ marginBottom: 0 }}>
-                  <DatePicker 
-                    size="small" 
-                    format="YYYY-MM-DD" 
-                    style={{ width: '110px', fontSize: '12px' }} 
-                    disabled={!isEditing} 
+                  <DatePicker
+                    size="small"
+                    format="YYYY-MM-DD"
+                    style={{ width: '110px', fontSize: '12px' }}
+                    disabled={!isEditing}
                     className={!isEditing ? 'metadata-picker-readonly' : ''}
                     placeholder=""
                   />
@@ -1717,11 +1750,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '70px', textAlign: 'right' }}>{t('testExecution.metadata.endDate')}：</span>
                 <Form.Item name="end_date" style={{ marginBottom: 0 }}>
-                  <DatePicker 
-                    size="small" 
-                    format="YYYY-MM-DD" 
-                    style={{ width: '100px', fontSize: '12px' }} 
-                    disabled={!isEditing} 
+                  <DatePicker
+                    size="small"
+                    format="YYYY-MM-DD"
+                    style={{ width: '100px', fontSize: '12px' }}
+                    disabled={!isEditing}
                     className={!isEditing ? 'metadata-picker-readonly' : ''}
                     placeholder=""
                   />
@@ -1732,11 +1765,11 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.65)', whiteSpace: 'nowrap', width: '70px', textAlign: 'right' }}>{t('testExecution.metadata.testDate')}：</span>
                 <Form.Item name="test_date" style={{ marginBottom: 0 }}>
-                  <DatePicker 
-                    size="small" 
-                    format="YYYY-MM-DD" 
-                    style={{ width: '100px', fontSize: '12px' }} 
-                    disabled={!isEditing} 
+                  <DatePicker
+                    size="small"
+                    format="YYYY-MM-DD"
+                    style={{ width: '100px', fontSize: '12px' }}
+                    disabled={!isEditing}
                     className={!isEditing ? 'metadata-picker-readonly' : ''}
                     placeholder=""
                   />
@@ -1766,14 +1799,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             console.log('🟢 [TaskMetadataPanel] onConfirm callback received!');
             console.log('🟢 [TaskMetadataPanel] cases count:', data?.cases?.length);
             console.log('🟢 [TaskMetadataPanel] filterConditions:', data?.filterConditions);
-            
+
             setCaseSelectionVisible(false);
-            
+
             // 设置显示语言为用户选择的语言（AIWeb用例）
             if (data.filterConditions?.language) {
               setDisplayLanguage(data.filterConditions.language);
             }
-            
+
             // 更新任务的用例集信息和显示语言到数据库
             const caseGroupName = data.filterConditions?.case_group || '';
             const caseGroupId = data.filterConditions?.case_group_id || 0;
@@ -1787,7 +1820,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             } else if (task?.execution_type === 'manual') {
               displayLangToSave = 'all';
             }
-            
+
             if (task?.task_uuid) {
               try {
                 console.log('💾 [TaskMetadataPanel] Updating task case_group_name:', caseGroupName, 'case_group_id:', caseGroupId, 'display_language:', displayLangToSave);
@@ -1806,10 +1839,10 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
                 // 不阻止后续流程
               }
             }
-            
+
             // 保存用例到后端（会合并已有的执行结果）
             await saveAllCasesToBackend(data.cases, data.filterConditions);
-            
+
             // 保存后重新加载数据，确保显示最新的执行结果
             await loadSavedCaseResults();
           }}
@@ -1832,14 +1865,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             // 通过率 = OK / (总数 - NR)
             const requiredCount = total - nrCount;
             const passRatePercent = requiredCount > 0 ? Math.round((okCount / requiredCount) * 100) : 0;
-            
+
             return (
               <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 {/* 手工测试显示语言筛选按钮 */}
                 {isManualType() && (
-                  <Radio.Group 
-                    value={displayLanguage} 
-                    onChange={handleLanguageChange} 
+                  <Radio.Group
+                    value={displayLanguage}
+                    onChange={handleLanguageChange}
                     size="small"
                   >
                     <Radio.Button value="cn">CN</Radio.Button>
@@ -1847,7 +1880,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
                     <Radio.Button value="en">EN</Radio.Button>
                   </Radio.Group>
                 )}
-                
+
                 {/* 统计数字 */}
                 <Space size={12}>
                   <span style={{ color: '#52c41a', fontWeight: 'bold' }}>OK: {okCount}</span>
@@ -1855,14 +1888,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
                   <span style={{ color: '#faad14', fontWeight: 'bold' }}>Block: {blockCount}</span>
                   <span style={{ color: '#8c8c8c', fontWeight: 'bold' }}>NR: {nrCount}</span>
                 </Space>
-                
+
                 {/* 实施进度条 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ fontSize: 12, color: '#666' }}>{t('testExecution.statistics.progress')}:</span>
                   <div style={{ width: 100, height: 16, backgroundColor: '#f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ 
-                      width: `${progressPercent}%`, 
-                      height: '100%', 
+                    <div style={{
+                      width: `${progressPercent}%`,
+                      height: '100%',
                       backgroundColor: '#1890ff',
                       borderRadius: 8,
                       transition: 'width 0.3s'
@@ -1870,14 +1903,14 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
                   </div>
                   <span style={{ fontSize: 12, color: '#666', minWidth: 36 }}>{progressPercent}%</span>
                 </div>
-                
+
                 {/* 通过率条 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ fontSize: 12, color: '#666' }}>{t('testExecution.statistics.passRate')}:</span>
                   <div style={{ width: 100, height: 16, backgroundColor: '#f0f0f0', borderRadius: 8, overflow: 'hidden' }}>
-                    <div style={{ 
-                      width: `${passRatePercent}%`, 
-                      height: '100%', 
+                    <div style={{
+                      width: `${passRatePercent}%`,
+                      height: '100%',
                       backgroundColor: passRatePercent >= 80 ? '#52c41a' : passRatePercent >= 50 ? '#faad14' : '#ff4d4f',
                       borderRadius: 8,
                       transition: 'width 0.3s'
@@ -1915,7 +1948,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
           />
         </div>
       )}
-      
+
       {/* 用例详细信息弹窗 */}
       <CaseDetailModal
         visible={caseDetailVisible}
@@ -1926,7 +1959,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
         onSave={handleSaveCaseDetail}
         onCancel={handleCloseCaseDetail}
       />
-      
+
       {/* 执行完成对话框 */}
       <Modal
         open={completionModalVisible}

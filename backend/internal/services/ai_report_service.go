@@ -10,8 +10,8 @@ import (
 
 // AIReportService AI报告服务接口
 type AIReportService interface {
-	ListReports(projectID uint) ([]*models.AIReport, error)
-	CreateReport(projectID uint, name string) (*models.AIReport, error)
+	ListReports(projectID uint, reportType string) ([]*models.AIReport, error)
+	CreateReport(projectID uint, reportType, name string) (*models.AIReport, error)
 	GetReport(reportID string) (*models.AIReport, error)
 	UpdateReport(reportID string, name, content *string) (*models.AIReport, error)
 	DeleteReport(reportID string) error
@@ -27,9 +27,17 @@ func NewAIReportService(repo repositories.AIReportRepository) AIReportService {
 	return &aiReportService{repo: repo}
 }
 
-// ListReports 获取项目报告列表
-func (s *aiReportService) ListReports(projectID uint) ([]*models.AIReport, error) {
-	reports, err := s.repo.FindByProjectID(projectID)
+// ListReports 获取项目报告列表(按类型过滤)
+func (s *aiReportService) ListReports(projectID uint, reportType string) ([]*models.AIReport, error) {
+	var reports []*models.AIReport
+	var err error
+
+	if reportType != "" {
+		reports, err = s.repo.FindByProjectIDAndType(projectID, reportType)
+	} else {
+		reports, err = s.repo.FindByProjectID(projectID)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("获取报告列表失败: %w", err)
 	}
@@ -39,10 +47,19 @@ func (s *aiReportService) ListReports(projectID uint) ([]*models.AIReport, error
 	return reports, nil
 }
 
-// CreateReport 创建报告(包含名称检重)
-func (s *aiReportService) CreateReport(projectID uint, name string) (*models.AIReport, error) {
-	// 检查名称是否重复
-	exists, err := s.repo.ExistsByProjectAndName(projectID, name, "")
+// CreateReport 创建报告(包含名称检重,支持类型)
+func (s *aiReportService) CreateReport(projectID uint, reportType, name string) (*models.AIReport, error) {
+	// 验证类型,默认为O(其他)
+	if reportType == "" {
+		reportType = "O"
+	}
+	validTypes := map[string]bool{"R": true, "A": true, "T": true, "O": true}
+	if !validTypes[reportType] {
+		return nil, fmt.Errorf("无效的报告类型: %s", reportType)
+	}
+
+	// 检查同类型下名称是否重复
+	exists, err := s.repo.ExistsByProjectTypeAndName(projectID, reportType, name, "")
 	if err != nil {
 		return nil, fmt.Errorf("检查报告名称重复失败: %w", err)
 	}
@@ -56,6 +73,7 @@ func (s *aiReportService) CreateReport(projectID uint, name string) (*models.AIR
 	report := &models.AIReport{
 		ID:        reportID,
 		ProjectID: projectID,
+		Type:      reportType,
 		Name:      name,
 		Content:   "", // 初始化为空
 	}

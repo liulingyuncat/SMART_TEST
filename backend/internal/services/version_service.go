@@ -13,12 +13,16 @@ import (
 // VersionService 版本管理服务接口
 type VersionService interface {
 	SaveVersion(projectID, userID uint, caseType string) (filename string, err error)
+	// SaveMultiLangVersion 保存多语言版本(CN/JP/EN/ALL 4个xlsx打包成zip)
+	SaveMultiLangVersion(projectID, userID uint, caseType string) (filename string, err error)
 	GetVersionList(projectID uint, caseType string) ([]*models.CaseVersion, error)
 	GetVersionByID(versionID uint) (*models.CaseVersion, error)
 	DownloadVersion(projectID, versionID uint) (fileBytes []byte, filename string, err error)
 	DeleteVersion(projectID, versionID uint) error
 	CreateVersion(version *models.CaseVersion) error
 	UpdateVersionRemark(projectID, versionID uint, remark string) error
+	// GenerateTemplate 生成手工用例多语言模板(zip)
+	GenerateTemplate() (zipBytes []byte, filename string, err error)
 }
 
 type versionService struct {
@@ -79,6 +83,38 @@ func (s *versionService) SaveVersion(projectID, userID uint, caseType string) (s
 	}
 
 	return filename, nil
+}
+
+// SaveMultiLangVersion 保存多语言版本(CN/JP/EN/ALL 4个xlsx打包成zip)
+func (s *versionService) SaveMultiLangVersion(projectID, userID uint, caseType string) (string, error) {
+	// 1. 参数验证
+	if caseType != "overall" && caseType != "change" && caseType != "acceptance" {
+		return "", fmt.Errorf("unsupported case_type: %s", caseType)
+	}
+
+	// 2. 调用ExcelService生成多语言ZIP包（项目名在内部获取）
+	zipPath, zipFilename, fileSize, err := s.excelSvc.GenerateManualCasesZip(projectID, caseType)
+	if err != nil {
+		return "", fmt.Errorf("generate multi-lang zip failed: %w", err)
+	}
+
+	// 3. 插入版本记录
+	version := &models.CaseVersion{
+		ProjectID: projectID,
+		DocType:   caseType,
+		Filename:  zipFilename,
+		FilePath:  zipPath,
+		FileSize:  fileSize,
+		CreatedBy: &userID,
+	}
+
+	if err := s.versionRepo.Create(version); err != nil {
+		// 删除已创建的文件
+		os.Remove(zipPath)
+		return "", fmt.Errorf("create version record: %w", err)
+	}
+
+	return zipFilename, nil
 }
 
 // GetVersionList 获取版本列表(支持按类型过滤)
@@ -176,4 +212,9 @@ func (s *versionService) UpdateVersionRemark(projectID, versionID uint, remark s
 	// 3. 更新备注
 	version.Remark = remark
 	return s.db.Save(version).Error
+}
+
+// GenerateTemplate 生成手工用例多语言模板(zip)
+func (s *versionService) GenerateTemplate() ([]byte, string, error) {
+	return s.excelSvc.ExportManualCaseTemplate()
 }

@@ -1078,7 +1078,7 @@ func main() {
 // initSystemPrompts 从prompts目录动态加载系统提示词到数据库
 func initSystemPrompts(db *gorm.DB) error {
 	projectID := uint(1)
-	promptsDir := "internal/mcp/prompts"
+	promptsDir := config.GetPromptsDir()
 
 	// 扫描目录中所有 .prompt.md 文件
 	files, err := filepath.Glob(filepath.Join(promptsDir, "*.prompt.md"))

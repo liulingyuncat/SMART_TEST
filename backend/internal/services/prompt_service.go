@@ -81,9 +81,10 @@ func (s *promptService) ListPromptsWithRole(
 	}
 
 	// 分页查询（不加载content字段）
+	// 按名称升序排序，便于用户查找
 	offset := (page - 1) * pageSize
 	if err := query.Offset(offset).Limit(pageSize).
-		Order("created_at DESC").
+		Order("name ASC").
 		Find(&prompts).Error; err != nil {
 		return nil, 0, fmt.Errorf("query prompts: %w", err)
 	}
@@ -137,9 +138,10 @@ func (s *promptService) ListPrompts(
 	}
 
 	// 分页查询（不加载content字段）
+	// 按名称升序排序，便于用户查找
 	offset := (page - 1) * pageSize
 	if err := query.Offset(offset).Limit(pageSize).
-		Order("created_at DESC").
+		Order("name ASC").
 		Find(&prompts).Error; err != nil {
 		return nil, 0, fmt.Errorf("query prompts: %w", err)
 	}

@@ -131,46 +131,82 @@ arguments:
 
 **批量处理要求：**
 
-当用例数量超过10条时，必须以**每10条为一个批次**进行翻译和更新处理：
+必须以**每5条为一个批次**进行翻译和更新处理（用例总数≤5条时可一次处理）：
 
-1. **分批翻译：** 每次仅处理10条用例的翻译工作
-2. **分批更新：** 完成当前批次翻译后立即调用更新接口保存
-3. **进度反馈：** 每完成一个批次，向用户报告进度（如"已完成第1批，用例ID 1-10，共X批"）
-4. **自动继续：** 无需用户手动输入"继续"，自动处理下一批次直至全部完成
-5. **错误处理：** 如某批次更新失败，记录失败批次后继续处理后续批次
+1. **分批翻译：** 每次仅处理5条用例的翻译工作（精准控制，保证翻译质量）
+2. **独立构建：** 为每条用例独立分析缺失字段，构建包含id和所有需更新字段的完整数据对象
+3. **分批更新：** 完成当前批次5条用例的翻译后，立即调用 `update_manual_cases` 的 **cases数组模式** 保存
+4. **进度反馈：** 每完成一个批次，向用户报告进度（如"✅ 第1批完成：用例ID 244-248，成功5条"）
+5. **自动继续：** 无需用户手动输入"继续"，自动处理下一批次直至全部完成
+6. **错误隔离：** 某条用例更新失败不影响同批次其他用例（continue_on_error=true），在最终报告中列出失败用例供重试
+
+**禁止事项：**
+
+- ❌ 不要使用 filter 模式进行翻译更新（filter只适合统一修改，无法个性化翻译每条用例）
+- ❌ 不要一次性处理超过10条用例（避免token超限和翻译质量下降）
+- ❌ 不要省略用例的任何需翻译字段（必须完整包含所有6个字段组的缺失语言）
 
 ### 第五步：批量更新用例 (Update Manual Cases)
 
-调用 `update_manual_cases` 工具，批量更新翻译后的用例。
+调用 `update_manual_cases` 工具的 **cases数组模式**，批量更新翻译后的用例。
 
-参数说明：
+**关键参数说明：**
 
-- `project_id`: 项目ID
-- `group_id`: 用例集ID（推荐提供，以确保更新正确性）
-- `cases`: 用例数据数组，每个元素包含：
-  - `id`: 用例ID（必填，整数型）
-  - 需要更新的多语言字段（仅包含有变更的字段）
+- `project_id`: 项目ID（必填）
+- `group_id`: 用例集ID（强烈推荐，确保更新正确性）
+- `cases`: 用例数据数组（必填），每个元素必须包含：
+  - `id`: 用例ID（必填，整数型，如244）
+  - 所有需要翻译的多语言字段（完整包含6个字段组的所有缺失语言）
+- `continue_on_error`: true（推荐，某条失败不影响其他）
 
-**示例：**
+**完整翻译示例（每批5条）：**
 
 ```json
 {
   "project_id": 1,
-  "group_id": 10,
+  "group_id": 50,
+  "continue_on_error": true,
   "cases": [
     {
-      "id": 101,
-      "major_function_cn": "用户管理",
-      "major_function_en": "User Management"
+      "id": 244,
+      "major_function_jp": "ECログ データ構造とフォーマット",
+      "major_function_en": "EC Log Data Structure and Format",
+      "middle_function_jp": "ECログ 構成 - 異常系要件",
+      "middle_function_en": "EC Log Composition - Exception Requirement",
+      "minor_function_jp": "Parameter2が特殊値の場合の処理を検証",
+      "minor_function_en": "Verify handling when Parameter2 is a special value",
+      "precondition_jp": "ログのParameter2=0xFFFFFFFE",
+      "precondition_en": "Log Parameter2=0xFFFFFFFE",
+      "test_steps_jp": "1. このログ値をダウンロード\n2. 不明とマークされているか確認\n3. 正常に処理されるかを検証",
+      "test_steps_en": "1. Download logs with this value\n2. Verify if marked as unknown\n3. Validate normal processing",
+      "expected_result_jp": "Parameter2が[Unknown](0xFFFFFFFE)の時、正常に無効とマークされ、データ欠落を引き起こさない",
+      "expected_result_en": "When Parameter2 is [Unknown](0xFFFFFFFE), it is correctly marked as invalid without causing data loss"
     },
     {
-      "id": 102,
-      "precondition_cn": "用户已登录系统",
-      "precondition_en": "User has logged into the system"
+      "id": 245,
+      "major_function_jp": "ECログ データ構造とフォーマット",
+      "major_function_en": "EC Log Data Structure and Format",
+      "minor_function_jp": "ヘッダーデータ検出時の処理を検証",
+      "minor_function_en": "Verify handling when Header data is corrupted",
+      "precondition_jp": "ヘッダーデータを変更",
+      "precondition_en": "Modify Header data",
+      "test_steps_jp": "1. ヘッダー部分を検出\n2. エラーが報告されるかを確認\n3. アプリケーションが正常に動作することを検証",
+      "test_steps_en": "1. Detect Header section\n2. Verify if error is reported\n3. Validate application continues to operate normally",
+      "expected_result_jp": "ヘッダーデータ検出時、システムが正常に検出して報告でき、クラッシュしない",
+      "expected_result_en": "When Header data is corrupted, the system can correctly detect and report without crashing"
     }
+    // ... 继续包含id=246, 247, 248的用例（第1批共5条）
   ]
 }
 ```
+
+**重要提示：**
+
+- ✅ 每个用例对象必须包含 `id` 字段和所有需要翻译的多语言字段
+- ✅ 字段名必须精确匹配（如 `major_function_jp`，不是 `majorFunctionJp`）
+- ✅ 只包含需要更新的字段，已有内容的字段不包含（最小改动原则）
+- ✅ 每批次建议5条用例，最多不超过10条
+- ❌ 不要使用 filter 模式进行翻译（filter无法个性化翻译每条用例）
 
 ### 第六步：输出执行报告 (Output Execution Report)
 
@@ -212,6 +248,37 @@ arguments:
 已成功更新 [n] 条用例。
 ```
 
+### 6.5 批次部分失败的重试策略
+
+当某个批次中有用例更新失败时：
+
+1. **记录失败用例：** 在结果中标记失败的用例ID和原因
+2. **继续处理：** 不中断后续批次的处理（continue_on_error=true）
+3. **最终重试：** 所有批次完成后，将失败的用例单独构建为一个cases数组重新尝试
+4. **报告详情：** 在最终报告中明确列出：
+   - 成功翻译的用例数
+   - 失败的用例ID列表
+   - 每个失败用例的具体错误原因
+
+**重试示例：**
+
+```json
+// 第1轮失败：用例245在第1批中更新失败
+// 所有批次完成后，单独重试用例245：
+{
+  "project_id": 1,
+  "group_id": 50,
+  "cases": [
+    {
+      "id": 245,
+      "major_function_jp": "...",
+      "major_function_en": "..."
+      // ... 完整的多语言字段
+    }
+  ]
+}
+```
+
 ## 7. 使用示例 (Usage Examples)
 
 ### 示例对话 1：完整流程
@@ -223,10 +290,17 @@ arguments:
 1. 调用 `get_current_project_name` → 获取 project_id: 5
 2. 调用 `list_manual_groups` → 显示用例集列表
 3. 匹配 "登录功能测试" → group_id: 12
-4. 调用 `list_manual_cases(project_id=5, group_id=12, return_all_fields=true)`
-5. 分析并翻译缺失字段
-6. 调用 `update_manual_cases` 批量更新
-7. 输出执行报告
+4. 调用 `list_manual_cases(project_id=5, group_id=12, return_all_fields=true)` → 获取13条用例
+5. **第1批（用例1-5）：**
+   - 逐条分析CN/JP/EN字段缺失情况
+   - 逐条翻译缺失字段
+   - 构建cases数组包含5条完整数据
+   - 调用 `update_manual_cases(cases模式)` → 成功5条
+6. **第2批（用例6-10）：**
+   - 重复步骤5 → 成功5条
+7. **第3批（用例11-13）：**
+   - 处理剩余3条 → 成功3条
+8. 输出完整执行报告（总计13条，成功13条，失败0条）
 
 ### 示例对话 2：翻译细节
 

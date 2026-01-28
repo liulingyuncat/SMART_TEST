@@ -1,17 +1,20 @@
 import client from './client';
 
 /**
- * AI质量报告API模块 (T47)
- * 支持项目级报告管理
+ * AI报告API模块 (T47)
+ * 支持项目级报告管理,包含4种类型:
+ * R=用例审阅, A=品质分析, T=测试结果, O=其他
  */
 
 /**
- * 获取项目所有AI报告列表
+ * 获取项目AI报告列表
  * @param {number} projectId - 项目ID
+ * @param {string} reportType - 可选,报告类型(R/A/T/O)
  * @returns {Promise<Array>} AI报告数组
  */
-export const fetchAIReports = async (projectId) => {
-  const response = await client.get(`/projects/${projectId}/ai-reports`);
+export const fetchAIReports = async (projectId, reportType = '') => {
+  const params = reportType ? `?type=${reportType}` : '';
+  const response = await client.get(`/projects/${projectId}/ai-reports${params}`);
   return response.items || response || [];
 };
 
@@ -19,10 +22,11 @@ export const fetchAIReports = async (projectId) => {
  * 创建新AI报告
  * @param {number} projectId - 项目ID
  * @param {string} name - 报告名称
+ * @param {string} reportType - 报告类型(R/A/T/O),默认O
  * @returns {Promise<Object>} 创建的AI报告
  */
-export const createAIReport = async (projectId, name) => {
-  const response = await client.post(`/projects/${projectId}/ai-reports`, { name });
+export const createAIReport = async (projectId, name, reportType = 'O') => {
+  const response = await client.post(`/projects/${projectId}/ai-reports`, { name, type: reportType });
   return response;
 };
 
@@ -59,3 +63,4 @@ export const deleteAIReport = async (projectId, reportId) => {
   const response = await client.delete(`/projects/${projectId}/ai-reports/${reportId}`);
   return response;
 };
+

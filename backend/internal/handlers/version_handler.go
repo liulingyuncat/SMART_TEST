@@ -498,11 +498,14 @@ func (h *VersionHandler) UpdateVersionRemarkGeneric(c *gin.Context) {
 // @Tags Version
 // @Success 200 {file} application/zip "模版zip文件"
 // @Router /api/v1/manual-cases/template [get]
+// ExportTemplate 导出手工测试用例模版（CN/JP/EN空白xlsx打包成zip）
+// @Summary 导出手工测试用例模版
+// @Tags Version
+// @Success 200 {file} application/zip "模版zip文件"
+// @Router /api/v1/manual-cases/template [get]
 func (h *VersionHandler) ExportTemplate(c *gin.Context) {
-	// TODO: GenerateTemplate方法未实现
 	// 调用服务层生成模版
-	// zipBytes, filename, err := h.versionService.GenerateTemplate()
-	err := fmt.Errorf("GenerateTemplate not implemented")
+	zipBytes, filename, err := h.versionService.GenerateTemplate()
 	if err != nil {
 		log.Printf("[ExportTemplate] Failed to generate template: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate template", "details": err.Error()})
@@ -510,7 +513,7 @@ func (h *VersionHandler) ExportTemplate(c *gin.Context) {
 	}
 
 	// 设置响应头并返回zip文件
-	// c.Header("Content-Type", "application/zip")
-	// c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	// c.Data(http.StatusOK, "application/zip", zipBytes)
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Data(http.StatusOK, "application/zip", zipBytes)
 }

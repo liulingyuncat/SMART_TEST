@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"webtest/config"
 	"webtest/internal/constants"
 	"webtest/internal/models"
 	"webtest/internal/services"
@@ -437,7 +438,7 @@ func (h *promptHandler) RefreshPrompts(c *gin.Context) {
 
 	// 刷新系统提示词：动态扫描prompts目录并更新数据库
 	if req.Scope == "system" || req.Scope == "" || req.Scope == "all" {
-		promptsDir := "internal/mcp/prompts"
+		promptsDir := config.GetPromptsDir()
 		if err := h.promptService.RefreshSystemPromptsFromDirectory(promptsDir); err != nil {
 			log.Printf("[Prompt Refresh Failed] error=%v", err)
 			utils.ResponseError(c, 500, "刷新系统提示词失败")

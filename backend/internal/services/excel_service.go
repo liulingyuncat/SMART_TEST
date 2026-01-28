@@ -26,6 +26,13 @@ type ExcelService interface {
 	// T45: Web用例多语言导出
 	ExportWebCasesByLanguage(projectName string, caseGroups []models.CaseGroup, cases []models.AutoTestCase, language string) ([]byte, string, error)
 	GenerateWebCasesZip(projectID uint, projectName string, cases []models.AutoTestCase) (zipPath string, fileSize int64, err error)
+	// 手工用例多语言ZIP导出 (CN/JP/EN/全字段4个xlsx文件打包成zip)
+	// 手工用例多语言ZIP导出 (CN/JP/EN/全字段4个xlsx文件打包成zip)
+	GenerateManualCasesZip(projectID uint, caseType string) (zipPath string, filename string, fileSize int64, err error)
+	// 获取项目名称
+	GetProjectName(projectID uint) (string, error)
+	// 导出手工用例多语言模版 (CN/JP/EN三个空xlsx文件打包成zip)
+	ExportManualCaseTemplate() ([]byte, string, error)
 }
 
 type excelService struct {
@@ -180,8 +187,7 @@ func (s *excelService) ExportTemplate(projectID uint, caseType string) ([]byte, 
 // language: CN/JP/EN (为空则导出全部语言)
 // caseGroup: 用例集名称 (为空则导出全部)
 func (s *excelService) ExportCases(projectID uint, caseType string, taskUUID string, language string, caseGroup string) ([]byte, string, error) {
-	// 1. 查询元数据和用例数据
-	metadata, _ := s.caseRepo.GetMetadataByProjectID(projectID, caseType)
+	// 1. 查询用例数据
 	cases, err := s.caseRepo.GetByProjectAndTypeOrdered(projectID, caseType)
 	if err != nil {
 		return nil, "", fmt.Errorf("get cases: %w", err)
@@ -214,28 +220,13 @@ func (s *excelService) ExportCases(projectID uint, caseType string, taskUUID str
 	// 3. 创建Excel文件
 	f := excelize.NewFile()
 
-	// Sheet1: 元数据
-	metaSheet := "元数据"
-	f.SetSheetName("Sheet1", metaSheet)
-	if metadata != nil {
-		f.SetCellValue(metaSheet, "A1", "Test Version")
-		f.SetCellValue(metaSheet, "B1", metadata.TestVersion)
-		f.SetCellValue(metaSheet, "A2", "Test Environment")
-		f.SetCellValue(metaSheet, "B2", metadata.TestEnv)
-		f.SetCellValue(metaSheet, "A3", "Test Date")
-		f.SetCellValue(metaSheet, "B3", metadata.TestDate)
-		f.SetCellValue(metaSheet, "A4", "Tester")
-		f.SetCellValue(metaSheet, "B4", metadata.Executor)
-	}
-
-	// 4. Sheet2: 用例数据
-	// T44: 如果指定caseGroup,Sheet名使用用例集名称
+	// T44: 直接使用Sheet1作为用例数据Sheet，不创建元数据Sheet
+	// 如果指定caseGroup,Sheet名使用用例集名称，否则使用"用例数据"
 	dataSheet := "用例数据"
 	if caseGroup != "" {
 		dataSheet = caseGroup
 	}
-	index, _ := f.NewSheet(dataSheet)
-	f.SetActiveSheet(index)
+	f.SetSheetName("Sheet1", dataSheet)
 
 	// T44: 根据language参数动态生成列头（与前端表头保持一致）
 	var headers []string
@@ -363,14 +354,14 @@ func (s *excelService) ExportCases(projectID uint, caseType string, taskUUID str
 		projectName = project.Name
 	}
 
-	// T44: 文件名格式调整为: 项目名_Manual_用例集名_语言_时间戳.xlsx
+	// 文件名格式统一为: 项目名_Manual_用例集名_TestCase_时间戳.xlsx
 	typeMap := map[string]string{"overall": "Overall", "change": "Change", "acceptance": "Acceptance"}
 	var filename string
 	if language != "" && caseGroup != "" {
-		// 按语言导出时使用新格式
-		filename = fmt.Sprintf("%s_Manual_%s_%s_%s.xlsx", projectName, caseGroup, language, time.Now().Format("20060102_150405"))
+		// 单语言导出：项目名_Manual_用例集名_TestCase_时间戳.xlsx
+		filename = fmt.Sprintf("%s_Manual_%s_TestCase_%s.xlsx", projectName, caseGroup, time.Now().Format("20060102_150405"))
 	} else {
-		// 兼容旧格式
+		// 全语言导出（兼容旧格式）
 		filename = fmt.Sprintf("%s_%s_Cases_%s.xlsx", projectName, typeMap[caseType], time.Now().Format("2006-01-02_150405"))
 	}
 
@@ -416,10 +407,37 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 	// 优先尝试 "用例数据"
 	if containsString(sheetList, "用例数据") {
 		sheetName = "用例数据"
+		fmt.Printf("✅ [ImportCases] 找到'用例数据'工作表\n")
 	} else if len(sheetList) > 0 {
-		// 使用第一个Sheet
-		sheetName = sheetList[0]
-		fmt.Printf("⚠️ [ImportCases] 未找到'用例数据'工作表，使用第一个Sheet: %s\n", sheetName)
+		// T44: 智能选择Sheet - 优先选择列数>=7的Sheet（排除元数据Sheet）
+		fmt.Printf("⚠️ [ImportCases] 未找到'用例数据'工作表，开始智能选择...\n")
+		var candidateSheet string
+		var maxColumns int = 0
+
+		for _, sheet := range sheetList {
+			rows, err := f.GetRows(sheet)
+			if err != nil || len(rows) < 1 {
+				continue
+			}
+			headerRow := rows[0]
+			colCount := len(headerRow)
+			fmt.Printf("  Sheet '%s': %d列\n", sheet, colCount)
+
+			// 优先选择列数>=7的Sheet（用例数据至少7列）
+			if colCount >= 7 && colCount > maxColumns {
+				candidateSheet = sheet
+				maxColumns = colCount
+			}
+		}
+
+		if candidateSheet != "" {
+			sheetName = candidateSheet
+			fmt.Printf("✅ [ImportCases] 智能选择Sheet: %s（%d列）\n", sheetName, maxColumns)
+		} else {
+			// 没有找到>=7列的Sheet，使用第一个
+			sheetName = sheetList[0]
+			fmt.Printf("⚠️ [ImportCases] 未找到合适的Sheet，使用第一个: %s\n", sheetName)
+		}
 	} else {
 		return 0, 0, fmt.Errorf("Excel文件中没有可用的工作表")
 	}
@@ -437,17 +455,33 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 	// 检测Excel格式和语言：根据表头判断
 	headerRow := rows[0]
 	is9ColumnFormat := false
+	hasUUIDColumn := false
 	detectedLanguage := language // 默认使用传入的language参数
 
-	if len(headerRow) >= 8 {
-		// 检查是否是9列格式
+	if len(headerRow) >= 7 {
+		// 检查是否是单语言格式
 		if len(headerRow) < 12 { // 少于12列，肯定不是23列格式
 			is9ColumnFormat = true
-			fmt.Printf("📝 [ImportCases] 检测到9列单语言格式\n")
 
-			// 自动检测语言：根据表头第3列的语言后缀
-			if len(headerRow) > 2 {
-				header := headerRow[2] // Maj.CategoryXX
+			// 判断是否有UUID列：检查第一列是否为UUID
+			if headerRow[0] == "UUID" {
+				hasUUIDColumn = true
+				fmt.Printf("📝 [ImportCases] 检测到8列单语言格式（带UUID - 支持更新）\n")
+			} else {
+				hasUUIDColumn = false
+				fmt.Printf("📝 [ImportCases] 检测到7列单语言格式（不带UUID - 仅新增）\n")
+			}
+
+			// 自动检测语言：根据表头第3列（或第2列，取决于是否有UUID）的语言后缀
+			checkColIndex := 2
+			if hasUUIDColumn {
+				checkColIndex = 2 // UUID, CaseID, Maj.CategoryXX
+			} else {
+				checkColIndex = 1 // CaseID, Maj.CategoryXX
+			}
+
+			if len(headerRow) > checkColIndex {
+				header := headerRow[checkColIndex]
 				if strings.HasSuffix(header, "CN") {
 					detectedLanguage = "CN"
 				} else if strings.HasSuffix(header, "JP") {
@@ -463,7 +497,7 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 		}
 	}
 	fmt.Printf("📋 [ImportCases] 表头: %v\n", headerRow)
-	fmt.Printf("🔍 [ImportCases] 格式判断: is9ColumnFormat=%v, 列数=%d, 最终语言=%s\n", is9ColumnFormat, len(headerRow), language)
+	fmt.Printf("🔍 [ImportCases] 格式判断: is9ColumnFormat=%v, hasUUIDColumn=%v, 列数=%d, 最终语言=%s\n", is9ColumnFormat, hasUUIDColumn, len(headerRow), language)
 
 	updateCount := 0
 	insertCount := 0
@@ -475,7 +509,8 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 	}
 
 	// 3. 遍历数据行(跳过标题行)
-	for _, row := range rows[1:] {
+	for rowIdx, row := range rows[1:] {
+		rowNum := rowIdx + 2 // 实际行号（1为标题行，数据从第2行开始）
 		// 安全读取列数据的辅助函数
 		getCol := func(index int) string {
 			if index < len(row) {
@@ -496,31 +531,63 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 
 		// 根据检测到的格式读取数据
 		if is9ColumnFormat && language != "" {
-			// 9列单语言格式: No., CaseID, Maj.Category, Mid.Category, Min.Category, Precondition, TestStep, Expect, UUID
-			caseNumber = getCol(1)
-			uuidStr = getCol(8)
-			switch language {
-			case "CN":
-				majorFunctionCN = getCol(2)
-				middleFunctionCN = getCol(3)
-				minorFunctionCN = getCol(4)
-				preconditionCN = getCol(5)
-				testStepsCN = getCol(6)
-				expectedResultCN = getCol(7)
-			case "JP":
-				majorFunctionJP = getCol(2)
-				middleFunctionJP = getCol(3)
-				minorFunctionJP = getCol(4)
-				preconditionJP = getCol(5)
-				testStepsJP = getCol(6)
-				expectedResultJP = getCol(7)
-			case "EN":
-				majorFunctionEN = getCol(2)
-				middleFunctionEN = getCol(3)
-				minorFunctionEN = getCol(4)
-				preconditionEN = getCol(5)
-				testStepsEN = getCol(6)
-				expectedResultEN = getCol(7)
+			// 单语言格式，根据是否有UUID列判断列偏移
+			if hasUUIDColumn {
+				// 8列格式（带UUID）: UUID, CaseID, Maj.Category, Mid.Category, Min.Category, Precondition, TestStep, Expect
+				// 列索引: 0=UUID, 1=CaseID, 2=Maj, 3=Mid, 4=Min, 5=Precond, 6=TestStep, 7=Expect
+				uuidStr = getCol(0)
+				caseNumber = getCol(1)
+				switch language {
+				case "CN":
+					majorFunctionCN = getCol(2)
+					middleFunctionCN = getCol(3)
+					minorFunctionCN = getCol(4)
+					preconditionCN = getCol(5)
+					testStepsCN = getCol(6)
+					expectedResultCN = getCol(7)
+				case "JP":
+					majorFunctionJP = getCol(2)
+					middleFunctionJP = getCol(3)
+					minorFunctionJP = getCol(4)
+					preconditionJP = getCol(5)
+					testStepsJP = getCol(6)
+					expectedResultJP = getCol(7)
+				case "EN":
+					majorFunctionEN = getCol(2)
+					middleFunctionEN = getCol(3)
+					minorFunctionEN = getCol(4)
+					preconditionEN = getCol(5)
+					testStepsEN = getCol(6)
+					expectedResultEN = getCol(7)
+				}
+			} else {
+				// 7列格式（不带UUID）: CaseID, Maj.Category, Mid.Category, Min.Category, Precondition, TestStep, Expect
+				// 列索引: 0=CaseID, 1=Maj, 2=Mid, 3=Min, 4=Precond, 5=TestStep, 6=Expect
+				caseNumber = getCol(0)
+				uuidStr = "" // 空模板导入时自动生成UUID
+				switch language {
+				case "CN":
+					majorFunctionCN = getCol(1)
+					middleFunctionCN = getCol(2)
+					minorFunctionCN = getCol(3)
+					preconditionCN = getCol(4)
+					testStepsCN = getCol(5)
+					expectedResultCN = getCol(6)
+				case "JP":
+					majorFunctionJP = getCol(1)
+					middleFunctionJP = getCol(2)
+					minorFunctionJP = getCol(3)
+					preconditionJP = getCol(4)
+					testStepsJP = getCol(5)
+					expectedResultJP = getCol(6)
+				case "EN":
+					majorFunctionEN = getCol(1)
+					middleFunctionEN = getCol(2)
+					minorFunctionEN = getCol(3)
+					preconditionEN = getCol(4)
+					testStepsEN = getCol(5)
+					expectedResultEN = getCol(6)
+				}
 			}
 		} else {
 			// 23列格式(原格式)
@@ -558,9 +625,24 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 			expectedResultCN != "" || expectedResultJP != "" || expectedResultEN != "" ||
 			testResult != "" || remark != ""
 
+		// T44: 调试日志 - 打印每一行的原始数据和hasData判断结果
+		fmt.Printf("\n📋 [ImportCases] Row %d 原始数据:\n", rowNum)
+		fmt.Printf("  UUID列: %q\n", uuidStr)
+		fmt.Printf("  CaseNumber: %q\n", caseNumber)
+		fmt.Printf("  MajorCN: %q, MajorJP: %q, MajorEN: %q\n", majorFunctionCN, majorFunctionJP, majorFunctionEN)
+		fmt.Printf("  MiddleCN: %q, MiddleJP: %q, MiddleEN: %q\n", middleFunctionCN, middleFunctionJP, middleFunctionEN)
+		fmt.Printf("  MinorCN: %q, MinorJP: %q, MinorEN: %q\n", minorFunctionCN, minorFunctionJP, minorFunctionEN)
+		fmt.Printf("  PrecondCN: %q, PrecondJP: %q, PrecondEN: %q\n", preconditionCN, preconditionJP, preconditionEN)
+		fmt.Printf("  TestStepsCN: %q, TestStepsJP: %q, TestStepsEN: %q\n", testStepsCN, testStepsJP, testStepsEN)
+		fmt.Printf("  ExpectCN: %q, ExpectJP: %q, ExpectEN: %q\n", expectedResultCN, expectedResultJP, expectedResultEN)
+		fmt.Printf("  TestResult: %q, Remark: %q\n", testResult, remark)
+		fmt.Printf("  hasData判断结果: %v\n", hasData)
+
 		if !hasData {
+			fmt.Printf("⏭️ [ImportCases] Row %d 因hasData=false被跳过\n", rowNum)
 			continue
 		}
+		fmt.Printf("✅ [ImportCases] Row %d 通过hasData检查，开始处理\n", rowNum)
 
 		// 解析数据
 		fmt.Printf("\n📝 [ImportCases] 创建用例对象:\n")
@@ -608,11 +690,15 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 		// UUID匹配逻辑
 		if uuidStr != "" && uuidStr != " " {
 			// 非空UUID: 尝试查找
-			existing, _ := s.caseRepo.GetByCaseID(uuidStr)
+			fmt.Printf("\n🔍 [ImportCases] 尝试通过UUID查找已有用例: %q\n", uuidStr)
+			existing, err := s.caseRepo.GetByCaseID(uuidStr)
+			if err != nil {
+				fmt.Printf("⚠️ [ImportCases] 查找UUID时发生错误: %v\n", err)
+			}
 			if existing != nil {
 				// UUID存在于数据库: 覆盖更新(保留created_at和ID)
 				// T44: 根据language参数仅更新对应语言字段
-				fmt.Printf("\n🔄 [ImportCases] 准备更新已有用例 (UUID: %s):\n", uuidStr)
+				fmt.Printf("\n🔄 [ImportCases] 找到已有用例，准备更新 (UUID: %s, DB-ID: %d):\n", uuidStr, existing.ID)
 				fmt.Printf("  旧CaseGroup: %q\n", existing.CaseGroup)
 				fmt.Printf("  新CaseGroup: %q\n", testCase.CaseGroup)
 
@@ -669,17 +755,24 @@ func (s *excelService) ImportCases(projectID uint, caseType string, fileData []b
 				}
 
 				if err := s.caseRepo.UpdateByCaseID(uuidStr, updates); err != nil {
+					fmt.Printf("❌ [ImportCases] 更新失败: %v\n", err)
 					return 0, 0, fmt.Errorf("update case: %w", err)
 				}
+				fmt.Printf("✅ [ImportCases] 更新成功\n")
 				updateCount++
 			} else {
 				// UUID不存在于数据库: 视为新用例，生成新UUID插入
+				fmt.Printf("\n❓ [ImportCases] UUID在数据库中不存在，将作为新用例插入: %q\n", uuidStr)
 				currentMaxID++
 				testCase.ID = currentMaxID
 				testCase.CaseID = uuid.New().String() // 生成新UUID
+				fmt.Printf("  生成新ID: %d\n", testCase.ID)
+				fmt.Printf("  生成新UUID: %s\n", testCase.CaseID)
 				if err := s.caseRepo.Create(testCase); err != nil {
+					fmt.Printf("❌ [ImportCases] 插入失败: %v\n", err)
 					return 0, 0, fmt.Errorf("create case: %w", err)
 				}
+				fmt.Printf("✅ [ImportCases] 插入成功\n")
 				insertCount++
 			}
 		} else {
@@ -1161,4 +1254,342 @@ func (s *excelService) getFileSize(filePath string) (int64, error) {
 		return 0, fmt.Errorf("stat file: %w", err)
 	}
 	return fileInfo.Size(), nil
+}
+
+// GenerateManualCasesZip 生成手工用例多语言ZIP包
+// 包含4个xlsx文件: CN.xlsx, JP.xlsx, EN.xlsx, ALL.xlsx
+// 每个用例集作为一个sheet页，用例集名称为sheet名
+// 9列格式: No./CaseID/Maj.Category/Mid.Category/Min.Category/Precondition/Test Step/Expect/UUID
+func (s *excelService) GenerateManualCasesZip(projectID uint, caseType string) (string, string, int64, error) {
+	// 1. 获取项目名称
+	projectName, err := s.GetProjectName(projectID)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("get project name: %w", err)
+	}
+
+	// 2. 查询所有用例
+	cases, err := s.caseRepo.GetByProjectAndTypeOrdered(projectID, caseType)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("get cases: %w", err)
+	}
+
+	// 2. 按用例集分组 - 只包含有用例集的用例（过滤掉未分组的用例）
+	casesByGroup := make(map[string][]*models.ManualTestCase)
+	groupOrder := make([]string, 0) // 保持用例集顺序
+	for _, c := range cases {
+		groupName := c.CaseGroup
+		// 过滤掉没有用例集的用例
+		if groupName == "" {
+			continue
+		}
+		if _, exists := casesByGroup[groupName]; !exists {
+			groupOrder = append(groupOrder, groupName)
+		}
+		casesByGroup[groupName] = append(casesByGroup[groupName], c)
+	}
+
+	// 3. 创建临时目录
+	tmpDir := fmt.Sprintf("storage/tmp/manual-cases-%d-%d", projectID, time.Now().Unix())
+	if err := s.createDir(tmpDir); err != nil {
+		return "", "", 0, fmt.Errorf("create tmp dir: %w", err)
+	}
+	defer s.removeDir(tmpDir)
+
+	// 4. 生成4个xlsx文件
+	timestamp := time.Now().Format("20060102_150405")
+	languages := []string{"All", "CN", "EN", "JP"}
+	excelFiles := make(map[string]string)
+
+	for _, lang := range languages {
+		xlsxBytes, xlsxFilename, err := s.exportManualCasesByLanguage(projectName, lang, timestamp, groupOrder, casesByGroup)
+		if err != nil {
+			return "", "", 0, fmt.Errorf("generate %s excel: %w", lang, err)
+		}
+
+		filePath := fmt.Sprintf("%s/%s", tmpDir, xlsxFilename)
+		if err := s.writeFile(filePath, xlsxBytes); err != nil {
+			return "", "", 0, fmt.Errorf("write %s file: %w", lang, err)
+		}
+		excelFiles[lang] = filePath
+	}
+
+	// 5. 打包为zip
+	// ZIP命名格式: 项目名_Manual_TestCase_时间戳.zip
+	zipFilename := fmt.Sprintf("%s_Manual_TestCase_%s.zip", projectName, timestamp)
+	zipDir := fmt.Sprintf("storage/versions/%d", projectID)
+	if err := s.createDir(zipDir); err != nil {
+		return "", "", 0, fmt.Errorf("create zip dir: %w", err)
+	}
+
+	zipPath := fmt.Sprintf("%s/%s", zipDir, zipFilename)
+	if err := s.createZipArchive(zipPath, excelFiles); err != nil {
+		return "", "", 0, fmt.Errorf("create zip archive: %w", err)
+	}
+
+	// 6. 获取文件大小
+	fileSize, err := s.getFileSize(zipPath)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("get file size: %w", err)
+	}
+
+	return zipPath, zipFilename, fileSize, nil
+}
+
+// exportManualCasesByLanguage 按语言导出手工用例到xlsx
+// 文件名格式: 项目名_Manual_语言_TestCase_时间戳.xlsx
+func (s *excelService) exportManualCasesByLanguage(projectName string, language string, timestamp string, groupOrder []string, casesByGroup map[string][]*models.ManualTestCase) ([]byte, string, error) {
+	f := excelize.NewFile()
+
+	// 记录是否已创建第一个sheet
+	firstSheetCreated := false
+
+	// 为每个用例集创建Sheet页
+	for _, groupName := range groupOrder {
+		groupCases := casesByGroup[groupName]
+		if len(groupCases) == 0 {
+			continue
+		}
+
+		// 处理Sheet名称（Excel限制31字符，且不能包含特殊字符）
+		sheetName := groupName
+		if len(sheetName) > 31 {
+			sheetName = sheetName[:31]
+		}
+		// 替换非法字符
+		for _, ch := range []string{":", "\\", "/", "?", "*", "[", "]"} {
+			sheetName = strings.ReplaceAll(sheetName, ch, "_")
+		}
+
+		if !firstSheetCreated {
+			// 第一个sheet，先创建新sheet然后删除默认的Sheet1
+			sheetIndex, _ := f.NewSheet(sheetName)
+			f.DeleteSheet("Sheet1")
+			f.SetActiveSheet(sheetIndex)
+			firstSheetCreated = true
+		} else {
+			f.NewSheet(sheetName)
+		}
+
+		// 写入表头
+		var headers []string
+		switch language {
+		case "CN":
+			headers = []string{"No.", "CaseID", "Maj.CategoryCN", "Mid.CategoryCN", "Min.CategoryCN", "PreconditionCN", "Test StepCN", "ExpectCN", "UUID"}
+		case "JP":
+			headers = []string{"No.", "CaseID", "Maj.CategoryJP", "Mid.CategoryJP", "Min.CategoryJP", "PreconditionJP", "Test StepJP", "ExpectJP", "UUID"}
+		case "EN":
+			headers = []string{"No.", "CaseID", "Maj.CategoryEN", "Mid.CategoryEN", "Min.CategoryEN", "PreconditionEN", "Test StepEN", "ExpectEN", "UUID"}
+		case "All":
+			// All语言版本不包含TestResult和Remark
+			headers = []string{"No.", "CaseID",
+				"Maj.CategoryCN", "Maj.CategoryJP", "Maj.CategoryEN",
+				"Mid.CategoryCN", "Mid.CategoryJP", "Mid.CategoryEN",
+				"Min.CategoryCN", "Min.CategoryJP", "Min.CategoryEN",
+				"PreconditionCN", "PreconditionJP", "PreconditionEN",
+				"Test StepCN", "Test StepJP", "Test StepEN",
+				"ExpectCN", "ExpectJP", "ExpectEN",
+				"UUID"}
+		}
+
+		for j, h := range headers {
+			cell := fmt.Sprintf("%s1", columnName(j))
+			f.SetCellValue(sheetName, cell, h)
+		}
+
+		// 写入数据行
+		for k, c := range groupCases {
+			row := k + 2
+
+			switch language {
+			case "CN":
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), k+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), c.CaseNumber)
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), c.MajorFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), c.MiddleFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), c.MinorFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), c.PreconditionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), c.TestStepsCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), c.ExpectedResultCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), c.CaseID)
+			case "JP":
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), k+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), c.CaseNumber)
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), c.MajorFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), c.MiddleFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), c.MinorFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), c.PreconditionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), c.TestStepsJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), c.ExpectedResultJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), c.CaseID)
+			case "EN":
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), k+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), c.CaseNumber)
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), c.MajorFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), c.MiddleFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), c.MinorFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), c.PreconditionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), c.TestStepsEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), c.ExpectedResultEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), c.CaseID)
+			case "All":
+				// All语言版本不包含TestResult和Remark
+				f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), k+1)
+				f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), c.CaseNumber)
+				f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), c.MajorFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), c.MajorFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), c.MajorFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), c.MiddleFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), c.MiddleFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), c.MiddleFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), c.MinorFunctionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), c.MinorFunctionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), c.MinorFunctionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), c.PreconditionCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), c.PreconditionJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("N%d", row), c.PreconditionEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("O%d", row), c.TestStepsCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("P%d", row), c.TestStepsJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("Q%d", row), c.TestStepsEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("R%d", row), c.ExpectedResultCN)
+				f.SetCellValue(sheetName, fmt.Sprintf("S%d", row), c.ExpectedResultJP)
+				f.SetCellValue(sheetName, fmt.Sprintf("T%d", row), c.ExpectedResultEN)
+				f.SetCellValue(sheetName, fmt.Sprintf("U%d", row), c.CaseID)
+			}
+		}
+	}
+
+	// 生成文件名: 项目名_Manual_语言_TestCase_时间戳.xlsx
+	filename := fmt.Sprintf("%s_Manual_%s_TestCase_%s.xlsx", projectName, language, timestamp)
+
+	buffer, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, "", fmt.Errorf("write buffer: %w", err)
+	}
+
+	return buffer.Bytes(), filename, nil
+}
+
+// GetProjectName 获取项目名称
+func (s *excelService) GetProjectName(projectID uint) (string, error) {
+	project, err := s.projectRepo.GetByID(projectID)
+	if err != nil {
+		return "", fmt.Errorf("get project: %w", err)
+	}
+	if project == nil {
+		return fmt.Sprintf("Project%d", projectID), nil
+	}
+	return project.Name, nil
+}
+
+// ExportManualCaseTemplate 导出手工用例多语言模版
+// 生成ZIP包含3个空xlsx文件: Manual_Case_CN.xlsx, Manual_Case_EN.xlsx, Manual_Case_JP.xlsx
+// 7列格式: CaseID/Maj.Category/Mid.Category/Min.Category/Precondition/Test Step/Expect
+func (s *excelService) ExportManualCaseTemplate() ([]byte, string, error) {
+	// 1. 创建临时目录
+	tmpDir := fmt.Sprintf("storage/tmp/manual-template-%d", time.Now().Unix())
+	if err := s.createDir(tmpDir); err != nil {
+		return nil, "", fmt.Errorf("create tmp dir: %w", err)
+	}
+	defer s.removeDir(tmpDir)
+
+	// 2. 生成3个xlsx模版文件
+	languages := []string{"CN", "EN", "JP"}
+	excelFiles := make(map[string]string)
+
+	for _, lang := range languages {
+		// 创建Excel文件
+		f := excelize.NewFile()
+		sheetName := "用例数据"
+		f.SetSheetName("Sheet1", sheetName)
+
+		// 写入表头 - 7列格式
+		var headers []string
+		switch lang {
+		case "CN":
+			headers = []string{"CaseID", "Maj.CategoryCN", "Mid.CategoryCN", "Min.CategoryCN", "PreconditionCN", "Test StepCN", "ExpectCN"}
+		case "EN":
+			headers = []string{"CaseID", "Maj.CategoryEN", "Mid.CategoryEN", "Min.CategoryEN", "PreconditionEN", "Test StepEN", "ExpectEN"}
+		case "JP":
+			headers = []string{"CaseID", "Maj.CategoryJP", "Mid.CategoryJP", "Min.CategoryJP", "PreconditionJP", "Test StepJP", "ExpectJP"}
+		}
+
+		for j, h := range headers {
+			cell := fmt.Sprintf("%s1", columnName(j))
+			f.SetCellValue(sheetName, cell, h)
+		}
+
+		// 写入示例数据行
+		switch lang {
+		case "CN":
+			f.SetCellValue(sheetName, "A2", "TC001")
+			f.SetCellValue(sheetName, "B2", "登录功能")
+			f.SetCellValue(sheetName, "C2", "用户登录")
+			f.SetCellValue(sheetName, "D2", "登录验证")
+			f.SetCellValue(sheetName, "E2", "用户已注册")
+			f.SetCellValue(sheetName, "F2", "1. 打开登录页面\n2. 输入用户名和密码\n3. 点击登录按钮")
+			f.SetCellValue(sheetName, "G2", "成功登录并跳转到主页")
+		case "EN":
+			f.SetCellValue(sheetName, "A2", "TC001")
+			f.SetCellValue(sheetName, "B2", "Login Function")
+			f.SetCellValue(sheetName, "C2", "User Login")
+			f.SetCellValue(sheetName, "D2", "Login Verification")
+			f.SetCellValue(sheetName, "E2", "User registered")
+			f.SetCellValue(sheetName, "F2", "1. Open login page\n2. Enter username and password\n3. Click login button")
+			f.SetCellValue(sheetName, "G2", "Login successfully and redirect to homepage")
+		case "JP":
+			f.SetCellValue(sheetName, "A2", "TC001")
+			f.SetCellValue(sheetName, "B2", "ログイン機能")
+			f.SetCellValue(sheetName, "C2", "ユーザーログイン")
+			f.SetCellValue(sheetName, "D2", "ログイン検証")
+			f.SetCellValue(sheetName, "E2", "ユーザー登録済み")
+			f.SetCellValue(sheetName, "F2", "1. ログインページを開く\n2. ユーザー名とパスワードを入力\n3. ログインボタンをクリック")
+			f.SetCellValue(sheetName, "G2", "正常にログインしてホームページに移動")
+		}
+
+		// 生成文件名: Manual_Case_语言.xlsx
+		xlsxFilename := fmt.Sprintf("Manual_Case_%s.xlsx", lang)
+		filePath := fmt.Sprintf("%s/%s", tmpDir, xlsxFilename)
+
+		if err := f.SaveAs(filePath); err != nil {
+			return nil, "", fmt.Errorf("save %s file: %w", lang, err)
+		}
+		excelFiles[lang] = filePath
+	}
+
+	// 3. 打包为zip
+	timestamp := time.Now().Format("20060102_150405")
+	zipFilename := fmt.Sprintf("Manual_Case_Template_%s.zip", timestamp)
+
+	// 创建zip buffer
+	var zipBuffer bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuffer)
+
+	for _, filePath := range excelFiles {
+		// 读取Excel文件
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("read file %s: %w", filePath, err)
+		}
+
+		// 获取文件名（不包含路径）
+		_, filename := filepath.Split(filePath)
+
+		// 在zip中创建文件
+		writer, err := zipWriter.Create(filename)
+		if err != nil {
+			return nil, "", fmt.Errorf("create zip entry %s: %w", filename, err)
+		}
+
+		// 写入数据
+		_, err = writer.Write(fileData)
+		if err != nil {
+			return nil, "", fmt.Errorf("write zip entry %s: %w", filename, err)
+		}
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		return nil, "", fmt.Errorf("close zip writer: %w", err)
+	}
+
+	return zipBuffer.Bytes(), zipFilename, nil
 }

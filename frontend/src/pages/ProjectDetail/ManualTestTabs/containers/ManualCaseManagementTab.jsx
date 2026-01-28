@@ -1,17 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { message, Button, Space, Upload, Popconfirm } from 'antd';
-import { DownloadOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { message, Button, Space, Popconfirm } from 'antd';
+import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import LeftSidePanel from '../components/LeftSidePanel';
+import ManualLeftSidePanel from '../components/ManualLeftSidePanel';
 import LanguageFilter from '../components/LanguageFilter';
 import EditableTable from '../components/EditableTable';
 import ReorderModal from '../components/ReorderModal';
-import { exportCasesByLanguage, importCasesByLanguage } from '../../../../api/manualCase';
+import { exportCasesByLanguage } from '../../../../api/manualCase';
 import './ManualCaseManagementTab.css';
 
 /**
  * 手工用例管理Tab容器组件
- * 采用左右分栏布局：左栏280px固定宽度，右栏自适应
+ * 采用左右分栏布局：左栏200px固定宽度，右栏自适应
  */
 const ManualCaseManagementTab = ({ projectId }) => {
   const { t } = useTranslation();
@@ -48,7 +48,7 @@ const ManualCaseManagementTab = ({ projectId }) => {
   };
 
   // 用例更新回调
-  const handleCaseUpdated = (caseId, newName) => {
+  const handleCaseUpdated = () => {
     setRefreshKey(prev => prev + 1); // 刷新表格
   };
 
@@ -65,33 +65,36 @@ const ManualCaseManagementTab = ({ projectId }) => {
   };
 
   // 用例删除回调
-  const handleCaseDeleted = (caseId) => {
-    console.log('[ManualCaseManagementTab] 用例删除:', caseId);
+  const handleCaseDeleted = () => {
+    console.log('[ManualCaseManagementTab] 用例删除');
+    setRefreshKey(prev => prev + 1); // 刷新表格
+  };
+
+  // 用例集更新回调（创建/编辑/删除用例集后触发）
+  const handleCaseGroupsUpdated = () => {
     setRefreshKey(prev => prev + 1); // 刷新表格
   };
 
   // T44: 按语言导出用例
   const handleExport = async () => {
     if (!selectedCaseGroup) {
-      message.warning('请先选择用例集');
+      message.warning(t('manualTest.selectCaseGroupFirst'));
       return;
     }
 
     try {
-      await exportCasesByLanguage(projectId, 'overall', language, selectedCaseGroup);
-      message.success('导出成功');
+      await exportCasesByLanguage(projectId, 'overall', language, selectedCaseGroup.case_group);
+      message.success(t('message.exportSuccess'));
     } catch (error) {
       console.error('导出用例失败:', error);
-      message.error('导出用例失败');
+      message.error(t('message.exportFailed'));
     }
   };
-
-  // 导入功能已移至左栏，此处不再需要
 
   // 批量删除 - 调用EditableTable暴露的删除函数
   const handleBatchDelete = () => {
     if (!batchDeleteInfo || !batchDeleteInfo.executeDelete) {
-      message.warning('请先在表格中选择要删除的用例');
+      message.warning(t('manualTest.selectCasesToDelete'));
       return;
     }
     // 调用EditableTable暴露的批量删除函数
@@ -106,33 +109,31 @@ const ManualCaseManagementTab = ({ projectId }) => {
   return (
     <div className="manual-case-management-tab">
       {/* 左栏操作面板 */}
-      <LeftSidePanel
+      <ManualLeftSidePanel
         projectId={projectId}
         language={language}
         collapsed={collapsed}
         selectedCaseGroup={selectedCaseGroup}
-        onCaseCreated={handleCaseCreated}
-        onCaseUpdated={handleCaseUpdated}
-        onCaseDeleted={handleCaseDeleted}
         onCaseSwitch={handleCaseSwitch}
         onCollapse={handleCollapseChange}
+        onCaseGroupsUpdated={handleCaseGroupsUpdated}
       />
 
       {/* 右栏内容区 */}
       <div className={`right-content-panel ${collapsed ? 'full-width' : ''}`}>
         {/* 顶部工具栏：语言切换 + 导出/删除按钮 */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '8px',
           padding: '0 8px'
         }}>
-          <LanguageFilter 
+          <LanguageFilter
             value={language}
             onChange={handleLanguageChange}
           />
-          
+
           {/* 右侧操作按钮 */}
           <Space size={8}>
             <Button
@@ -145,14 +146,14 @@ const ManualCaseManagementTab = ({ projectId }) => {
             <Popconfirm
               title={t('manualTest.batchDeleteConfirm', { count: batchDeleteInfo?.selectedCount || 0 })}
               onConfirm={handleBatchDelete}
-              okText="确定"
-              cancelText="取消"
-              disabled={!selectedCaseGroup}
+              okText={t('common.ok')}
+              cancelText={t('common.cancel')}
+              disabled={!selectedCaseGroup || !batchDeleteInfo || batchDeleteInfo.selectedCount === 0}
             >
-              <Button 
-                danger 
+              <Button
+                danger
                 icon={<DeleteOutlined />}
-                disabled={!selectedCaseGroup}
+                disabled={!selectedCaseGroup || !batchDeleteInfo || batchDeleteInfo.selectedCount === 0}
               >
                 {t('manualTest.batchDelete')}
               </Button>
@@ -161,15 +162,15 @@ const ManualCaseManagementTab = ({ projectId }) => {
         </div>
 
         {selectedCaseGroup === null ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
             height: 'calc(100vh - 200px)',
             fontSize: '16px',
             color: '#999'
           }}>
-            请点击左侧"创建用例"按钮添加第一个用例集
+            {t('manualTest.clickCreateCaseGroup')}
           </div>
         ) : (
           <EditableTable
@@ -177,7 +178,7 @@ const ManualCaseManagementTab = ({ projectId }) => {
             projectId={projectId}
             caseType="overall"
             language={language}
-            caseGroupFilter={selectedCaseGroup}
+            caseGroupFilter={selectedCaseGroup.case_group}
             onReorderClick={handleReorderClick}
             onBatchDeleteRequest={handleBatchDeleteRequest}
             hiddenButtons={['saveVersion', 'exportTemplate', 'aiSupplement', 'exportCases', 'importCases']}

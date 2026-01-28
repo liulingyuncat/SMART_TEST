@@ -5,10 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"webtest/internal/mcp/client"
 	"webtest/internal/mcp/tools"
 )
+
+// GetCurrentTimestamp 返回当前时间的格式化字符串（格式：20060102_150405）
+func GetCurrentTimestamp() string {
+	return time.Now().Format("20060102_150405")
+}
 
 // CreateAIReportHandler handles creating an AI report.
 type CreateAIReportHandler struct {
@@ -24,7 +30,7 @@ func (h *CreateAIReportHandler) Name() string {
 }
 
 func (h *CreateAIReportHandler) Description() string {
-	return "创建AI测试报告"
+	return "创建AI测试报告，根据报告类型自动生成报告名称"
 }
 
 func (h *CreateAIReportHandler) InputSchema() map[string]interface{} {
@@ -35,16 +41,21 @@ func (h *CreateAIReportHandler) InputSchema() map[string]interface{} {
 				"type":        "integer",
 				"description": "项目ID",
 			},
-			"title": map[string]interface{}{
+			"report_type": map[string]interface{}{
 				"type":        "string",
-				"description": "报告标题",
+				"description": "报告类型：R-用例审阅, A-品质分析, T-测试结果, O-其他",
+				"enum":        []interface{}{"R", "A", "T", "O"},
+			},
+			"case_group_name": map[string]interface{}{
+				"type":        "string",
+				"description": "用例集名称（仅当report_type为R时需要）",
 			},
 			"content": map[string]interface{}{
 				"type":        "string",
 				"description": "报告内容（Markdown格式）",
 			},
 		},
-		"required": []interface{}{"project_id", "title", "content"},
+		"required": []interface{}{"project_id", "report_type", "content"},
 	}
 }
 
@@ -54,9 +65,14 @@ func (h *CreateAIReportHandler) Execute(ctx context.Context, args map[string]int
 		return tools.NewErrorResult(err.Error()), nil
 	}
 
-	title, err := GetString(args, "title")
+	reportType, err := GetString(args, "report_type")
 	if err != nil {
 		return tools.NewErrorResult(err.Error()), nil
+	}
+
+	// 验证report_type
+	if reportType != "R" && reportType != "A" && reportType != "T" && reportType != "O" {
+		return tools.NewErrorResult("report_type必须是R/A/T/O其中之一"), nil
 	}
 
 	content, err := GetString(args, "content")
@@ -64,9 +80,28 @@ func (h *CreateAIReportHandler) Execute(ctx context.Context, args map[string]int
 		return tools.NewErrorResult(err.Error()), nil
 	}
 
+	// 生成报告标题
+	var title string
+	timestamp := GetCurrentTimestamp()
+
+	switch reportType {
+	case "R": // 用例审阅
+		caseGroupName := GetOptionalString(args, "case_group_name", "")
+		if caseGroupName == "" {
+			return tools.NewErrorResult("report_type为R时，case_group_name参数为必填项"), nil
+		}
+		title = fmt.Sprintf("%s_Review_%s", caseGroupName, timestamp)
+	case "A": // 品质分析
+		title = fmt.Sprintf("Quality_Analyse_%s", timestamp)
+	case "T": // 测试结果
+		title = fmt.Sprintf("TestResult_Analyse_%s", timestamp)
+	case "O": // 其他
+		title = fmt.Sprintf("Others_%s", timestamp)
+	}
+
 	// 首先创建报告（只设置名称）
 	createBody := map[string]interface{}{
-		"name": title, // 使用title作为报告名称
+		"name": title, // 使用自动生成的标题
 	}
 
 	path := fmt.Sprintf("/api/v1/projects/%d/ai-reports", projectID)

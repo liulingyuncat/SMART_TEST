@@ -1,20 +1,36 @@
 .ai-report-management-tab {
   display: flex;
+  flex-direction: column;
   height: calc(100vh - 200px);
   min-height: 600px;
   background-color: #fff;
-  gap: 0;
 }
 
-.left-panel {
-  flex: 0 0 200px;
+.ai-report-tabs {
+  flex: 0 0 auto;
+  padding: 0 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ai-report-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.ai-report-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.ai-report-content .left-panel {
+  flex: 0 0 220px;
   border-right: 1px solid #f0f0f0;
   padding: 16px;
   overflow-y: auto;
   background-color: #fff;
 }
 
-.right-panel {
+.ai-report-content .right-panel {
   flex: 1;
   overflow: hidden;
   background-color: #fff;
@@ -22,18 +38,18 @@
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .ai-report-management-tab {
+  .ai-report-content {
     flex-direction: column;
   }
 
-  .left-panel {
+  .ai-report-content .left-panel {
     flex: 0 0 auto;
     border-right: none;
     border-bottom: 1px solid #f0f0f0;
     max-height: 200px;
   }
 
-  .right-panel {
+  .ai-report-content .right-panel {
     flex: 1;
     overflow: hidden;
   }

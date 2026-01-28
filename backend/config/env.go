@@ -91,3 +91,11 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	}
 	return defaultValue
 }
+
+// GetPromptsDir 获取提示词目录路径
+// 通过环境变量 PROMPTS_DIR 配置，默认为 internal/mcp/prompts
+// 开发环境可使用相对路径 internal/mcp/prompts
+// 部署环境可设置为绝对路径如 /app/prompts 或 C:\app\prompts
+func GetPromptsDir() string {
+	return getEnv("PROMPTS_DIR", "internal/mcp/prompts")
+}

@@ -117,11 +117,6 @@ auth:
 - `create_api_case` - 创建API测试用例
 - `update_api_case` - 更新API测试用例
 
-### 用例评审 (2个)
-
-- `create_review_item` - 创建评审条目
-- `update_review_item` - 更新评审条目
-
 ### 执行任务 (3个)
 
 - `list_execution_tasks` - 获取执行任务列表

@@ -77,76 +77,76 @@ type CaseListDTO struct {
 // CreateCaseRequest 创建用例请求
 type CreateCaseRequest struct {
 	CaseType   string `json:"case_type" binding:"required,oneof=ai overall change acceptance"`
-	Language   string `json:"language,omitempty"` // 保留用于API兼容，不再存储到数据库
+	Language   string `json:"language"` // 保留用于API兼容，不再存储到数据库
 	CaseNumber string `json:"case_number" binding:"max=50"`
-	CaseGroup  string `json:"case_group,omitempty" binding:"max=100"` // 用例集名称
+	CaseGroup  string `json:"case_group" binding:"max=100"` // 用例集名称
 
 	// ======== 单语言字段(AI用例使用) ========
-	MajorFunction  string `json:"major_function,omitempty" binding:"max=100"`
-	MiddleFunction string `json:"middle_function,omitempty" binding:"max=100"`
-	MinorFunction  string `json:"minor_function,omitempty" binding:"max=100"`
-	Precondition   string `json:"precondition,omitempty"`
-	TestSteps      string `json:"test_steps,omitempty"`
-	ExpectedResult string `json:"expected_result,omitempty"`
+	MajorFunction  string `json:"major_function" binding:"max=100"`
+	MiddleFunction string `json:"middle_function" binding:"max=100"`
+	MinorFunction  string `json:"minor_function" binding:"max=100"`
+	Precondition   string `json:"precondition"`
+	TestSteps      string `json:"test_steps"`
+	ExpectedResult string `json:"expected_result"`
 
 	// ======== 多语言字段(整体/变更用例使用) ========
-	MajorFunctionCN  string `json:"major_function_cn,omitempty" binding:"max=100"`
-	MajorFunctionJP  string `json:"major_function_jp,omitempty" binding:"max=100"`
-	MajorFunctionEN  string `json:"major_function_en,omitempty" binding:"max=100"`
-	MiddleFunctionCN string `json:"middle_function_cn,omitempty" binding:"max=100"`
-	MiddleFunctionJP string `json:"middle_function_jp,omitempty" binding:"max=100"`
-	MiddleFunctionEN string `json:"middle_function_en,omitempty" binding:"max=100"`
-	MinorFunctionCN  string `json:"minor_function_cn,omitempty" binding:"max=100"`
-	MinorFunctionJP  string `json:"minor_function_jp,omitempty" binding:"max=100"`
-	MinorFunctionEN  string `json:"minor_function_en,omitempty" binding:"max=100"`
-	PreconditionCN   string `json:"precondition_cn,omitempty"`
-	PreconditionJP   string `json:"precondition_jp,omitempty"`
-	PreconditionEN   string `json:"precondition_en,omitempty"`
-	TestStepsCN      string `json:"test_steps_cn,omitempty"`
-	TestStepsJP      string `json:"test_steps_jp,omitempty"`
-	TestStepsEN      string `json:"test_steps_en,omitempty"`
-	ExpectedResultCN string `json:"expected_result_cn,omitempty"`
-	ExpectedResultJP string `json:"expected_result_jp,omitempty"`
-	ExpectedResultEN string `json:"expected_result_en,omitempty"`
+	MajorFunctionCN  string `json:"major_function_cn" binding:"max=100"`
+	MajorFunctionJP  string `json:"major_function_jp" binding:"max=100"`
+	MajorFunctionEN  string `json:"major_function_en" binding:"max=100"`
+	MiddleFunctionCN string `json:"middle_function_cn" binding:"max=100"`
+	MiddleFunctionJP string `json:"middle_function_jp" binding:"max=100"`
+	MiddleFunctionEN string `json:"middle_function_en" binding:"max=100"`
+	MinorFunctionCN  string `json:"minor_function_cn" binding:"max=100"`
+	MinorFunctionJP  string `json:"minor_function_jp" binding:"max=100"`
+	MinorFunctionEN  string `json:"minor_function_en" binding:"max=100"`
+	PreconditionCN   string `json:"precondition_cn"`
+	PreconditionJP   string `json:"precondition_jp"`
+	PreconditionEN   string `json:"precondition_en"`
+	TestStepsCN      string `json:"test_steps_cn"`
+	TestStepsJP      string `json:"test_steps_jp"`
+	TestStepsEN      string `json:"test_steps_en"`
+	ExpectedResultCN string `json:"expected_result_cn"`
+	ExpectedResultJP string `json:"expected_result_jp"`
+	ExpectedResultEN string `json:"expected_result_en"`
 
-	TestResult string `json:"test_result,omitempty" binding:"omitempty,oneof=OK NG Block NR"` // 仅overall/change使用
-	Remark     string `json:"remark,omitempty"`
+	TestResult string `json:"test_result" binding:"omitempty,oneof=OK NG Block NR"` // 仅overall/change使用
+	Remark     string `json:"remark"`
 }
 
 // UpdateCaseRequest 更新用例请求
 type UpdateCaseRequest struct {
-	CaseNumber *string `json:"case_number,omitempty" binding:"omitempty,max=50"`
+	CaseNumber *string `json:"case_number" binding:"omitempty,max=50"`
 
 	// ======== 单语言字段(AI用例使用) ========
-	MajorFunction  *string `json:"major_function,omitempty" binding:"omitempty,max=100"`
-	MiddleFunction *string `json:"middle_function,omitempty"`
-	MinorFunction  *string `json:"minor_function,omitempty"`
-	Precondition   *string `json:"precondition,omitempty"`
-	TestSteps      *string `json:"test_steps,omitempty"`
-	ExpectedResult *string `json:"expected_result,omitempty"`
+	MajorFunction  *string `json:"major_function" binding:"omitempty,max=100"`
+	MiddleFunction *string `json:"middle_function"`
+	MinorFunction  *string `json:"minor_function"`
+	Precondition   *string `json:"precondition"`
+	TestSteps      *string `json:"test_steps"`
+	ExpectedResult *string `json:"expected_result"`
 
 	// ======== 多语言字段(整体/变更用例使用) ========
-	MajorFunctionCN  *string `json:"major_function_cn,omitempty" binding:"omitempty,max=100"`
-	MajorFunctionJP  *string `json:"major_function_jp,omitempty" binding:"omitempty,max=100"`
-	MajorFunctionEN  *string `json:"major_function_en,omitempty" binding:"omitempty,max=100"`
-	MiddleFunctionCN *string `json:"middle_function_cn,omitempty"`
-	MiddleFunctionJP *string `json:"middle_function_jp,omitempty"`
-	MiddleFunctionEN *string `json:"middle_function_en,omitempty"`
-	MinorFunctionCN  *string `json:"minor_function_cn,omitempty"`
-	MinorFunctionJP  *string `json:"minor_function_jp,omitempty"`
-	MinorFunctionEN  *string `json:"minor_function_en,omitempty"`
-	PreconditionCN   *string `json:"precondition_cn,omitempty"`
-	PreconditionJP   *string `json:"precondition_jp,omitempty"`
-	PreconditionEN   *string `json:"precondition_en,omitempty"`
-	TestStepsCN      *string `json:"test_steps_cn,omitempty"`
-	TestStepsJP      *string `json:"test_steps_jp,omitempty"`
-	TestStepsEN      *string `json:"test_steps_en,omitempty"`
-	ExpectedResultCN *string `json:"expected_result_cn,omitempty"`
-	ExpectedResultJP *string `json:"expected_result_jp,omitempty"`
-	ExpectedResultEN *string `json:"expected_result_en,omitempty"`
+	MajorFunctionCN  *string `json:"major_function_cn" binding:"omitempty,max=100"`
+	MajorFunctionJP  *string `json:"major_function_jp" binding:"omitempty,max=100"`
+	MajorFunctionEN  *string `json:"major_function_en" binding:"omitempty,max=100"`
+	MiddleFunctionCN *string `json:"middle_function_cn"`
+	MiddleFunctionJP *string `json:"middle_function_jp"`
+	MiddleFunctionEN *string `json:"middle_function_en"`
+	MinorFunctionCN  *string `json:"minor_function_cn"`
+	MinorFunctionJP  *string `json:"minor_function_jp"`
+	MinorFunctionEN  *string `json:"minor_function_en"`
+	PreconditionCN   *string `json:"precondition_cn"`
+	PreconditionJP   *string `json:"precondition_jp"`
+	PreconditionEN   *string `json:"precondition_en"`
+	TestStepsCN      *string `json:"test_steps_cn"`
+	TestStepsJP      *string `json:"test_steps_jp"`
+	TestStepsEN      *string `json:"test_steps_en"`
+	ExpectedResultCN *string `json:"expected_result_cn"`
+	ExpectedResultJP *string `json:"expected_result_jp"`
+	ExpectedResultEN *string `json:"expected_result_en"`
 
-	TestResult *string `json:"test_result,omitempty" binding:"omitempty,oneof=OK NG Block NR"`
-	Remark     *string `json:"remark,omitempty"`
+	TestResult *string `json:"test_result" binding:"omitempty,oneof=OK NG Block NR"`
+	Remark     *string `json:"remark"`
 }
 
 // ManualTestCaseService 手工测试用例服务接口

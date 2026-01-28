@@ -28,7 +28,7 @@ func NewAIReportHandler(service services.AIReportService) AIReportHandler {
 }
 
 // ListReports 获取报告列表
-// GET /api/projects/:id/ai-reports
+// GET /api/projects/:id/ai-reports?type=R|A|T|O
 func (h *aiReportHandler) ListReports(c *gin.Context) {
 	projectIDStr := c.Param("id")
 	projectID, err := strconv.ParseUint(projectIDStr, 10, 32)
@@ -37,7 +37,10 @@ func (h *aiReportHandler) ListReports(c *gin.Context) {
 		return
 	}
 
-	reports, err := h.service.ListReports(uint(projectID))
+	// 获取可选的type参数
+	reportType := c.Query("type")
+
+	reports, err := h.service.ListReports(uint(projectID), reportType)
 	if err != nil {
 		utils.ResponseError(c, 500, err.Error())
 		return
@@ -58,6 +61,7 @@ func (h *aiReportHandler) CreateReport(c *gin.Context) {
 
 	var req struct {
 		Name string `json:"name" binding:"required"`
+		Type string `json:"type"` // R=用例审阅, A=品质分析, T=测试结果, O=其他(默认)
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -65,7 +69,7 @@ func (h *aiReportHandler) CreateReport(c *gin.Context) {
 		return
 	}
 
-	report, err := h.service.CreateReport(uint(projectID), req.Name)
+	report, err := h.service.CreateReport(uint(projectID), req.Type, req.Name)
 	if err != nil {
 		// 名称已存在返回409
 		if err.Error() == "报告名称已存在" {

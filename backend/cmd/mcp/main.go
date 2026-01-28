@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"webtest/internal/mcp"
 	"webtest/internal/mcp/tools/handlers"
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -21,6 +24,9 @@ const (
 )
 
 func main() {
+	// Load .env file from multiple possible locations
+	loadEnvFile()
+
 	// Parse command line arguments
 	configPath := flag.String("config", "./config/mcp-server.yaml", "Path to configuration file")
 	showVersion := flag.Bool("version", false, "Show version information")
@@ -64,6 +70,63 @@ func main() {
 	}
 
 	logInfo("info", "Server shutdown complete")
+}
+
+// loadEnvFile loads environment variables from .env file
+// It searches for .env in multiple locations:
+// 1. Current working directory
+// 2. Parent directory (webtest root)
+// 3. Two levels up (for backend/build execution)
+func loadEnvFile() {
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		logInfo("debug", "Could not get current directory: %v", err)
+		return
+	}
+
+	// Try multiple possible .env locations
+	possiblePaths := []string{
+		filepath.Join(cwd, ".env"),             // Current directory
+		filepath.Join(cwd, "..", ".env"),       // Parent directory
+		filepath.Join(cwd, "..", "..", ".env"), // Two levels up
+		filepath.Join(cwd, "backend", ".env"),  // From root to backend
+		"D:\\VSCode\\webtest\\.env",            // Absolute path fallback
+	}
+
+	for _, envPath := range possiblePaths {
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Load(envPath); err == nil {
+				logInfo("info", "Loaded .env file from: %s", envPath)
+
+				// Log PROMPTS_DIR if it was set
+				if promptsDir := os.Getenv("PROMPTS_DIR"); promptsDir != "" {
+					logInfo("info", "PROMPTS_DIR from .env: %s", promptsDir)
+
+					// Convert relative path to absolute if needed
+					if !filepath.IsAbs(promptsDir) {
+						// Determine the backend directory based on .env location
+						envDir := filepath.Dir(envPath)
+						backendDir := filepath.Join(envDir, "backend")
+
+						// If .env is in backend or backend/build, adjust accordingly
+						if filepath.Base(envDir) == "backend" {
+							backendDir = envDir
+						} else if filepath.Base(envDir) == "build" {
+							backendDir = filepath.Dir(envDir) // parent of build is backend
+						}
+
+						absPromptsDir := filepath.Join(backendDir, promptsDir)
+						os.Setenv("PROMPTS_DIR", absPromptsDir)
+						logInfo("info", "Converted PROMPTS_DIR to absolute: %s (backend dir: %s)", absPromptsDir, backendDir)
+					}
+				}
+				return
+			}
+		}
+	}
+
+	logInfo("debug", "No .env file found in any of the searched locations")
 }
 
 func logInfo(level string, format string, args ...interface{}) {

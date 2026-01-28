@@ -406,22 +406,6 @@ get_api_group_metadata(group_name="apitest", project_id=1)
 
 ---
 
-## 用例评审
-
-### create_review_item
-
-创建用例评审条目
-
-**参数**：
-
-- `project_id` (integer, required): 项目ID
-- `name` (string, required): 审阅条目名称
-- `content` (string, optional): 评审内容（Markdown格式）
-
-**返回**：新创建的评审条目ID和详细信息
-
----
-
 ## 执行任务
 
 ### list_execution_tasks
@@ -493,12 +477,17 @@ get_api_group_metadata(group_name="apitest", project_id=1)
 
 ### create_ai_report
 
-创建AI测试报告
+创建AI测试报告，根据报告类型自动生成报告名称
 
 **参数**：
 
 - `project_id` (integer, required): 项目ID
-- `title` (string, required): 报告标题
+- `report_type` (string, required): 报告类型
+  - `R`: 用例审阅 (生成名称: `[用例集名]_Review_[时间戳]`)
+  - `A`: 品质分析 (生成名称: `Quality_Analyse_[时间戳]`)
+  - `T`: 测试结果 (生成名称: `TestResult_Analyse_[时间戳]`)
+  - `O`: 其他 (生成名称: `Others_[时间戳]`)
+- `case_group_name` (string, required when report_type=R): 用例集名称（仅当report_type为R时需要）
 - `content` (string, required): 报告内容（Markdown格式）
 
 **返回**：新创建的报告ID和详细信息
