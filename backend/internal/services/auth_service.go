@@ -30,7 +30,7 @@ type AuthService interface {
 
 // authService 认证服务实现
 type authService struct {
-	userRepo repositories.UserRepository
+	userRepo  repositories.UserRepository
 	jwtSecret []byte
 }
 
@@ -125,6 +125,7 @@ func (s *authService) InitAdminUsers() error {
 	}{
 		{Username: "admin", Nickname: "系统管理员", Password: "admin123", Role: constants.RoleSystemAdmin},
 		{Username: "root", Nickname: "超级管理员", Password: "root123", Role: constants.RoleSystemAdmin},
+		{Username: "Padmin", Nickname: "项目管理员", Password: "123456", Role: constants.RoleProjectManager},
 	}
 
 	for _, admin := range adminUsers {

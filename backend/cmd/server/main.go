@@ -1080,6 +1080,26 @@ func initSystemPrompts(db *gorm.DB) error {
 	projectID := uint(1)
 	promptsDir := config.GetPromptsDir()
 
+	// 记录详细的路径信息用于调试
+	log.Printf("[INFO] Initializing system prompts from directory: %s", promptsDir)
+
+	// 检查目录是否存在
+	if stat, err := os.Stat(promptsDir); err != nil {
+		log.Printf("[ERROR] Prompts directory does not exist or cannot be accessed: %s", promptsDir)
+		log.Printf("[ERROR] Error details: %v", err)
+
+		// 尝试打印当前工作目录和环境变量，帮助调试
+		if cwd, err := os.Getwd(); err == nil {
+			log.Printf("[DEBUG] Current working directory: %s", cwd)
+		}
+		log.Printf("[DEBUG] PROMPTS_DIR env: %s", os.Getenv("PROMPTS_DIR"))
+
+		return fmt.Errorf("prompts directory not found: %s", promptsDir)
+	} else if !stat.IsDir() {
+		log.Printf("[ERROR] %s exists but is not a directory", promptsDir)
+		return fmt.Errorf("%s is not a directory", promptsDir)
+	}
+
 	// 扫描目录中所有 .prompt.md 文件
 	files, err := filepath.Glob(filepath.Join(promptsDir, "*.prompt.md"))
 	if err != nil {
@@ -1132,6 +1152,7 @@ func initSystemPrompts(db *gorm.DB) error {
 				Version:     frontMatter.Version,
 				Content:     string(content),
 				Scope:       "system",
+				Arguments:   "[]", // 必须是有效的JSON，PostgreSQL的json类型不接受空字符串
 				UserID:      nil,
 			}
 

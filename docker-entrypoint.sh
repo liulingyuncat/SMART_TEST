@@ -101,8 +101,43 @@ echo "[entrypoint] Note: Table schema will be auto-created by GORM on first star
 # 驱动会被下载到 /root/.cache/ms-playwright-go/
 echo "[entrypoint] Playwright driver will be auto-downloaded on first use"
 
+# 检查并记录 PROMPTS_DIR 配置
+if [ -n "$PROMPTS_DIR" ]; then
+    echo "[entrypoint] PROMPTS_DIR is set to: $PROMPTS_DIR"
+    if [ -d "$PROMPTS_DIR" ]; then
+        echo "[entrypoint] Prompts directory exists"
+        PROMPT_COUNT=$(find "$PROMPTS_DIR" -name "*.prompt.md" | wc -l)
+        echo "[entrypoint] Found $PROMPT_COUNT prompt files in $PROMPTS_DIR"
+        if [ "$PROMPT_COUNT" -gt 0 ]; then
+            echo "[entrypoint] Listing prompt files:"
+            ls -la "$PROMPTS_DIR"/*.prompt.md 2>/dev/null || echo "[entrypoint] No .prompt.md files found"
+        else
+            echo "[entrypoint] WARNING: No .prompt.md files found in $PROMPTS_DIR"
+        fi
+    else
+        echo "[entrypoint] ERROR: PROMPTS_DIR directory does not exist: $PROMPTS_DIR"
+        echo "[entrypoint] Checking /app/internal/mcp/prompts..."
+        if [ -d "/app/internal/mcp/prompts" ]; then
+            echo "[entrypoint] Found prompts at /app/internal/mcp/prompts, using this path"
+            export PROMPTS_DIR="/app/internal/mcp/prompts"
+        fi
+    fi
+else
+    echo "[entrypoint] WARNING: PROMPTS_DIR environment variable is not set"
+    echo "[entrypoint] Checking default location /app/internal/mcp/prompts..."
+    if [ -d "/app/internal/mcp/prompts" ]; then
+        PROMPT_COUNT=$(find "/app/internal/mcp/prompts" -name "*.prompt.md" | wc -l)
+        echo "[entrypoint] Found $PROMPT_COUNT prompt files in default location"
+        export PROMPTS_DIR="/app/internal/mcp/prompts"
+        echo "[entrypoint] Set PROMPTS_DIR to: $PROMPTS_DIR"
+    else
+        echo "[entrypoint] ERROR: Prompts directory not found in default location"
+    fi
+fi
+
 # 启动 Web 服务（后台运行）
 echo "[entrypoint] Starting Web service on port 8443..."
+echo "[entrypoint] Environment: DB_TYPE=${DB_TYPE}, PROMPTS_DIR=$PROMPTS_DIR"
 ./server &
 SERVER_PID=$!
 echo "[entrypoint] Web service started (PID: $SERVER_PID)"
