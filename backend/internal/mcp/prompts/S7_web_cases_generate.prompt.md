@@ -536,6 +536,27 @@ mcp_microsoft_pla_browser_navigate(url="about:blank")
 
 > ⚠️ **重要**：Playwright MCP 工具使用 `mcp_microsoft_pla_` 前缀。如果直接调用 `browser_navigate` 会失败，必须使用完整的工具名称。
 
+#### 🔐 HTTPS自签名证书处理
+
+**当目标系统使用自签名证书时（如 https://192.168.x.x），浏览器会报错 `ERR_CERT_AUTHORITY_INVALID`。**
+
+**解决方法：创建新的浏览器上下文并设置 `ignoreHTTPSErrors: true`**
+
+```javascript
+// 在 browser_run_code 验证脚本时使用
+const browser = await page.context().browser();
+const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
+const p = await ctx.newPage();
+await p.goto('https://192.168.11.104:8443/login');  // 自签名证书也能访问
+await p.getByPlaceholder('用户名').fill('admin');
+// ... 后续操作
+```
+
+**⚠️ 重要说明：**
+1. **验证阶段**：使用上述方法在browser_run_code中测试脚本
+2. **script_code字段**：写入数据库的脚本无需特殊处理（Docker执行环境已配置跳过证书验证）
+3. **变量使用**：script_code中仍使用 `${BASE_URL}` 等变量占位符
+
 **Playwright MCP 工具名称映射：**
 
 | 简写（文档中）            | 完整工具名（实际调用）                          |

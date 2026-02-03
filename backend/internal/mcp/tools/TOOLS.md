@@ -93,14 +93,17 @@
 
 ### get_requirement_item
 
-获取单个AI需求文档的详细内容
+获取单个AI需求文档的详细内容，包含所有章节(chunks)的完整内容
 
 **参数**：
 
 - `project_id` (integer, required): 项目ID
-- `requirement_id` (integer, required): 需求文档ID
+- `id` (integer, optional): 需求文档ID（与name二选一）
+- `name` (string, optional): 需求文档名称（与id二选一）
 
-**返回**：完整的需求文档内容
+**说明**：优先使用ID查询，如未提供ID则通过名称进行精确匹配查询
+
+**返回**：完整的需求文档内容（包含所有chunks）
 
 ### create_requirement_item
 
@@ -144,14 +147,17 @@
 
 ### get_viewpoint_item
 
-获取单个AI观点文档的详细内容
+获取单个AI观点文档的详细内容，包含所有章节(chunks)的完整内容
 
 **参数**：
 
 - `project_id` (integer, required): 项目ID
-- `viewpoint_id` (integer, required): 观点文档ID
+- `id` (integer, optional): 观点文档ID（与name二选一）
+- `name` (string, optional): 观点文档名称（与id二选一）
 
-**返回**：完整的观点文档内容
+**说明**：优先使用ID查询，如未提供ID则通过名称进行精确匹配查询
+
+**返回**：完整的观点文档内容（包含所有chunks）
 
 ### create_viewpoint_item
 

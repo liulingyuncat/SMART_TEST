@@ -399,7 +399,7 @@ const WebCaseManagementTab = ({ projectId }) => {
               projectId={projectId}
               caseType="web"
               language={language}
-              caseGroupFilter={selectedCaseGroup.case_group}
+              caseGroupFilter={String(selectedCaseGroup.id)}
               caseGroupId={selectedCaseGroup.id}
               onReorderClick={handleReorderClick}
               onCaseCreated={handleCaseCreated}

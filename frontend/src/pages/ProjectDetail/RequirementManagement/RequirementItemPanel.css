@@ -102,6 +102,29 @@
   background: #fff;
   overflow: hidden;
   display: flex;
+  flex-direction: row;
+}
+
+/* 中栏样式 - Chunk目录 (T54) */
+.panel-middle {
+  width: 280px;
+  min-width: 280px;
+  border-right: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+.panel-middle.collapsed {
+  width: 24px;
+  min-width: 24px;
+}
+
+/* 右栏内容区 (T54) */
+.panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
   flex-direction: column;
 }
 

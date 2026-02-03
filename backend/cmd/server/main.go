@@ -77,6 +77,8 @@ func main() {
 		&models.ProjectMember{},
 		&models.RequirementItem{},
 		&models.ViewpointItem{},
+		&models.RequirementChunk{}, // T54: 需求Chunk表
+		&models.ViewpointChunk{},   // T54: 观点Chunk表
 		&models.Version{},
 		&models.ManualTestCase{},
 		&models.AutoTestCase{},
@@ -120,6 +122,10 @@ func main() {
 	viewpointItemRepo := repositories.NewViewpointItemRepository(db)
 	versionRepo := repositories.NewVersionRepository(db)
 
+	// 需求Chunk相关Repository (T54)
+	requirementChunkRepo := repositories.NewRequirementChunkRepository(db)
+	viewpointChunkRepo := repositories.NewViewpointChunkRepository(db)
+
 	// 缺陷管理相关Repository
 	defectRepo := repositories.NewDefectRepository(db)
 	defectAttachmentRepo := repositories.NewDefectAttachmentRepository(db)
@@ -161,8 +167,12 @@ func main() {
 
 	// 需求管理相关Service (T42)
 	storageDir := "storage"
-	requirementItemService := services.NewRequirementItemService(requirementItemRepo, versionRepo, storageDir)
-	viewpointItemService := services.NewViewpointItemService(viewpointItemRepo, versionRepo, storageDir)
+	requirementItemService := services.NewRequirementItemService(requirementItemRepo, requirementChunkRepo, versionRepo, storageDir)
+	viewpointItemService := services.NewViewpointItemService(viewpointItemRepo, viewpointChunkRepo, versionRepo, storageDir)
+
+	// 需求Chunk相关Service (T54)
+	requirementChunkService := services.NewRequirementChunkService(requirementChunkRepo)
+	viewpointChunkService := services.NewViewpointChunkService(viewpointChunkRepo)
 
 	// 用户自定义变量相关Service (需要在executionTaskService之前初始化)
 	userDefinedVarService := services.NewUserDefinedVariableService(userDefinedVarRepo)
@@ -220,6 +230,10 @@ func main() {
 	// 需求管理相关Handler (T42)
 	requirementItemHandler := handlers.NewRequirementItemHandler(requirementItemService, projectService, storageDir)
 	viewpointItemHandler := handlers.NewViewpointItemHandler(viewpointItemService, projectService, storageDir)
+
+	// 需求Chunk相关Handler (T54)
+	requirementChunkHandler := handlers.NewRequirementChunkHandler(requirementChunkService)
+	viewpointChunkHandler := handlers.NewViewpointChunkHandler(viewpointChunkService)
 
 	// 审阅条目相关Handler (T44)
 	reviewItemHandler := handlers.NewReviewItemHandler(reviewItemService, projectService)
@@ -395,6 +409,9 @@ func main() {
 			projects.GET("/:id/requirement-items",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				requirementItemHandler.ListItems)
+			projects.GET("/:id/requirement-items/:itemId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementItemHandler.GetItem)
 			projects.POST("/:id/requirement-items",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				requirementItemHandler.CreateItem)
@@ -423,6 +440,17 @@ func main() {
 			projects.DELETE("/:id/requirement-items/bulk",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				requirementItemHandler.BulkDeleteItems)
+
+			// 需求Chunk管理路由 (T54)
+			projects.GET("/:id/requirement-items/:itemId/chunks",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.ListChunks)
+			projects.POST("/:id/requirement-items/:itemId/chunks",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.CreateChunk)
+			projects.PUT("/:id/requirement-items/:itemId/chunks/reorder",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.ReorderChunks)
 
 			// 观点条目管理路由 (T42 - 新架构)
 			projects.GET("/:id/viewpoint-items",
@@ -459,6 +487,17 @@ func main() {
 			projects.DELETE("/:id/viewpoint-items/bulk",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				viewpointItemHandler.BulkDeleteItems)
+
+			// 观点Chunk管理路由 (T54)
+			projects.GET("/:id/viewpoint-items/:itemId/chunks",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.ListChunks)
+			projects.POST("/:id/viewpoint-items/:itemId/chunks",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.CreateChunk)
+			projects.PUT("/:id/viewpoint-items/:itemId/chunks/reorder",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.ReorderChunks)
 
 			// 用例集管理路由
 			projects.GET("/:id/case-groups",
@@ -990,6 +1029,36 @@ func main() {
 			viewpointItems.DELETE("/bulk",
 				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
 				viewpointItemHandler.BulkDeleteItems)
+		}
+
+		// 需求Chunk独立路由 (T54)
+		requirementChunks := api.Group("/requirement-chunks")
+		requirementChunks.Use(middleware.DualAuthMiddleware(authService, userService))
+		{
+			requirementChunks.GET("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.GetChunk)
+			requirementChunks.PUT("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.UpdateChunk)
+			requirementChunks.DELETE("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				requirementChunkHandler.DeleteChunk)
+		}
+
+		// 观点Chunk独立路由 (T54)
+		viewpointChunks := api.Group("/viewpoint-chunks")
+		viewpointChunks.Use(middleware.DualAuthMiddleware(authService, userService))
+		{
+			viewpointChunks.GET("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.GetChunk)
+			viewpointChunks.PUT("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.UpdateChunk)
+			viewpointChunks.DELETE("/:chunkId",
+				middleware.RequireRole(constants.RoleProjectManager, constants.RoleProjectMember),
+				viewpointChunkHandler.DeleteChunk)
 		}
 
 		// 用例集通用路由（更新和删除）

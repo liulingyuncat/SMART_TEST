@@ -447,73 +447,82 @@ async (page) => {
 
 #### � 脚本格式说明
 
-**API脚本使用 `async (page) => {}` 格式配合 `page.evaluate()` 执行 fetch 请求。**
+**API脚本使用 `async (page) => {}` 格式配合 Playwright 的 `page.request` API。**
 
-**为什么使用这种格式？**
+**为什么使用 page.request？**
 
-1. **与Web用例统一**：与S7 Web自动化用例使用相同的 `async (page) => {}` 格式
-2. **HTTPS证书跳过**：`page.evaluate()` 在浏览器上下文中执行，自动继承 Playwright 的 `ignoreHTTPSErrors: true` 设置，无需额外处理自签名证书
-3. **Docker执行兼容**：脚本在 playwright-executor 容器中运行，统一的格式便于维护
+1. **原生API支持**：Playwright提供的原生HTTP请求API，无需浏览器上下文
+2. **HTTPS证书跳过**：支持 `ignoreHTTPSErrors: true` 参数，可直接跳过自签名证书验证
+3. **更简洁高效**：无需page.evaluate包装，代码更直观
+4. **Docker执行兼容**：在 playwright-executor 容器中运行，自动处理证书
 
 **脚本结构：**
 
 ```javascript
+// ✅ 推荐：使用 page.request API（更简洁）
 async (page) => {
-  return await page.evaluate(async ({ baseUrl, username, password }) => {
-    // 在浏览器上下文中执行 fetch（自动跳过HTTPS证书验证）
-    const res = await fetch(baseUrl + '/api/...', { ... });
-    return { passed: res.status === 200, ... };
-  }, { baseUrl: '${base_url}', username: '${username}', password: '${password}' });
+  // 1. 登录获取Token
+  const loginRes = await page.request.post('${base_url}/api/v1/auth/login', {
+    data: { username: '${username}', password: '${password}' },
+    ignoreHTTPSErrors: true  // 🔐 跳过HTTPS证书验证
+  });
+  const token = (await loginRes.json()).data?.token;
+  
+  // 2. 执行API请求
+  const res = await page.request.get('${base_url}/api/users', {
+    headers: { 'Authorization': 'Bearer ' + token },
+    ignoreHTTPSErrors: true  // 🔐 跳过HTTPS证书验证
+  });
+  
+  return { passed: res.status() === 200, status: res.status() };
 }
 ```
+
+**⚠️ 注意事项：**
+- 每个请求都需要添加 `ignoreHTTPSErrors: true` 参数（当目标系统使用自签名证书时）
+- 使用 `res.status()` 获取状态码（注意是方法调用，不是属性）
+- 使用 `await res.json()` 解析响应体
 
 #### �🚨 script_code 脚本独立原则
 
 **每个script_code必须完全独立可执行，包含登录获取Token的完整流程：**
 
 ```javascript
-// ✅ 正确：脚本自行登录获取Token，使用 page.evaluate 跳过HTTPS证书
+// ✅ 正确：脚本自行登录获取Token，使用 page.request API
 async (page) => {
-  return await page.evaluate(async ({ baseUrl, username, password }) => {
-    // 1. 先登录获取Token（每个脚本独立获取）
-    const loginRes = await fetch(baseUrl + '/api/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    const loginData = await loginRes.json();
-    const token = loginData.data?.token || loginData.token;
-    if (!token) return { passed: false, error: 'Login failed' };
+  // 1. 先登录获取Token（每个脚本独立获取）
+  const loginRes = await page.request.post('${base_url}/api/v1/auth/login', {
+    data: { username: '${username}', password: '${password}' },
+    ignoreHTTPSErrors: true  // 🔐 跳过HTTPS证书验证（自签名证书）
+  });
+  const loginData = await loginRes.json();
+  const token = loginData.data?.token || loginData.token;
+  if (!token) return { passed: false, error: 'Login failed' };
 
-    // 2. 使用获取的token执行实际测试
-    const res = await fetch(baseUrl + '/api/users', {
-      method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    return { passed: res.status === 200, status: res.status };
-  }, { baseUrl: '${base_url}', username: '${username}', password: '${password}' });
+  // 2. 使用获取的token执行实际测试
+  const res = await page.request.get('${base_url}/api/users', {
+    headers: { 'Authorization': 'Bearer ' + token },
+    ignoreHTTPSErrors: true  // 🔐 跳过HTTPS证书验证
+  });
+  return { passed: res.status() === 200, status: res.status() };
 }
 
 // ❌ 错误：依赖外部token变量（不独立）
 async (page) => {
-  return await page.evaluate(async ({ baseUrl, token }) => {
-    const res = await fetch(baseUrl + '/api/users', {
-      method: 'GET',
-      headers: { 'Authorization': 'Bearer ' + token }  // 依赖变量表中的token，不推荐
-    });
-    return { passed: res.status === 200, status: res.status };
-  }, { baseUrl: '${base_url}', token: '${token}' });
+  const res = await page.request.get('${base_url}/api/users', {
+    headers: { 'Authorization': 'Bearer ${token}' },  // 依赖变量表中的token，token会过期
+    ignoreHTTPSErrors: true
+  });
+  return { passed: res.status() === 200, status: res.status() };
 }
 
 // ❌ 错误：硬编码具体值
 async (page) => {
-  return await page.evaluate(async () => {
-    const res = await fetch('https://example.com:443/api/users', {  // 硬编码URL
-      method: 'GET',
-      headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIs...' }  // 硬编码Token
-    });
-    return { passed: res.status === 200, status: res.status };
+  const res = await page.request.get('https://example.com:443/api/users', {  // 硬编码URL
+    headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIs...' },  // 硬编码Token
+    ignoreHTTPSErrors: true
   });
+  return { passed: res.status() === 200, status: res.status() };
 }
 ```
 
@@ -779,13 +788,22 @@ mcp_microsoft_pla_browser_navigate(url='{meta_protocol}://{meta_server}:{meta_po
 
 #### 🔐 HTTPS证书跳过（ERR_CERT_AUTHORITY_INVALID时使用）
 
+**当目标系统使用自签名证书时，浏览器会报错 `ERR_CERT_AUTHORITY_INVALID`。**
+
+**解决方法：在browser_run_code验证脚本时，创建新的浏览器上下文并设置 `ignoreHTTPSErrors: true`**
+
 ```javascript
-const ctx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+// 🚨 在 browser_run_code 中验证脚本时使用此方法
+const browser = await page.context().browser();
+const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
 const p = await ctx.newPage();
-await p.goto('https://...');
+await p.goto('https://192.168.11.104:8443/login');  // 自签名证书也能访问
 ```
 
-> script_code无需额外处理，该context中的fetch自动跳过证书。
+**⚠️ 重要说明：**
+1. **验证阶段**：使用上述方法在browser_run_code中测试脚本
+2. **script_code字段**：写入数据库的脚本使用标准 `page.request` API（Docker执行环境会自动处理证书）
+3. **Docker环境**：playwright-executor容器已配置跳过证书验证，无需在script_code中额外处理
 
 ### 第三步：🚨 逐画面逐控件采集API（不遗漏任何控件）
 
@@ -1041,7 +1059,14 @@ create_api_cases(
 ❌ 禁止：跳过验证步骤直接写入
 ❌ 禁止：验证失败后不修正就继续
 ❌ 禁止：一次 create_api_cases 调用中 cases 数组包含多条用例
+❌ 禁止：写入用例时省略 script_code 字段（这会导致界面显示空白脚本）
 ```
+
+**⚠️ script_code字段说明**：
+- **MCP工具支持**：`create_api_cases` 完全支持 script_code 字段，后端会将其原样保存到数据库
+- **后端行为**：如果cases对象中未提供script_code字段，后端会自动初始化为空字符串 `""`
+- **必须要求**：每个用例对象必须包含完整的 script_code 字段，否则界面将显示空白脚本区域
+- **字段内容**：script_code 必须是完整的 Playwright 格式脚本：`async (page) => { ... }`
 
 #### ✅ 正确的单条处理示例
 
@@ -1058,23 +1083,23 @@ create_api_cases(
   "header": "{\"Authorization\": \"Bearer ${token}\"}",
   "body": "",
   "response": "{\"code\": 200}",
-  "script_code": "async (page) => { ... }"
+  "script_code": "async (page) => { return await page.evaluate(async ({ baseUrl, username, password }) => { const loginRes = await fetch(baseUrl + '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const loginData = await loginRes.json(); const token = loginData.data?.token || loginData.token; if (!token) return { passed: false, error: 'Login failed' }; const res = await fetch(baseUrl + '/api/v1/users', { method: 'GET', headers: { 'Authorization': 'Bearer ' + token } }); return { passed: res.status === 200, status: res.status }; }, { baseUrl: '${base_url}', username: '${username}', password: '${password}' }); }"
 }
 
 步骤B - 验证脚本：
-→ 调用 browser_evaluate 执行
+→ 调用 browser_evaluate 执行上述 script_code
 → 返回: { passed: true, status: 200 }
 
-步骤C - 写入用例：
+步骤C - 写入用例（🚨 包含script_code字段）：
 → 实际200 === 期望200 ✓
-→ 调用 create_api_cases 写入
+→ 调用 create_api_cases 写入（cases中包含完整的script_code）
 ✅ [1/9] 已写入: [用户管理] GET /api/v1/users - 正常访问(200)
 
 ---继续下一条---
 
 📝 [2/9] 处理中: GET /api/v1/users - 无Token(401)
 
-步骤A - 生成用例：
+步骤A - 生成用例（🚨 必须生成完整的script_code）：
 {
   "screen": "[用户管理]",
   "url": "/api/v1/users",
@@ -1082,16 +1107,16 @@ create_api_cases(
   "header": "{}",
   "body": "",
   "response": "{\"code\": 401}",
-  "script_code": "async (page) => { ... 无Authorization头 ... }"
+  "script_code": "async (page) => { return await page.evaluate(async ({ baseUrl }) => { const res = await fetch(baseUrl + '/api/v1/users', { method: 'GET' }); return { passed: res.status === 401, status: res.status }; }, { baseUrl: '${base_url}' }); }"
 }
 
 步骤B - 验证脚本：
-→ 调用 browser_evaluate 执行
+→ 调用 browser_evaluate 执行上述 script_code
 → 返回: { passed: true, status: 401 }
 
-步骤C - 写入用例：
+步骤C - 写入用例（🚨 包含script_code字段）：
 → 实际401 === 期望401 ✓
-→ 调用 create_api_cases 写入
+→ 调用 create_api_cases 写入（cases中包含完整的script_code）
 ✅ [2/9] 已写入: [用户管理] GET /api/v1/users - 无Token(401)
 
 ---继续下一条---
@@ -1146,10 +1171,10 @@ create_api_cases(
 | 正常访问    | {"code": 200}  | 401  | ❌ 失败，需修正脚本或跳过  |
 | 无Token  | {"code": 401}  | 200  | ❌ 失败，API可能无需认证 |
 
-#### 单条写入调用示例
+#### 单条写入调用示例（🚨 script_code字段是必填的！）
 
 ```javascript
-// ✅ 正确：每次只写入1条验证通过的用例
+// ✅ 正确：每次只写入1条验证通过的用例，必须包含script_code字段
 create_api_cases(
   project_id=1,
   group_name='用例集名称',
@@ -1161,6 +1186,21 @@ create_api_cases(
     "body": "",
     "response": "{\"code\": 200}",
     "script_code": "async (page) => { return await page.evaluate(async ({ baseUrl, username, password }) => { const loginRes = await fetch(baseUrl + '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }); const loginData = await loginRes.json(); const token = loginData.data?.token || loginData.token; if (!token) return { passed: false, error: 'Login failed' }; const res = await fetch(baseUrl + '/api/v1/users', { method: 'GET', headers: { 'Authorization': 'Bearer ' + token } }); return { passed: res.status === 200, status: res.status }; }, { baseUrl: '${base_url}', username: '${username}', password: '${password}' }); }"
+  }]
+)
+
+// ❌ 错误：缺少script_code字段，会导致界面显示空白脚本
+create_api_cases(
+  project_id=1,
+  group_name='用例集名称',
+  cases=[{
+    "screen": "[用户管理]",
+    "url": "/api/v1/users",
+    "method": "GET",
+    "header": "{\"Authorization\": \"Bearer ${token}\"}",
+    "body": "",
+    "response": "{\"code\": 200}"
+    // ❌ 缺少 script_code 字段！
   }]
 )
 

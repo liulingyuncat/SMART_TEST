@@ -8,8 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"webtest/internal/dto"
 	"webtest/internal/models"
 	"webtest/internal/repositories"
+
+	"gorm.io/gorm"
 )
 
 // RequirementItemService 需求条目服务接口
@@ -20,6 +23,12 @@ type RequirementItemService interface {
 	DeleteItem(id uint) error
 	GetItemByID(id uint) (*models.RequirementItem, error)
 	GetItemsByProjectID(projectID uint) ([]*models.RequirementItem, error)
+
+	// 带Chunk的操作（新增）
+	GetItemsWithChunksSummary(projectID uint) ([]*dto.RequirementItemWithChunks, error)
+	GetItemWithChunks(itemID uint) (*dto.RequirementItemWithChunkDetails, error)
+	CreateItemWithChunks(projectID uint, name, content string, chunks []dto.ChunkInput) (*dto.RequirementItemWithChunkDetails, error)
+	UpdateItemWithChunks(itemID uint, name, content *string, chunkOps []dto.ChunkOperation) (*dto.RequirementItemWithChunkDetails, error)
 
 	// 批量操作
 	BulkCreateItems(projectID uint, items []struct{ Name, Content string }) error
@@ -38,6 +47,7 @@ type RequirementItemService interface {
 // requirementItemService 需求条目服务实现
 type requirementItemService struct {
 	itemRepo    repositories.RequirementItemRepository
+	chunkRepo   repositories.RequirementChunkRepository
 	versionRepo repositories.VersionRepository
 	storageDir  string // 存储目录
 }
@@ -45,11 +55,13 @@ type requirementItemService struct {
 // NewRequirementItemService 创建需求条目服务实例
 func NewRequirementItemService(
 	itemRepo repositories.RequirementItemRepository,
+	chunkRepo repositories.RequirementChunkRepository,
 	versionRepo repositories.VersionRepository,
 	storageDir string,
 ) RequirementItemService {
 	return &requirementItemService{
 		itemRepo:    itemRepo,
+		chunkRepo:   chunkRepo,
 		versionRepo: versionRepo,
 		storageDir:  storageDir,
 	}
@@ -311,4 +323,239 @@ func (s *requirementItemService) ImportFromZip(projectID uint, zipPath string, c
 	}
 
 	return nil
+}
+
+// GetItemsWithChunksSummary 获取项目的所有需求及其Chunk摘要（避免N+1问题）
+func (s *requirementItemService) GetItemsWithChunksSummary(projectID uint) ([]*dto.RequirementItemWithChunks, error) {
+	// 1. 获取所有需求
+	items, err := s.itemRepo.FindByProjectID(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("查询需求条目失败: %w", err)
+	}
+
+	if len(items) == 0 {
+		return []*dto.RequirementItemWithChunks{}, nil
+	}
+
+	// 2. 收集所有ItemID
+	itemIDs := make([]uint, len(items))
+	for i, item := range items {
+		itemIDs[i] = item.ID
+	}
+
+	// 3. 批量查询所有Chunks
+	allChunks, err := s.chunkRepo.FindByRequirementIDs(itemIDs)
+	if err != nil {
+		return nil, fmt.Errorf("查询Chunks失败: %w", err)
+	}
+
+	// 4. 按RequirementID分组
+	chunkMap := make(map[uint][]dto.ChunkSummary)
+	for _, chunk := range allChunks {
+		chunkMap[chunk.RequirementID] = append(chunkMap[chunk.RequirementID], dto.ChunkSummary{
+			ID:        chunk.ID,
+			Title:     chunk.Title,
+			SortOrder: chunk.SortOrder,
+		})
+	}
+
+	// 5. 组装响应
+	result := make([]*dto.RequirementItemWithChunks, len(items))
+	for i, item := range items {
+		chunks := chunkMap[item.ID]
+		if chunks == nil {
+			chunks = []dto.ChunkSummary{}
+		}
+		result[i] = &dto.RequirementItemWithChunks{
+			ID:        item.ID,
+			ProjectID: item.ProjectID,
+			Name:      item.Name,
+			Content:   item.Content,
+			CreatedAt: item.CreatedAt,
+			UpdatedAt: item.UpdatedAt,
+			Chunks:    chunks,
+		}
+	}
+
+	return result, nil
+}
+
+// GetItemWithChunks 获取单个需求及其完整Chunks内容
+func (s *requirementItemService) GetItemWithChunks(itemID uint) (*dto.RequirementItemWithChunkDetails, error) {
+	// 1. 获取需求
+	item, err := s.itemRepo.FindByID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("需求条目不存在: %w", err)
+	}
+
+	// 2. 获取所有Chunks
+	chunks, err := s.chunkRepo.FindByRequirementID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("查询Chunks失败: %w", err)
+	}
+
+	// 3. 组装响应
+	chunkDetails := make([]dto.ChunkDetail, len(chunks))
+	for i, chunk := range chunks {
+		chunkDetails[i] = dto.ChunkDetail{
+			ID:        chunk.ID,
+			Title:     chunk.Title,
+			Content:   chunk.Content,
+			SortOrder: chunk.SortOrder,
+		}
+	}
+
+	return &dto.RequirementItemWithChunkDetails{
+		ID:        item.ID,
+		ProjectID: item.ProjectID,
+		Name:      item.Name,
+		Content:   item.Content,
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+		Chunks:    chunkDetails,
+	}, nil
+}
+
+// CreateItemWithChunks 创建需求并批量创建Chunks（事务）
+func (s *requirementItemService) CreateItemWithChunks(projectID uint, name, content string, chunks []dto.ChunkInput) (*dto.RequirementItemWithChunkDetails, error) {
+	// 检查重名
+	existing, _ := s.itemRepo.FindByProjectIDAndName(projectID, name)
+	if existing != nil {
+		return nil, fmt.Errorf("需求名称 '%s' 已存在", name)
+	}
+
+	db := s.itemRepo.GetDB()
+	var itemID uint
+
+	// 开启事务
+	err := db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建RequirementItem
+		item := &models.RequirementItem{
+			ProjectID: projectID,
+			Name:      name,
+			Content:   content,
+		}
+		if err := tx.Create(item).Error; err != nil {
+			return fmt.Errorf("创建需求条目失败: %w", err)
+		}
+		itemID = item.ID
+
+		// 2. 批量创建Chunks
+		for i, chunkInput := range chunks {
+			chunk := &models.RequirementChunk{
+				RequirementID: itemID,
+				Title:         chunkInput.Title,
+				Content:       chunkInput.Content,
+				SortOrder:     i + 1,
+			}
+			if err := tx.Create(chunk).Error; err != nil {
+				return fmt.Errorf("创建Chunk失败: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 返回完整响应
+	return s.GetItemWithChunks(itemID)
+}
+
+// UpdateItemWithChunks 更新需求并处理Chunk增删改（事务）
+func (s *requirementItemService) UpdateItemWithChunks(itemID uint, name, content *string, chunkOps []dto.ChunkOperation) (*dto.RequirementItemWithChunkDetails, error) {
+	// 获取现有需求
+	item, err := s.itemRepo.FindByID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("需求条目不存在: %w", err)
+	}
+
+	db := s.itemRepo.GetDB()
+
+	// 开启事务
+	err = db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新Item（如果有传入name或content）
+		updates := make(map[string]interface{})
+		if name != nil && *name != "" {
+			// 检查重名(排除自己)
+			if *name != item.Name {
+				existing, _ := s.itemRepo.FindByProjectIDAndName(item.ProjectID, *name)
+				if existing != nil && existing.ID != itemID {
+					return fmt.Errorf("需求名称 '%s' 已存在", *name)
+				}
+			}
+			updates["name"] = *name
+		}
+		if content != nil {
+			updates["content"] = *content
+		}
+		if len(updates) > 0 {
+			if err := tx.Model(&models.RequirementItem{}).Where("id = ?", itemID).Updates(updates).Error; err != nil {
+				return fmt.Errorf("更新需求条目失败: %w", err)
+			}
+		}
+
+		// 2. 处理Chunk操作
+		for _, op := range chunkOps {
+			if op.ChunkID != nil {
+				// 验证Chunk归属
+				var chunk models.RequirementChunk
+				if err := tx.First(&chunk, *op.ChunkID).Error; err != nil {
+					return fmt.Errorf("Chunk ID=%d 不存在", *op.ChunkID)
+				}
+				if chunk.RequirementID != itemID {
+					return fmt.Errorf("Chunk ID=%d 不属于此需求", *op.ChunkID)
+				}
+
+				if op.Delete {
+					// 删除
+					if err := tx.Delete(&models.RequirementChunk{}, *op.ChunkID).Error; err != nil {
+						return fmt.Errorf("删除Chunk失败: %w", err)
+					}
+				} else {
+					// 更新
+					chunkUpdates := make(map[string]interface{})
+					if op.Title != "" {
+						chunkUpdates["title"] = op.Title
+					}
+					if op.Content != "" {
+						chunkUpdates["content"] = op.Content
+					}
+					if len(chunkUpdates) > 0 {
+						if err := tx.Model(&models.RequirementChunk{}).Where("id = ?", *op.ChunkID).Updates(chunkUpdates).Error; err != nil {
+							return fmt.Errorf("更新Chunk失败: %w", err)
+						}
+					}
+				}
+			} else {
+				// 新增
+				var maxOrder int
+				tx.Model(&models.RequirementChunk{}).
+					Where("requirement_id = ?", itemID).
+					Select("COALESCE(MAX(sort_order), 0)").
+					Scan(&maxOrder)
+
+				newChunk := &models.RequirementChunk{
+					RequirementID: itemID,
+					Title:         op.Title,
+					Content:       op.Content,
+					SortOrder:     maxOrder + 1,
+				}
+				if err := tx.Create(newChunk).Error; err != nil {
+					return fmt.Errorf("创建Chunk失败: %w", err)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 返回更新后的完整响应
+	return s.GetItemWithChunks(itemID)
 }

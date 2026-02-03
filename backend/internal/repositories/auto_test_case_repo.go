@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"log"
 	"webtest/internal/models"
 
 	"gorm.io/gorm"
@@ -161,23 +162,29 @@ func (r *autoTestCaseRepository) GetCasesByTypeAndGroup(projectID uint, caseType
 
 	if caseGroupID > 0 {
 		// 按用例集ID查询：先从case_groups表获取名称，再按名称过滤
+		log.Printf("[GetCasesByTypeAndGroup] Looking up group_name for id=%d, project_id=%d", caseGroupID, projectID)
 		var groupName string
 		result := r.db.Where("id = ? AND project_id = ?", caseGroupID, projectID).
 			Model(&models.CaseGroup{}).Pluck("group_name", &groupName)
+		log.Printf("[GetCasesByTypeAndGroup] Lookup result - Error: %v, groupName: '%s', RowsAffected: %d", result.Error, groupName, result.RowsAffected)
 
 		if result.Error != nil {
 			// 如果按ID查询失败，按ID字符串查询
+			log.Printf("[GetCasesByTypeAndGroup] Query error, using original caseGroup as filter: '%s'", caseGroup)
 			query = query.Where("case_group = ?", caseGroup)
 		} else if groupName != "" {
 			// 成功获取到名称，使用名称过滤
+			log.Printf("[GetCasesByTypeAndGroup] Using groupName as filter: '%s'", groupName)
 			query = query.Where("case_group = ?", groupName)
 		} else {
 			// 用例集不存在（ID对应的group_name为空），不添加额外过滤
 			// 这种情况下返回空结果
+			log.Printf("[GetCasesByTypeAndGroup] Group not found (groupName empty), returning 0 results")
 			return cases, 0, nil
 		}
 	} else {
 		// 按用例集名称查询
+		log.Printf("[GetCasesByTypeAndGroup] caseGroup not a number, using as name filter: '%s'", caseGroup)
 		query = query.Where("case_group = ?", caseGroup)
 	}
 
@@ -187,6 +194,7 @@ func (r *autoTestCaseRepository) GetCasesByTypeAndGroup(projectID uint, caseType
 	}
 
 	// 查询数据(按id升序排序)
+	log.Printf("[GetCasesByTypeAndGroup] Executing final query with offset=%d, limit=%d", offset, limit)
 	err := query.Order("id ASC").
 		Offset(offset).
 		Limit(limit).
@@ -195,6 +203,8 @@ func (r *autoTestCaseRepository) GetCasesByTypeAndGroup(projectID uint, caseType
 	if err != nil {
 		return nil, 0, fmt.Errorf("get auto cases by type and group: %w", err)
 	}
+
+	log.Printf("[GetCasesByTypeAndGroup] Query completed - Found %d cases, Total: %d", len(cases), total)
 
 	return cases, total, nil
 }

@@ -8,8 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"webtest/internal/dto"
 	"webtest/internal/models"
 	"webtest/internal/repositories"
+
+	"gorm.io/gorm"
 )
 
 // ViewpointItemService AI观点条目服务接口
@@ -20,6 +23,12 @@ type ViewpointItemService interface {
 	DeleteItem(id uint) error
 	GetItemByID(id uint) (*models.ViewpointItem, error)
 	GetItemsByProjectID(projectID uint) ([]*models.ViewpointItem, error)
+
+	// 带Chunk的操作（新增）
+	GetItemsWithChunksSummary(projectID uint) ([]*dto.ViewpointItemWithChunks, error)
+	GetItemWithChunks(itemID uint) (*dto.ViewpointItemWithChunkDetails, error)
+	CreateItemWithChunks(projectID uint, name, content string, chunks []dto.ViewpointChunkInput) (*dto.ViewpointItemWithChunkDetails, error)
+	UpdateItemWithChunks(itemID uint, name, content *string, chunkOps []dto.ViewpointChunkOperation) (*dto.ViewpointItemWithChunkDetails, error)
 
 	// 批量操作
 	BulkCreateItems(projectID uint, items []struct{ Name, Content string }) error
@@ -38,6 +47,7 @@ type ViewpointItemService interface {
 // viewpointItemService AI观点条目服务实现
 type viewpointItemService struct {
 	itemRepo    repositories.ViewpointItemRepository
+	chunkRepo   repositories.ViewpointChunkRepository
 	versionRepo repositories.VersionRepository
 	storageDir  string
 }
@@ -45,11 +55,13 @@ type viewpointItemService struct {
 // NewViewpointItemService 创建AI观点条目服务实例
 func NewViewpointItemService(
 	itemRepo repositories.ViewpointItemRepository,
+	chunkRepo repositories.ViewpointChunkRepository,
 	versionRepo repositories.VersionRepository,
 	storageDir string,
 ) ViewpointItemService {
 	return &viewpointItemService{
 		itemRepo:    itemRepo,
+		chunkRepo:   chunkRepo,
 		versionRepo: versionRepo,
 		storageDir:  storageDir,
 	}
@@ -304,4 +316,239 @@ func (s *viewpointItemService) ImportFromZip(projectID uint, zipPath string, cre
 	}
 
 	return nil
+}
+
+// GetItemsWithChunksSummary 获取项目的所有观点及其Chunk摘要（避免N+1问题）
+func (s *viewpointItemService) GetItemsWithChunksSummary(projectID uint) ([]*dto.ViewpointItemWithChunks, error) {
+	// 1. 获取所有观点
+	items, err := s.itemRepo.FindByProjectID(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("查询观点条目失败: %w", err)
+	}
+
+	if len(items) == 0 {
+		return []*dto.ViewpointItemWithChunks{}, nil
+	}
+
+	// 2. 收集所有ItemID
+	itemIDs := make([]uint, len(items))
+	for i, item := range items {
+		itemIDs[i] = item.ID
+	}
+
+	// 3. 批量查询所有Chunks
+	allChunks, err := s.chunkRepo.FindByViewpointIDs(itemIDs)
+	if err != nil {
+		return nil, fmt.Errorf("查询Chunks失败: %w", err)
+	}
+
+	// 4. 按ViewpointID分组
+	chunkMap := make(map[uint][]dto.ViewpointChunkSummary)
+	for _, chunk := range allChunks {
+		chunkMap[chunk.ViewpointID] = append(chunkMap[chunk.ViewpointID], dto.ViewpointChunkSummary{
+			ID:        chunk.ID,
+			Title:     chunk.Title,
+			SortOrder: chunk.SortOrder,
+		})
+	}
+
+	// 5. 组装响应
+	result := make([]*dto.ViewpointItemWithChunks, len(items))
+	for i, item := range items {
+		chunks := chunkMap[item.ID]
+		if chunks == nil {
+			chunks = []dto.ViewpointChunkSummary{}
+		}
+		result[i] = &dto.ViewpointItemWithChunks{
+			ID:        item.ID,
+			ProjectID: item.ProjectID,
+			Name:      item.Name,
+			Content:   item.Content,
+			CreatedAt: item.CreatedAt,
+			UpdatedAt: item.UpdatedAt,
+			Chunks:    chunks,
+		}
+	}
+
+	return result, nil
+}
+
+// GetItemWithChunks 获取单个观点及其完整Chunks内容
+func (s *viewpointItemService) GetItemWithChunks(itemID uint) (*dto.ViewpointItemWithChunkDetails, error) {
+	// 1. 获取观点
+	item, err := s.itemRepo.FindByID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("观点条目不存在: %w", err)
+	}
+
+	// 2. 获取所有Chunks
+	chunks, err := s.chunkRepo.FindByViewpointID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("查询Chunks失败: %w", err)
+	}
+
+	// 3. 组装响应
+	chunkDetails := make([]dto.ViewpointChunkDetail, len(chunks))
+	for i, chunk := range chunks {
+		chunkDetails[i] = dto.ViewpointChunkDetail{
+			ID:        chunk.ID,
+			Title:     chunk.Title,
+			Content:   chunk.Content,
+			SortOrder: chunk.SortOrder,
+		}
+	}
+
+	return &dto.ViewpointItemWithChunkDetails{
+		ID:        item.ID,
+		ProjectID: item.ProjectID,
+		Name:      item.Name,
+		Content:   item.Content,
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+		Chunks:    chunkDetails,
+	}, nil
+}
+
+// CreateItemWithChunks 创建观点并批量创建Chunks（事务）
+func (s *viewpointItemService) CreateItemWithChunks(projectID uint, name, content string, chunks []dto.ViewpointChunkInput) (*dto.ViewpointItemWithChunkDetails, error) {
+	// 检查重名
+	existing, _ := s.itemRepo.FindByProjectIDAndName(projectID, name)
+	if existing != nil {
+		return nil, fmt.Errorf("观点名称 '%s' 已存在", name)
+	}
+
+	db := s.itemRepo.GetDB()
+	var itemID uint
+
+	// 开启事务
+	err := db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建ViewpointItem（注意：当前模型不支持RequirementID字段）
+		item := &models.ViewpointItem{
+			ProjectID: projectID,
+			Name:      name,
+			Content:   content,
+		}
+		if err := tx.Create(item).Error; err != nil {
+			return fmt.Errorf("创建观点条目失败: %w", err)
+		}
+		itemID = item.ID
+
+		// 2. 批量创建Chunks
+		for i, chunkInput := range chunks {
+			chunk := &models.ViewpointChunk{
+				ViewpointID: itemID,
+				Title:       chunkInput.Title,
+				Content:     chunkInput.Content,
+				SortOrder:   i + 1,
+			}
+			if err := tx.Create(chunk).Error; err != nil {
+				return fmt.Errorf("创建Chunk失败: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 返回完整响应
+	return s.GetItemWithChunks(itemID)
+}
+
+// UpdateItemWithChunks 更新观点并处理Chunk增删改（事务）
+func (s *viewpointItemService) UpdateItemWithChunks(itemID uint, name, content *string, chunkOps []dto.ViewpointChunkOperation) (*dto.ViewpointItemWithChunkDetails, error) {
+	// 获取现有观点
+	item, err := s.itemRepo.FindByID(itemID)
+	if err != nil {
+		return nil, fmt.Errorf("观点条目不存在: %w", err)
+	}
+
+	db := s.itemRepo.GetDB()
+
+	// 开启事务
+	err = db.Transaction(func(tx *gorm.DB) error {
+		// 1. 更新Item（如果有传入name或content）
+		updates := make(map[string]interface{})
+		if name != nil && *name != "" {
+			// 检查重名(排除自己)
+			if *name != item.Name {
+				existing, _ := s.itemRepo.FindByProjectIDAndName(item.ProjectID, *name)
+				if existing != nil && existing.ID != itemID {
+					return fmt.Errorf("观点名称 '%s' 已存在", *name)
+				}
+			}
+			updates["name"] = *name
+		}
+		if content != nil {
+			updates["content"] = *content
+		}
+		if len(updates) > 0 {
+			if err := tx.Model(&models.ViewpointItem{}).Where("id = ?", itemID).Updates(updates).Error; err != nil {
+				return fmt.Errorf("更新观点条目失败: %w", err)
+			}
+		}
+
+		// 2. 处理Chunk操作
+		for _, op := range chunkOps {
+			if op.ChunkID != nil {
+				// 验证Chunk归属
+				var chunk models.ViewpointChunk
+				if err := tx.First(&chunk, *op.ChunkID).Error; err != nil {
+					return fmt.Errorf("Chunk ID=%d 不存在", *op.ChunkID)
+				}
+				if chunk.ViewpointID != itemID {
+					return fmt.Errorf("Chunk ID=%d 不属于此观点", *op.ChunkID)
+				}
+
+				if op.Delete {
+					// 删除
+					if err := tx.Delete(&models.ViewpointChunk{}, *op.ChunkID).Error; err != nil {
+						return fmt.Errorf("删除Chunk失败: %w", err)
+					}
+				} else {
+					// 更新
+					chunkUpdates := make(map[string]interface{})
+					if op.Title != "" {
+						chunkUpdates["title"] = op.Title
+					}
+					if op.Content != "" {
+						chunkUpdates["content"] = op.Content
+					}
+					if len(chunkUpdates) > 0 {
+						if err := tx.Model(&models.ViewpointChunk{}).Where("id = ?", *op.ChunkID).Updates(chunkUpdates).Error; err != nil {
+							return fmt.Errorf("更新Chunk失败: %w", err)
+						}
+					}
+				}
+			} else {
+				// 新增
+				var maxOrder int
+				tx.Model(&models.ViewpointChunk{}).
+					Where("viewpoint_id = ?", itemID).
+					Select("COALESCE(MAX(sort_order), 0)").
+					Scan(&maxOrder)
+
+				newChunk := &models.ViewpointChunk{
+					ViewpointID: itemID,
+					Title:       op.Title,
+					Content:     op.Content,
+					SortOrder:   maxOrder + 1,
+				}
+				if err := tx.Create(newChunk).Error; err != nil {
+					return fmt.Errorf("创建Chunk失败: %w", err)
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 返回更新后的完整响应
+	return s.GetItemWithChunks(itemID)
 }

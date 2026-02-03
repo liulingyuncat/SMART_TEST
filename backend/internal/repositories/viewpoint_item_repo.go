@@ -17,6 +17,7 @@ type ViewpointItemRepository interface {
 	BulkCreate(items []*models.ViewpointItem) error
 	BulkUpdate(items []*models.ViewpointItem) error
 	BulkDelete(ids []uint) error
+	GetDB() *gorm.DB
 }
 
 // viewpointItemRepository AI观点条目仓库实现
@@ -27,6 +28,11 @@ type viewpointItemRepository struct {
 // NewViewpointItemRepository 创建AI观点条目仓库实例
 func NewViewpointItemRepository(db *gorm.DB) ViewpointItemRepository {
 	return &viewpointItemRepository{db: db}
+}
+
+// GetDB 获取数据库连接（用于事务操作）
+func (r *viewpointItemRepository) GetDB() *gorm.DB {
+	return r.db
 }
 
 // Create 创建AI观点条目

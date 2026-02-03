@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { List, Button, Input, Modal, message, Space, Popconfirm, Table, Tooltip, Empty, Spin } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined, HistoryOutlined, DoubleLeftOutlined, DoubleRightOutlined, DownloadOutlined, EditOutlined, CloseOutlined, ImportOutlined, CopyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +14,15 @@ import {
   deleteRequirementItem,
   exportRequirementItemsToZip,
 } from '../../../api/requirementItem';
+import {
+  fetchChunks as fetchRequirementChunks,
+  createChunk as createRequirementChunk,
+  updateChunk as updateRequirementChunk,
+  deleteChunk as deleteRequirementChunk,
+} from '../../../api/requirementChunk';
 import { getVersionList, downloadVersion, deleteVersion, updateVersionRemark } from '../../../api/requirement';
+import ChunkTOC from './ChunkTOC';
+import ChunkContent from './ChunkContent';
 import './RequirementItemPanel.css';
 
 /**
@@ -51,6 +59,14 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
   const [isEditMode, setIsEditMode] = useState(false);
   const mdParser = React.useRef(new MarkdownIt());
   
+  // T54: Chunk相关状态
+  const [chunks, setChunks] = useState([]);
+  const [chunksLoading, setChunksLoading] = useState(false);
+  const [activeChunkId, setActiveChunkId] = useState(null);
+  const [editingChunkId, setEditingChunkId] = useState(null);
+  const [middlePanelCollapsed, setMiddlePanelCollapsed] = useState(false);
+  const contentRef = useRef(null);
+  
   // 将标题转换为ID
   const titleToId = useCallback((title) => {
     return 'heading-' + title
@@ -83,6 +99,23 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
     return toc;
   }, [titleToId]);
 
+  // T54: 加载Chunk列表 (必须在loadItems之前定义,避免循环依赖)
+  const loadChunks = useCallback(async (itemId) => {
+    if (!itemId || !projectId) return;
+    setChunksLoading(true);
+    try {
+      const data = await fetchRequirementChunks(projectId, itemId);
+      setChunks(Array.isArray(data) ? data : []);
+      setActiveChunkId(null);
+      setEditingChunkId(null);
+    } catch (error) {
+      console.error('加载Chunk失败:', error);
+      setChunks([]);
+    } finally {
+      setChunksLoading(false);
+    }
+  }, [projectId]);
+  
   // 加载需求条目列表
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -107,18 +140,21 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
         }
       } else if (itemList.length > 0 && !selectedItem) {
         // 如果没有选中任何条目且列表不为空，默认选中第一条
-        setSelectedItem(itemList[0]);
-        setEditingContent(itemList[0].content || '');
+        const firstItem = itemList[0];
+        setSelectedItem(firstItem);
+        setEditingContent(firstItem.content || '');
         // 为默认选中的条目生成目录
-        const toc = generateTOC(itemList[0].content || '');
+        const toc = generateTOC(firstItem.content || '');
         setTocItems(toc);
+        // T54修复: 默认加载第一个条目的Chunks
+        loadChunks(firstItem.id);
       }
     } catch (error) {
       message.error(t('requirement.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, selectedItem, t, generateTOC]);
+  }, [projectId, selectedItem, t, generateTOC, loadChunks]);
 
   useEffect(() => {
     loadItems();
@@ -136,6 +172,7 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
           setIsEditMode(false);
           const toc = generateTOC(item.content || '');
           setTocItems(toc);
+          loadChunks(item.id);
         },
       });
     } else {
@@ -143,8 +180,80 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
       setEditingContent(item.content || '');
       const toc = generateTOC(item.content || '');
       setTocItems(toc);
+      loadChunks(item.id);
     }
   };
+
+  // T54: 点击目录项滚动到对应Chunk
+  const handleChunkClick = useCallback((chunkId) => {
+    setActiveChunkId(chunkId);
+    const element = document.querySelector(`[data-chunk-id="${chunkId}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  // T54: 添加新Chunk
+  const handleAddChunk = useCallback(async () => {
+    if (!selectedItem) return;
+    try {
+      const newChunk = await createRequirementChunk(projectId, selectedItem.id, '', '');
+      setChunks(prev => [...prev, newChunk]);
+      setEditingChunkId(newChunk.id);
+      message.success(t('chunk.saveSuccess'));
+    } catch (error) {
+      message.error(error.message || '创建失败');
+    }
+  }, [projectId, selectedItem, t]);
+
+  // T54: 编辑Chunk
+  const handleEditChunk = useCallback((chunkId) => {
+    setEditingChunkId(chunkId);
+  }, []);
+
+  // T54: 删除Chunk
+  const handleDeleteChunk = useCallback(async (chunkId) => {
+    try {
+      await deleteRequirementChunk(chunkId);
+      setChunks(prev => prev.filter(c => c.id !== chunkId));
+      message.success(t('chunk.deleteSuccess'));
+    } catch (error) {
+      message.error(error.message || '删除失败');
+    }
+  }, [t]);
+
+  // T54: 保存Chunk
+  const handleSaveChunk = useCallback(async (chunkId, title, content) => {
+    try {
+      const updated = await updateRequirementChunk(chunkId, title, content);
+      setChunks(prev => prev.map(c => c.id === chunkId ? { ...c, ...updated } : c));
+      setEditingChunkId(null);
+      message.success(t('chunk.saveSuccess'));
+    } catch (error) {
+      message.error(error.message || '保存失败');
+    }
+  }, [t]);
+
+  // T54: 取消编辑Chunk
+  const handleCancelChunkEdit = useCallback(() => {
+    setEditingChunkId(null);
+  }, []);
+
+  // T54: 下载需求的所有Chunks为Markdown
+  const handleDownloadChunks = useCallback((item) => {
+    if (!chunks || chunks.length === 0) {
+      message.warning('暂无段落可下载');
+      return;
+    }
+    const content = chunks.map(c => c.content || '').join('\n\n---\n\n');
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${item?.name || 'requirement'}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [chunks]);
 
   // 显示编辑名称对话框
   const handleShowEditName = (item) => {
@@ -658,6 +767,19 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
                           }}
                         />
                       </Tooltip>
+                      <Tooltip title={t('common.download')}>
+                        <DownloadOutlined
+                          className="action-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (selectedItem?.id === item.id) {
+                              handleDownloadChunks(item);
+                            } else {
+                              message.info('请先选中此需求');
+                            }
+                          }}
+                        />
+                      </Tooltip>
                       <Popconfirm
                         title={t('requirement.confirmDelete')}
                         onConfirm={(e) => {
@@ -684,86 +806,38 @@ const RequirementItemPanel = ({ projectId, projectName }) => {
       <div className="panel-right">
         {selectedItem ? (
           <>
-            <div className="right-panel-header">
-              {isEditMode ? (
-                <Input
-                  value={selectedItem.name}
-                  onChange={(e) => setSelectedItem({ ...selectedItem, name: e.target.value })}
-                  placeholder="请输入需求名称"
-                  style={{ flex: 1, marginRight: 12 }}
-                />
-              ) : (
-                <div className="requirement-title">{selectedItem.name}</div>
-              )}
-              <Space>
-                {isEditMode ? (
-                  <>
-                    <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>
-                      {t('common.save')}
-                    </Button>
-                    <Button icon={<CloseOutlined />} onClick={handleEditCancel}>
-                      {t('common.cancel')}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button icon={<EditOutlined />} onClick={handleEdit}>
-                      {t('requirement.edit')}
-                    </Button>
-                    <Button icon={<ImportOutlined />} onClick={handleImport}>
-                      {t('requirement.import')}
-                    </Button>
-                    <Button icon={<DownloadOutlined />} onClick={handleDownload}>
-                      {t('requirement.download')}
-                    </Button>
-                  </>
-                )}
-              </Space>
+            {/* T54: 中栏 - Chunk目录 */}
+            <div className={`panel-middle ${middlePanelCollapsed ? 'collapsed' : ''}`}>
+              <ChunkTOC
+                chunks={chunks}
+                activeChunkId={activeChunkId}
+                onChunkClick={handleChunkClick}
+                onAddChunk={handleAddChunk}
+                collapsed={middlePanelCollapsed}
+                onCollapse={() => setMiddlePanelCollapsed(!middlePanelCollapsed)}
+              />
             </div>
-            <div className="right-panel-content">
-              {isEditMode ? (
-                <MdEditor
-                  value={editingContent || ''}
-                  style={{ height: '100%' }}
-                  renderHTML={(text) => mdParser.current.render(text)}
-                  onChange={handleContentChange}
-                  config={{
-                    view: { menu: true, md: true, html: true },
-                    canView: { menu: true, md: true, html: true, fullScreen: true, hideMenu: true }
-                  }}
+            {/* T54: 右栏 - Chunk内容 */}
+            <div className="panel-content" ref={contentRef}>
+              {chunksLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <Spin />
+                </div>
+              ) : chunks.length === 0 ? (
+                <Empty
+                  description={t('chunk.emptyChunks')}
+                  style={{ marginTop: '100px' }}
                 />
               ) : (
-                <div className="readonly-container">
-                  <div className="toc-sidebar">
-                    <div className="toc-title">{t('requirement.toc')}</div>
-                    <div className="toc-list">
-                      {tocItems.map((item, index) => (
-                        <div
-                          key={index}
-                          className={`toc-item toc-level-${item.level}`}
-                          onClick={() => handleTocClick(item.id)}
-                        >
-                          {item.title}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="markdown-preview">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        h1: ({ node, children, ...props }) => <h1 id={titleToId(extractText(children))} {...props}>{children}</h1>,
-                        h2: ({ node, children, ...props }) => <h2 id={titleToId(extractText(children))} {...props}>{children}</h2>,
-                        h3: ({ node, children, ...props }) => <h3 id={titleToId(extractText(children))} {...props}>{children}</h3>,
-                        h4: ({ node, children, ...props }) => <h4 id={titleToId(extractText(children))} {...props}>{children}</h4>,
-                        h5: ({ node, children, ...props }) => <h5 id={titleToId(extractText(children))} {...props}>{children}</h5>,
-                        h6: ({ node, children, ...props }) => <h6 id={titleToId(extractText(children))} {...props}>{children}</h6>
-                      }}
-                    >
-                      {editingContent || ''}
-                    </ReactMarkdown>
-                  </div>
-                </div>
+                <ChunkContent
+                  chunks={chunks}
+                  activeChunkId={activeChunkId}
+                  editingChunkId={editingChunkId}
+                  onEdit={handleEditChunk}
+                  onDelete={handleDeleteChunk}
+                  onSave={handleSaveChunk}
+                  onCancel={handleCancelChunkEdit}
+                />
               )}
             </div>
           </>

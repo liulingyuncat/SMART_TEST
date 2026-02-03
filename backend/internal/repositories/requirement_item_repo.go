@@ -17,6 +17,7 @@ type RequirementItemRepository interface {
 	BulkCreate(items []*models.RequirementItem) error
 	BulkUpdate(items []*models.RequirementItem) error
 	BulkDelete(ids []uint) error
+	GetDB() *gorm.DB
 }
 
 // requirementItemRepository 需求条目仓库实现
@@ -27,6 +28,11 @@ type requirementItemRepository struct {
 // NewRequirementItemRepository 创建需求条目仓库实例
 func NewRequirementItemRepository(db *gorm.DB) RequirementItemRepository {
 	return &requirementItemRepository{db: db}
+}
+
+// GetDB 获取数据库连接（用于事务操作）
+func (r *requirementItemRepository) GetDB() *gorm.DB {
+	return r.db
 }
 
 // Create 创建需求条目

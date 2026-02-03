@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Table, Button, Space, message, Input, Select, Form, Upload, Alert, Modal, Tooltip } from 'antd';
-import { DeleteOutlined, DownloadOutlined, UploadOutlined, SaveOutlined, PlusCircleOutlined, CopyOutlined, ArrowUpOutlined, ArrowDownOutlined, EyeOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, UploadOutlined, SaveOutlined, PlusCircleOutlined, CopyOutlined, ArrowUpOutlined, ArrowDownOutlined, EyeOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { getCasesList, createCase, updateCase, deleteCase, exportAICases, exportCases, importCases, clearAICases, insertCase, batchDeleteCases, reassignAllIDs } from '../../../../api/manualCase';
 import { getAutoCasesList, createAutoCase, updateAutoCase, deleteAutoCase, exportAutoCases, insertAutoCase, batchDeleteAutoCases, reassignAutoIDs } from '../../../../api/autoCase';
 import { getApiCasesList, createApiCase, updateApiCase, deleteApiCase, insertApiCase, batchDeleteApiCases } from '../../../../api/apiCase';
@@ -194,6 +194,9 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
 
   // 批量删除选择状态
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+
+  // Operation列收束状态 - 默认为false（收束状态，只显示核心操作按钮）
+  const [showOperationDetails, setShowOperationDetails] = useState(false);
 
   // 将批量删除功能暴露给父组件
   useEffect(() => {
@@ -421,13 +424,14 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
         createAPI = isAutoType ? createAutoCase : createCase;
         createData = {
           case_type: caseType,
+          language: language, // 所有用例类型都需要language参数
         };
-        // 手工用例需要language参数
-        if (!isAutoType) {
-          createData.language = language;
-        }
-        // 如果有 caseGroupFilter，添加到创建数据中
-        if (caseGroupFilter) {
+        // 如果有 caseGroupFilter 和 caseGroupId，使用 group_id（优先）或 case_group
+        if (caseGroupId) {
+          // 使用 group_id，让后端自动转换为 group_name
+          createData.group_id = parseInt(caseGroupId); // 确保是数字类型
+        } else if (caseGroupFilter) {
+          // 降级：直接使用 case_group 名称
           createData.case_group = caseGroupFilter;
         }
       }
@@ -443,7 +447,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       console.error('[createDefaultEmptyRow] Error response:', error?.response?.data);
       throw error;
     }
-  }, [projectId, caseType, language, apiModule, caseGroupFilter]);
+  }, [projectId, caseType, language, apiModule, caseGroupFilter, caseGroupId]);
 
   // 用例补足 - 自动填充空的分类字段
   // 用例补足 - 自动填充空的分类字段(一键补充所有用例)
@@ -2352,16 +2356,35 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       },
     };
 
-    // 操作列 - 根据需求FR-03.1，Title栏显示为英文
+    // 收束控制列 - 始终显示，用于控制Operation列的展开/收起
+    const expandToggleColumn = {
+      title: (
+        <Tooltip title={showOperationDetails ? t('common.collapse', '收起') : t('common.expand', '展开')}>
+          <Button
+            type="text"
+            size="small"
+            icon={showOperationDetails ? <LeftOutlined /> : <RightOutlined />}
+            onClick={() => setShowOperationDetails(!showOperationDetails)}
+            style={{ padding: '0 4px' }}
+          />
+        </Tooltip>
+      ),
+      key: 'expand_toggle',
+      width: 50,
+      fixed: 'right',
+      render: () => null, // 不显示单元格内容，只显示列标题的按钮
+    };
+
+    // 操作列 - 根据showOperationDetails状态显示/隐藏
     const actionColumn = {
       title: 'Operation',
       key: 'action',
-      width: 160, // 缩短列宽以适应图标按钮
+      width: 160,
       fixed: 'right',
       render: (_, record) => {
         const isCurrentEditing = editingKey === record.case_id;
 
-        // 编辑状态: 显示保存/取消按钮 - 根据需求FR-03.1使用英文
+        // 编辑状态: 显示保存/取消按钮
         if (isCurrentEditing) {
           return (
             <Space>
@@ -2662,18 +2685,21 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
     // 执行模式：构建执行专用列（BugID + Remark）
     const executionColumns = executionMode ? [bugIdColumn, remarkColumn] : [];
 
+    // 根据收束状态决定是否显示操作列
+    const operationColumns = showOperationDetails ? [actionColumn] : [];
+
     // api-cases模式: 不包含CaseID列(case_num/case_number字段)
     let allColumns;
     if (executionMode) {
-      // 执行模式：显示数据列 + BugID + Remark + 操作列
+      // 执行模式：显示数据列 + BugID + Remark + 操作列 + 收束控制列
       allColumns = apiModule === 'api-cases'
-        ? [idColumn, ...dataColumns, ...executionColumns, actionColumn]
-        : [idColumn, caseNumberColumn, ...dataColumns, ...executionColumns, actionColumn];
+        ? [idColumn, ...dataColumns, ...executionColumns, ...operationColumns, expandToggleColumn]
+        : [idColumn, caseNumberColumn, ...dataColumns, ...executionColumns, ...operationColumns, expandToggleColumn];
     } else {
-      // 正常模式：原有逻辑
+      // 正常模式：显示数据列 + 操作列 + 收束控制列
       allColumns = apiModule === 'api-cases'
-        ? [idColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), actionColumn]
-        : [idColumn, caseNumberColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), actionColumn];
+        ? [idColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), ...operationColumns, expandToggleColumn]
+        : [idColumn, caseNumberColumn, ...dataColumns, ...(shouldHideRemark ? [] : [remarkColumn]), ...operationColumns, expandToggleColumn];
     }
 
     // 根据用例类型过滤列 - AI用例和role1-4不显示"测试结果"列
@@ -2683,7 +2709,7 @@ const EditableTable = ({ caseType, language, onRefreshMetadata, apiModule, proje
       ? allColumns.filter(col => col.key !== 'test_result')
       : allColumns;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseType, editingKey, language, pagination, openMultiLangModal, startEdit, saveEdit, cancelEdit, handleDelete, apiModule, executionMode, taskUuid, onResultsChange]);
+  }, [caseType, editingKey, language, pagination, openMultiLangModal, startEdit, saveEdit, cancelEdit, handleDelete, apiModule, executionMode, taskUuid, onResultsChange, showOperationDetails]);
 
   // 复选框配置
   const rowSelection = {

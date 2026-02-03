@@ -295,7 +295,9 @@ func (s *autoTestCaseService) GetCases(projectID uint, userID uint, caseType str
 	var cases []*models.AutoTestCase
 	var total int64
 	if caseType == "web" && caseGroup != "" {
+		log.Printf("[GetCases] Calling GetCasesByTypeAndGroup - projectID: %d, caseType: %s, caseGroup: %s, offset: %d, size: %d", projectID, caseType, caseGroup, offset, size)
 		cases, total, err = s.repo.GetCasesByTypeAndGroup(projectID, caseType, caseGroup, offset, size)
+		log.Printf("[GetCases] GetCasesByTypeAndGroup returned - cases count: %d, total: %d, error: %v", len(cases), total, err)
 	} else {
 		cases, total, err = s.repo.GetCasesByType(projectID, caseType, offset, size)
 	}
@@ -351,12 +353,19 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 	}
 
 	// 如果提供了GroupID，则查询对应的用例集名称
+	log.Printf("[CreateCase] Input - GroupID: %d, CaseGroup: %s, ProjectID: %d", req.GroupID, req.CaseGroup, projectID)
 	if req.GroupID > 0 {
 		var caseGroup *models.CaseGroup
-		if err := s.db.Where("id = ? AND project_id = ?", req.GroupID, projectID).First(&caseGroup).Error; err == nil && caseGroup != nil {
+		err := s.db.Where("id = ? AND project_id = ?", req.GroupID, projectID).First(&caseGroup).Error
+		if err != nil {
+			log.Printf("[CreateCase] Failed to find case_group with id=%d, project_id=%d: %v", req.GroupID, projectID, err)
+		} else if caseGroup != nil {
+			log.Printf("[CreateCase] Found case_group: id=%d, group_name=%s", caseGroup.ID, caseGroup.GroupName)
 			req.CaseGroup = caseGroup.GroupName
+			log.Printf("[CreateCase] Converted GroupID %d to CaseGroup: %s", req.GroupID, req.CaseGroup)
 		}
 	}
+	log.Printf("[CreateCase] Final CaseGroup to save: %s", req.CaseGroup)
 
 	// 设置默认测试结果
 	if req.TestResult == "" {
@@ -405,8 +414,8 @@ func (s *autoTestCaseService) CreateCase(projectID uint, userID uint, req Create
 		return nil, fmt.Errorf("create auto test case: %w", err)
 	}
 
-	// 调试日志：检查创建后的CaseID
-	log.Printf("[CreateCase] Generated CaseID: %s, ID: %d", testCase.CaseID, testCase.ID)
+	// 调试日志：检查创建后的记录
+	log.Printf("[CreateCase] Successfully created - CaseID: %s, ID: %d, CaseGroup: %s", testCase.CaseID, testCase.ID, testCase.CaseGroup)
 
 	return &AutoCaseDTO{
 		CaseID:           testCase.CaseID,

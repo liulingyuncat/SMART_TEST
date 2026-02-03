@@ -8,14 +8,15 @@ const { Text } = Typography;
 const { Panel } = Collapse;
 
 const ToolList = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [toolCategories, setToolCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState([]);
 
   useEffect(() => {
     loadTools();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i18n.language, t]); // 添加语言和t函数依赖，语言变化时重新加载
 
   const loadTools = async () => {
     setLoading(true);
@@ -27,7 +28,7 @@ const ToolList = () => {
           title: t('prompts.categoryProject'),
           icon: '📁',
           tools: [
-            { name: 'get_current_project_name', description: t('prompts.toolDescriptions.get_current_project_name'), params: '无', returns: 'project_id, project_name' },
+            { name: 'get_current_project_name', description: t('prompts.toolDescriptions.get_current_project_name'), params: t('prompts.toolParams.none'), returns: t('prompts.toolReturns.projectIdAndName') },
           ]
         },
         {
@@ -35,8 +36,8 @@ const ToolList = () => {
           title: t('prompts.categoryDocuments'),
           icon: '📄',
           tools: [
-            { name: 'list_raw_documents', description: t('prompts.toolDescriptions.list_raw_documents'), params: 'project_id(required)', returns: '原始文档列表' },
-            { name: 'get_converted_document', description: t('prompts.toolDescriptions.get_converted_document'), params: 'project_id(required), document_id(required)', returns: '完整的文档内容' },
+            { name: 'list_raw_documents', description: t('prompts.toolDescriptions.list_raw_documents'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.rawDocumentList') },
+            { name: 'get_converted_document', description: t('prompts.toolDescriptions.get_converted_document'), params: t('prompts.toolParams.projectIdAndDocId'), returns: t('prompts.toolReturns.fullDocumentContent') },
           ]
         },
         {
@@ -44,10 +45,10 @@ const ToolList = () => {
           title: t('prompts.categoryRequirements'),
           icon: '📋',
           tools: [
-            { name: 'list_requirement_items', description: t('prompts.toolDescriptions.list_requirement_items'), params: 'project_id(required)', returns: '需求文档列表' },
-            { name: 'get_requirement_item', description: t('prompts.toolDescriptions.get_requirement_item'), params: 'project_id(required), requirement_id(required)', returns: '完整的需求文档内容' },
-            { name: 'create_requirement_item', description: t('prompts.toolDescriptions.create_requirement_item'), params: 'project_id(required), name(required), content(required), parent_id(optional)', returns: '新创建的需求文档ID和详细信息' },
-            { name: 'update_requirement_item', description: t('prompts.toolDescriptions.update_requirement_item'), params: 'project_id(required), requirement_id(required), name(optional), content(optional)', returns: '更新后的需求文档信息' },
+            { name: 'list_requirement_items', description: t('prompts.toolDescriptions.list_requirement_items'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.requirementList') },
+            { name: 'get_requirement_item', description: t('prompts.toolDescriptions.get_requirement_item'), params: t('prompts.toolParams.projectIdAndReqId'), returns: t('prompts.toolReturns.requirementFullContent') },
+            { name: 'create_requirement_item', description: t('prompts.toolDescriptions.create_requirement_item'), params: t('prompts.toolParams.projectIdReqNameContent'), returns: t('prompts.toolReturns.newRequirementIdAndInfo') },
+            { name: 'update_requirement_item', description: t('prompts.toolDescriptions.update_requirement_item'), params: t('prompts.toolParams.projectIdReqIdUpdate'), returns: t('prompts.toolReturns.updatedRequirementInfo') },
           ]
         },
         {
@@ -55,10 +56,10 @@ const ToolList = () => {
           title: t('prompts.categoryViewpoints'),
           icon: '👁️',
           tools: [
-            { name: 'list_viewpoint_items', description: t('prompts.toolDescriptions.list_viewpoint_items'), params: 'project_id(required)', returns: '观点文档列表' },
-            { name: 'get_viewpoint_item', description: t('prompts.toolDescriptions.get_viewpoint_item'), params: 'project_id(required), viewpoint_id(required)', returns: '完整的观点文档内容' },
-            { name: 'create_viewpoint_item', description: t('prompts.toolDescriptions.create_viewpoint_item'), params: 'project_id(required), name(required), content(required), requirement_id(optional)', returns: '新创建的观点文档ID和详细信息' },
-            { name: 'update_viewpoint_item', description: t('prompts.toolDescriptions.update_viewpoint_item'), params: 'project_id(required), viewpoint_id(required), name(optional), content(optional)', returns: '更新后的观点文档信息' },
+            { name: 'list_viewpoint_items', description: t('prompts.toolDescriptions.list_viewpoint_items'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.viewpointList') },
+            { name: 'get_viewpoint_item', description: t('prompts.toolDescriptions.get_viewpoint_item'), params: t('prompts.toolParams.projectIdAndViewId'), returns: t('prompts.toolReturns.viewpointFullContent') },
+            { name: 'create_viewpoint_item', description: t('prompts.toolDescriptions.create_viewpoint_item'), params: t('prompts.toolParams.projectIdViewNameContent'), returns: t('prompts.toolReturns.newViewpointIdAndInfo') },
+            { name: 'update_viewpoint_item', description: t('prompts.toolDescriptions.update_viewpoint_item'), params: t('prompts.toolParams.projectIdViewIdUpdate'), returns: t('prompts.toolReturns.updatedViewpointInfo') },
           ]
         },
         {
@@ -66,10 +67,10 @@ const ToolList = () => {
           title: t('prompts.categoryManual'),
           icon: '✋',
           tools: [
-            { name: 'list_manual_groups', description: t('prompts.toolDescriptions.list_manual_groups'), params: 'project_id(required)', returns: '用例集列表' },
-            { name: 'list_manual_cases', description: t('prompts.toolDescriptions.list_manual_cases'), params: 'project_id(required), case_group_id(required), all_fields(optional)', returns: '用例列表' },
-            { name: 'create_manual_cases', description: t('prompts.toolDescriptions.create_manual_cases'), params: 'project_id(required), group_name(required), cases(required，只含中文字段), continue_on_error(optional)', returns: '创建结果列表，支持自动创建用例集' },
-            { name: 'update_manual_cases', description: t('prompts.toolDescriptions.update_manual_cases'), params: 'project_id(required), group_id或group_name(可选), cases或filter+update_data(二选一), continue_on_error(optional)', returns: '更新结果列表，支持按大/中/小功能筛选更新' },
+            { name: 'list_manual_groups', description: t('prompts.toolDescriptions.list_manual_groups'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.caseGroupList') },
+            { name: 'list_manual_cases', description: t('prompts.toolDescriptions.list_manual_cases'), params: t('prompts.toolParams.projectIdAndGroupId'), returns: t('prompts.toolReturns.caseList') },
+            { name: 'create_manual_cases', description: t('prompts.toolDescriptions.create_manual_cases'), params: t('prompts.toolParams.projectIdGroupNameCases'), returns: t('prompts.toolReturns.createResultList') },
+            { name: 'update_manual_cases', description: t('prompts.toolDescriptions.update_manual_cases'), params: t('prompts.toolParams.projectIdGroupIdOrNameUpdate'), returns: t('prompts.toolReturns.updateResultList') },
           ]
         },
         {
@@ -77,11 +78,11 @@ const ToolList = () => {
           title: t('prompts.categoryWeb'),
           icon: '🌐',
           tools: [
-            { name: 'list_web_groups', description: t('prompts.toolDescriptions.list_web_groups'), params: 'project_id(required)', returns: 'Web用例集列表' },
-            { name: 'get_web_group_metadata', description: t('prompts.toolDescriptions.get_web_group_metadata'), params: 'project_id(required), group_id(required)', returns: '用例集元数据' },
-            { name: 'list_web_cases', description: t('prompts.toolDescriptions.list_web_cases'), params: 'project_id(required), group_id(required)', returns: 'Web用例列表' },
-            { name: 'create_web_cases', description: t('prompts.toolDescriptions.create_web_cases'), params: 'project_id(required), group_id(required), cases(required), continue_on_error(optional)', returns: '创建结果列表' },
-            { name: 'update_web_cases', description: t('prompts.toolDescriptions.update_web_cases'), params: 'project_id(required), cases(required), continue_on_error(optional)', returns: '更新结果列表' },
+            { name: 'list_web_groups', description: t('prompts.toolDescriptions.list_web_groups'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.webGroupList') },
+            { name: 'get_web_group_metadata', description: t('prompts.toolDescriptions.get_web_group_metadata'), params: t('prompts.toolParams.projectIdAndGroupIdRequired'), returns: t('prompts.toolReturns.groupMetadata') },
+            { name: 'list_web_cases', description: t('prompts.toolDescriptions.list_web_cases'), params: t('prompts.toolParams.projectIdAndGroupIdRequired'), returns: t('prompts.toolReturns.webCaseList') },
+            { name: 'create_web_cases', description: t('prompts.toolDescriptions.create_web_cases'), params: t('prompts.toolParams.projectIdGroupIdCases'), returns: t('prompts.toolReturns.webCreateResult') },
+            { name: 'update_web_cases', description: t('prompts.toolDescriptions.update_web_cases'), params: t('prompts.toolParams.projectIdCases'), returns: t('prompts.toolReturns.webUpdateResult') },
           ]
         },
         {
@@ -89,11 +90,11 @@ const ToolList = () => {
           title: t('prompts.categoryApi'),
           icon: '🔌',
           tools: [
-            { name: 'list_api_groups', description: t('prompts.toolDescriptions.list_api_groups'), params: 'project_id(required)', returns: 'API用例集列表' },
-            { name: 'get_api_group_metadata', description: t('prompts.toolDescriptions.get_api_group_metadata'), params: 'project_id(required), group_id(required)', returns: '用例集元数据' },
-            { name: 'list_api_cases', description: t('prompts.toolDescriptions.list_api_cases'), params: 'project_id(required), group_id(required)', returns: 'API用例列表' },
-            { name: 'create_api_cases', description: t('prompts.toolDescriptions.create_api_cases'), params: 'project_id(required), group_id(required), cases(required)', returns: '创建结果（逐条处理）' },
-            { name: 'update_api_cases', description: t('prompts.toolDescriptions.update_api_cases'), params: 'project_id(required), group_id(required), cases(required)', returns: '更新后的用例信息' },
+            { name: 'list_api_groups', description: t('prompts.toolDescriptions.list_api_groups'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.apiGroupList') },
+            { name: 'get_api_group_metadata', description: t('prompts.toolDescriptions.get_api_group_metadata'), params: t('prompts.toolParams.projectIdAndGroupIdRequired'), returns: t('prompts.toolReturns.groupMetadata') },
+            { name: 'list_api_cases', description: t('prompts.toolDescriptions.list_api_cases'), params: t('prompts.toolParams.projectIdAndGroupIdRequired'), returns: t('prompts.toolReturns.apiCaseList') },
+            { name: 'create_api_cases', description: t('prompts.toolDescriptions.create_api_cases'), params: t('prompts.toolParams.projectIdGroupIdApiCases'), returns: t('prompts.toolReturns.apiCreateResult') },
+            { name: 'update_api_cases', description: t('prompts.toolDescriptions.update_api_cases'), params: t('prompts.toolParams.projectIdGroupIdApiCases'), returns: t('prompts.toolReturns.apiUpdateResult') },
           ]
         },
         {
@@ -101,10 +102,10 @@ const ToolList = () => {
           title: t('prompts.categoryExecution'),
           icon: '▶️',
           tools: [
-            { name: 'list_execution_tasks', description: t('prompts.toolDescriptions.list_execution_tasks'), params: 'project_id(required)', returns: '执行任务列表' },
-            { name: 'get_execution_task_metadata', description: t('prompts.toolDescriptions.get_execution_task_metadata'), params: 'project_id(required), task_id(required)', returns: '任务元数据和执行统计' },
-            { name: 'get_execution_task_cases', description: t('prompts.toolDescriptions.get_execution_task_cases'), params: 'project_id(required), task_id(required)', returns: '用例列表及其执行结果' },
-            { name: 'update_execution_case_result', description: t('prompts.toolDescriptions.update_execution_case_result'), params: 'project_id(required), case_id(required), result(required), comment(optional)', returns: '更新后的结果信息' },
+            { name: 'list_execution_tasks', description: t('prompts.toolDescriptions.list_execution_tasks'), params: t('prompts.toolParams.projectIdRequired'), returns: t('prompts.toolReturns.executionTaskList') },
+            { name: 'get_execution_task_metadata', description: t('prompts.toolDescriptions.get_execution_task_metadata'), params: t('prompts.toolParams.projectIdAndTaskId'), returns: t('prompts.toolReturns.taskMetadataAndStats') },
+            { name: 'get_execution_task_cases', description: t('prompts.toolDescriptions.get_execution_task_cases'), params: t('prompts.toolParams.projectIdAndTaskId'), returns: t('prompts.toolReturns.taskCaseList') },
+            { name: 'update_execution_case_result', description: t('prompts.toolDescriptions.update_execution_case_result'), params: t('prompts.toolParams.projectIdCaseIdResult'), returns: t('prompts.toolReturns.updatedCaseResult') },
           ]
         },
         {
@@ -112,8 +113,8 @@ const ToolList = () => {
           title: t('prompts.categoryDefects'),
           icon: '🐛',
           tools: [
-            { name: 'list_defects', description: t('prompts.toolDescriptions.list_defects'), params: 'project_id(required), page(optional), page_size(optional)', returns: '缺陷列表和总数' },
-            { name: 'update_defect', description: t('prompts.toolDescriptions.update_defect'), params: 'project_id(required), defect_id(required), status(optional), comment(optional)', returns: '更新后的缺陷信息' },
+            { name: 'list_defects', description: t('prompts.toolDescriptions.list_defects'), params: t('prompts.toolParams.projectIdPagination'), returns: t('prompts.toolReturns.defectListAndTotal') },
+            { name: 'update_defect', description: t('prompts.toolDescriptions.update_defect'), params: t('prompts.toolParams.projectIdDefectIdUpdate'), returns: t('prompts.toolReturns.updatedDefectInfo') },
           ]
         },
         {
@@ -124,14 +125,14 @@ const ToolList = () => {
             { 
               name: 'create_ai_report', 
               description: t('prompts.toolDescriptions.create_ai_report'), 
-              params: 'project_id(required), report_type(required: R-用例审阅/A-品质分析/T-测试结果/O-其他), case_group_name(仅R类型必填), content(required, Markdown格式)', 
-              returns: '报告ID和详情，名称自动生成（如：用例集名_Review_时间戳）' 
+              params: t('prompts.toolParams.projectIdReportTypeContent'), 
+              returns: t('prompts.toolReturns.reportIdAndDetail') 
             },
             { 
               name: 'update_ai_report', 
               description: t('prompts.toolDescriptions.update_ai_report'), 
-              params: 'project_id(required), id或title(二选一用于定位报告), content(optional, Markdown), name(optional, 重命名)', 
-              returns: '更新后的报告信息' 
+              params: t('prompts.toolParams.projectIdIdOrTitleContent'), 
+              returns: t('prompts.toolReturns.updatedReportInfo') 
             },
           ]
         },
@@ -163,10 +164,10 @@ const ToolList = () => {
           {tool.description}
         </div>
         <div style={{ marginBottom: '6px', fontSize: '12px', color: '#f0f0f0' }}>
-          <strong>{t('prompts.toolParams')}：</strong> <span style={{ color: '#ffc53d' }}>{tool.params}</span>
+          <strong>{t('prompts.toolParamsLabel')}：</strong> <span style={{ color: '#ffc53d' }}>{tool.params}</span>
         </div>
         <div style={{ fontSize: '12px', color: '#f0f0f0' }}>
-          <strong>{t('prompts.toolReturns')}：</strong> <span style={{ color: '#95de64' }}>{tool.returns}</span>
+          <strong>{t('prompts.toolReturnsLabel')}：</strong> <span style={{ color: '#95de64' }}>{tool.returns}</span>
         </div>
       </div>
     );
@@ -315,7 +316,7 @@ const ToolList = () => {
                   <span>{category.icon}</span>
                   <span>{category.title}</span>
                   <Text type="secondary" style={{ fontSize: '12px', fontWeight: 400 }}>
-                    （{category.tools.length}个）
+                    （{category.tools.length}{t('prompts.toolCount_unit')}）
                   </Text>
                 </div>
               }

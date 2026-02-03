@@ -1218,8 +1218,8 @@ func (s *rawDocumentService) convertWordToMarkdown(doc *models.RawDocument, cont
 	docxFile := r.Editable()
 	textContent := docxFile.GetContent()
 
-	// 清理XML标签，只保留文本
-	textContent = s.cleanDocxContent(textContent)
+	// 清理XML标签，过滤删除线文本
+	textContent = s.cleanDocxContentWithStrikethrough(textContent)
 
 	if textContent == "" {
 		textContent = "(Word文档内容为空或无法提取)"
@@ -1228,24 +1228,60 @@ func (s *rawDocumentService) convertWordToMarkdown(doc *models.RawDocument, cont
 	return s.createDocumentMarkdown(doc, textContent, "Word文档(DOCX)")
 }
 
-// cleanDocxContent 清理DOCX内容中的XML标签
-func (s *rawDocumentService) cleanDocxContent(content string) string {
-	// 简单的XML标签清理
+// cleanDocxContentWithStrikethrough 清理DOCX内容中的XML标签，并过滤删除线文本
+// Word删除线格式在XML中的表示：
+// <w:r><w:rPr><w:strike/></w:rPr><w:t>删除线文本</w:t></w:r>
+func (s *rawDocumentService) cleanDocxContentWithStrikethrough(content string) string {
 	var result strings.Builder
-	inTag := false
+	decoder := xml.NewDecoder(strings.NewReader(content))
 
-	for _, r := range content {
-		if r == '<' {
-			inTag = true
-			continue
+	var inStrikethrough bool
+	var inText bool
+	var currentRunHasStrike bool
+
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			break
 		}
-		if r == '>' {
-			inTag = false
-			result.WriteRune(' ') // 用空格替代标签
-			continue
-		}
-		if !inTag {
-			result.WriteRune(r)
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			// <w:r> 开始一个新的文本运行
+			if t.Name.Local == "r" {
+				currentRunHasStrike = false
+			}
+			// <w:strike> 标记删除线
+			if t.Name.Local == "strike" {
+				currentRunHasStrike = true
+				inStrikethrough = true
+			}
+			// <w:t> 文本节点
+			if t.Name.Local == "t" {
+				inText = true
+			}
+		case xml.EndElement:
+			// </w:r> 结束文本运行
+			if t.Name.Local == "r" {
+				inStrikethrough = false
+			}
+			// </w:t> 结束文本节点
+			if t.Name.Local == "t" {
+				inText = false
+			}
+			// </w:p> 段落结束，添加换行
+			if t.Name.Local == "p" {
+				result.WriteString("\n")
+			}
+		case xml.CharData:
+			// 只保留非删除线的文本
+			if inText && !inStrikethrough && !currentRunHasStrike {
+				text := strings.TrimSpace(string(t))
+				if text != "" {
+					result.WriteString(text)
+					result.WriteString(" ")
+				}
+			}
 		}
 	}
 
@@ -1320,8 +1356,8 @@ func (s *rawDocumentService) convertExcelToMarkdown(doc *models.RawDocument, con
 			continue
 		}
 
-		// 转换为Markdown表格
-		markdownBuilder.WriteString(s.rowsToMarkdownTable(rows))
+		// 转换为Markdown表格，过滤删除线单元格
+		markdownBuilder.WriteString(s.rowsToMarkdownTableWithStrikethrough(f, sheetName, rows))
 		markdownBuilder.WriteString("\n")
 	}
 
@@ -1430,6 +1466,103 @@ func (s *rawDocumentService) rowsToMarkdownTable(rows [][]string) string {
 	return builder.String()
 }
 
+// rowsToMarkdownTableWithStrikethrough 将行数据转换为Markdown表格，过滤删除线单元格
+func (s *rawDocumentService) rowsToMarkdownTableWithStrikethrough(f *excelize.File, sheetName string, rows [][]string) string {
+	if len(rows) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+
+	// 找出最大列数
+	maxCols := 0
+	for _, row := range rows {
+		if len(row) > maxCols {
+			maxCols = len(row)
+		}
+	}
+
+	// 限制最大列数，避免表格过宽
+	if maxCols > 20 {
+		maxCols = 20
+	}
+
+	// 写入表头
+	builder.WriteString("|")
+	for i := 0; i < maxCols; i++ {
+		if i < len(rows[0]) {
+			// 检查单元格是否有删除线
+			cellName, _ := excelize.CoordinatesToCellName(i+1, 1)
+			if s.isCellStrikethrough(f, sheetName, cellName) {
+				builder.WriteString(" |")
+				continue
+			}
+			cell := strings.TrimSpace(rows[0][i])
+			cell = strings.ReplaceAll(cell, "|", "\\|")
+			builder.WriteString(fmt.Sprintf(" %s |", cell))
+		} else {
+			builder.WriteString(" |")
+		}
+	}
+	builder.WriteString("\n")
+
+	// 写入分隔行
+	builder.WriteString("|")
+	for i := 0; i < maxCols; i++ {
+		builder.WriteString(" --- |")
+	}
+	builder.WriteString("\n")
+
+	// 写入数据行（限制最大行数）
+	maxRows := 1000
+	if len(rows) > maxRows {
+		rows = rows[:maxRows]
+	}
+
+	for i := 1; i < len(rows); i++ {
+		builder.WriteString("|")
+		for j := 0; j < maxCols; j++ {
+			if j < len(rows[i]) {
+				// 检查单元格是否有删除线
+				cellName, _ := excelize.CoordinatesToCellName(j+1, i+1)
+				if s.isCellStrikethrough(f, sheetName, cellName) {
+					builder.WriteString(" |")
+					continue
+				}
+				cell := strings.TrimSpace(rows[i][j])
+				cell = strings.ReplaceAll(cell, "|", "\\|")
+				cell = strings.ReplaceAll(cell, "\n", " ")
+				builder.WriteString(fmt.Sprintf(" %s |", cell))
+			} else {
+				builder.WriteString(" |")
+			}
+		}
+		builder.WriteString("\n")
+	}
+
+	return builder.String()
+}
+
+// isCellStrikethrough 检查Excel单元格是否有删除线格式
+func (s *rawDocumentService) isCellStrikethrough(f *excelize.File, sheetName, cellName string) bool {
+	styleID, err := f.GetCellStyle(sheetName, cellName)
+	if err != nil {
+		return false
+	}
+
+	style, err := f.GetStyle(styleID)
+	if err != nil {
+		return false
+	}
+
+	// 检查字体是否有删除线
+	if style.Font != nil && style.Font.Strike {
+		return true
+	}
+
+	return false
+}
+
 // convertPowerPointToMarkdown 将PowerPoint文档转换为Markdown
 func (s *rawDocumentService) convertPowerPointToMarkdown(doc *models.RawDocument, content []byte) string {
 	ext := strings.ToLower(filepath.Ext(doc.OriginalFilename))
@@ -1514,13 +1647,16 @@ func (s *rawDocumentService) extractTextFromPPTX(content []byte) string {
 	return strings.TrimSpace(markdownBuilder.String())
 }
 
-// extractTextFromSlideXML 从slide的XML内容中提取文本
+// extractTextFromSlideXML 从slide的XML内容中提取文本，过滤删除线文本
+// PowerPoint删除线格式：<a:r><a:rPr strike="sngStrike"/><a:t>文本</a:t></a:r>
 func (s *rawDocumentService) extractTextFromSlideXML(xmlContent []byte) string {
 	var textParts []string
 
 	// 使用XML解码器提取所有<a:t>标签中的文本
 	decoder := xml.NewDecoder(bytes.NewReader(xmlContent))
 	var currentParagraph []string
+	var currentRunHasStrike bool
+	var inTextRun bool
 
 	for {
 		token, err := decoder.Token()
@@ -1534,14 +1670,39 @@ func (s *rawDocumentService) extractTextFromSlideXML(xmlContent []byte) string {
 			if t.Name.Local == "p" && t.Name.Space == "http://schemas.openxmlformats.org/drawingml/2006/main" {
 				currentParagraph = []string{}
 			}
+			// <a:r> 是文本运行开始
+			if t.Name.Local == "r" {
+				inTextRun = true
+				currentRunHasStrike = false
+			}
+			// <a:rPr> 是文本属性，检查删除线
+			if t.Name.Local == "rPr" && inTextRun {
+				for _, attr := range t.Attr {
+					if attr.Name.Local == "strike" {
+						// strike值可以是 "sngStrike"（单删除线）或 "dblStrike"（双删除线）
+						if attr.Value == "sngStrike" || attr.Value == "dblStrike" {
+							currentRunHasStrike = true
+						}
+					}
+				}
+			}
 			// <a:t> 是文本元素
-			if t.Name.Local == "t" {
+			if t.Name.Local == "t" && !currentRunHasStrike {
 				var text string
 				if err := decoder.DecodeElement(&text, &t); err == nil && strings.TrimSpace(text) != "" {
 					currentParagraph = append(currentParagraph, text)
 				}
+			} else if t.Name.Local == "t" && currentRunHasStrike {
+				// 跳过删除线文本，但仍需消费这个元素
+				var text string
+				decoder.DecodeElement(&text, &t)
 			}
 		case xml.EndElement:
+			// <a:r> 文本运行结束
+			if t.Name.Local == "r" {
+				inTextRun = false
+				currentRunHasStrike = false
+			}
 			// <a:p> 段落结束，合并该段落的文本
 			if t.Name.Local == "p" && t.Name.Space == "http://schemas.openxmlformats.org/drawingml/2006/main" {
 				if len(currentParagraph) > 0 {

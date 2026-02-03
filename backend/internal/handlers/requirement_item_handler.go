@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+	"webtest/internal/dto"
 	"webtest/internal/services"
 	"webtest/internal/utils"
 
@@ -54,8 +55,9 @@ func (h *requirementItemHandler) CreateItem(c *gin.Context) {
 	}
 
 	var req struct {
-		Name    string `json:"name" binding:"required"`
-		Content string `json:"content"`
+		Name    string           `json:"name" binding:"required"`
+		Content string           `json:"content"`
+		Chunks  []dto.ChunkInput `json:"chunks,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,6 +65,18 @@ func (h *requirementItemHandler) CreateItem(c *gin.Context) {
 		return
 	}
 
+	// 如果有chunks，使用带Chunk的创建方法
+	if len(req.Chunks) > 0 {
+		result, err := h.itemService.CreateItemWithChunks(projectID, req.Name, req.Content, req.Chunks)
+		if err != nil {
+			utils.ResponseError(c, 400, err.Error())
+			return
+		}
+		utils.ResponseSuccess(c, result)
+		return
+	}
+
+	// 向后兼容：无chunks时使用原有方法
 	item, err := h.itemService.CreateItem(projectID, req.Name, req.Content)
 	if err != nil {
 		utils.ResponseError(c, 400, err.Error())
@@ -90,8 +104,9 @@ func (h *requirementItemHandler) UpdateItem(c *gin.Context) {
 	}
 
 	var req struct {
-		Name    string `json:"name"`
-		Content string `json:"content"`
+		Name    string               `json:"name"`
+		Content string               `json:"content"`
+		Chunks  []dto.ChunkOperation `json:"chunks,omitempty"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -99,6 +114,25 @@ func (h *requirementItemHandler) UpdateItem(c *gin.Context) {
 		return
 	}
 
+	// 如果有chunks操作，使用带Chunk的更新方法
+	if len(req.Chunks) > 0 {
+		var namePtr, contentPtr *string
+		if req.Name != "" {
+			namePtr = &req.Name
+		}
+		if req.Content != "" {
+			contentPtr = &req.Content
+		}
+		result, err := h.itemService.UpdateItemWithChunks(uint(id), namePtr, contentPtr, req.Chunks)
+		if err != nil {
+			utils.ResponseError(c, 400, err.Error())
+			return
+		}
+		utils.ResponseSuccess(c, result)
+		return
+	}
+
+	// 向后兼容：无chunks时使用原有方法
 	item, err := h.itemService.UpdateItem(uint(id), req.Name, req.Content)
 	if err != nil {
 		utils.ResponseError(c, 400, err.Error())
@@ -133,17 +167,17 @@ func (h *requirementItemHandler) DeleteItem(c *gin.Context) {
 	utils.ResponseSuccess(c, gin.H{"message": "删除成功"})
 }
 
-// GetItem 获取单个需求条目
-// GET /api/requirement-items/:id
+// GetItem 获取单个需求条目（包含完整Chunks内容）
+// GET /api/v1/projects/:id/requirement-items/:itemId
 func (h *requirementItemHandler) GetItem(c *gin.Context) {
-	idStr := c.Param("id")
+	idStr := c.Param("itemId")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		utils.ResponseError(c, 400, "无效的需求条目ID")
 		return
 	}
 
-	item, err := h.itemService.GetItemByID(uint(id))
+	item, err := h.itemService.GetItemWithChunks(uint(id))
 	if err != nil {
 		utils.ResponseError(c, 404, err.Error())
 		return
@@ -152,7 +186,7 @@ func (h *requirementItemHandler) GetItem(c *gin.Context) {
 	utils.ResponseSuccess(c, item)
 }
 
-// ListItems 获取项目的所有需求条目
+// ListItems 获取项目的所有需求条目（包含Chunks摘要）
 // GET /api/projects/:id/requirement-items
 func (h *requirementItemHandler) ListItems(c *gin.Context) {
 	projectID, err := h.validateProjectAccess(c)
@@ -160,7 +194,7 @@ func (h *requirementItemHandler) ListItems(c *gin.Context) {
 		return
 	}
 
-	items, err := h.itemService.GetItemsByProjectID(projectID)
+	items, err := h.itemService.GetItemsWithChunksSummary(projectID)
 	if err != nil {
 		utils.ResponseError(c, 400, err.Error())
 		return
