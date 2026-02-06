@@ -75,6 +75,7 @@ const SubjectEditModal = ({
       addForm.resetFields();
       await refreshSubjects();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to create subject:', error);
       message.error(labels.createFailed);
@@ -93,6 +94,7 @@ const SubjectEditModal = ({
       setEditingId(null);
       await refreshSubjects();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to update subject:', error);
       message.error(labels.saveFailed);
@@ -109,6 +111,7 @@ const SubjectEditModal = ({
       message.success(labels.deleteSuccess);
       await refreshSubjects();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to delete subject:', error);
       message.error(labels.deleteFailed);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { message } from 'antd';
 import DefectListPage from './DefectListPage';
 import DefectCreatePage from './DefectCreatePage';
@@ -13,6 +14,7 @@ import './index.css';
  */
 const DefectManagement = ({ projectId, projectName }) => {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   // 视图状态: 'list' | 'create' | 'detail'
   const [view, setView] = useState('list');
   const [currentDefectId, setCurrentDefectId] = useState(null);
@@ -21,6 +23,19 @@ const DefectManagement = ({ projectId, projectName }) => {
   const [subjects, setSubjects] = useState([]);
   const [phases, setPhases] = useState([]);
   const [configLoading, setConfigLoading] = useState(false);
+
+  // 从URL参数读取defectId
+  useEffect(() => {
+    const defectId = searchParams.get('defectId');
+    if (defectId) {
+      setCurrentDefectId(defectId);
+      setView('detail');
+      // 清除URL参数，避免刷新时重复打开
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('defectId');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // 加载配置数据 (Subject/Phase)
   const loadConfig = useCallback(async () => {

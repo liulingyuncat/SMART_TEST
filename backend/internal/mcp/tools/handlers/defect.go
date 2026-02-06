@@ -102,25 +102,89 @@ func (h *UpdateDefectHandler) InputSchema() map[string]interface{} {
 				"type":        "integer",
 				"description": "单个缺陷ID（与defects参数二选一），可以是数字（如30）或格式化的字符串（如'000030'）",
 			},
-			"status": map[string]interface{}{
+			"title": map[string]interface{}{
 				"type":        "string",
-				"description": "缺陷状态（在使用id参数时可选）",
+				"description": "缺陷标题",
+			},
+			"subject": map[string]interface{}{
+				"type":        "string",
+				"description": "模块名称",
+			},
+			"description": map[string]interface{}{
+				"type":        "string",
+				"description": "详细描述，支持多行文本",
+			},
+			"recovery_method": map[string]interface{}{
+				"type":        "string",
+				"description": "恢复方法",
+			},
+			"priority": map[string]interface{}{
+				"type":        "string",
+				"description": "优先级(A/B/C/D)",
 			},
 			"severity": map[string]interface{}{
 				"type":        "string",
-				"description": "严重程度（在使用id参数时可选）",
+				"description": "严重程度(Critical/Major/Minor/Trivial)",
+			},
+			"type": map[string]interface{}{
+				"type":        "string",
+				"description": "缺陷类型(Functional/UI/UIInteraction/Compatibility/BrowserSpecific/Performance/Security/Environment/UserError)",
+			},
+			"frequency": map[string]interface{}{
+				"type":        "string",
+				"description": "复现频率",
+			},
+			"detected_version": map[string]interface{}{
+				"type":        "string",
+				"description": "发现版本",
+			},
+			"phase": map[string]interface{}{
+				"type":        "string",
+				"description": "测试阶段",
+			},
+			"case_id": map[string]interface{}{
+				"type":        "string",
+				"description": "关联的Case ID",
 			},
 			"assignee": map[string]interface{}{
 				"type":        "string",
-				"description": "指派人（在使用id参数时可选）",
+				"description": "指派人",
+			},
+			"detection_team": map[string]interface{}{
+				"type":        "string",
+				"description": "检测团队",
+			},
+			"location": map[string]interface{}{
+				"type":        "string",
+				"description": "位置",
+			},
+			"fix_version": map[string]interface{}{
+				"type":        "string",
+				"description": "修复版本",
+			},
+			"sqa_memo": map[string]interface{}{
+				"type":        "string",
+				"description": "SQA备注",
+			},
+			"component": map[string]interface{}{
+				"type":        "string",
+				"description": "组件",
+			},
+			"resolution": map[string]interface{}{
+				"type":        "string",
+				"description": "解决方案",
+			},
+			"models": map[string]interface{}{
+				"type":        "string",
+				"description": "机型",
+			},
+			"status": map[string]interface{}{
+				"type":        "string",
+				"description": "缺陷状态(New/InProgress/Confirmed/Resolved/Reopened/Rejected/Closed)",
 			},
 			"comment": map[string]interface{}{
 				"type":        "string",
 				"description": "备注（在使用id参数时可选）",
-			},
-			"description": map[string]interface{}{
-				"type":        "string",
-				"description": "详细描述，支持多行文本，包含实际结果、测试步骤、期望结果等信息（在使用id参数时可选）",
 			},
 			"defects": map[string]interface{}{
 				"type":        "array",
@@ -171,20 +235,69 @@ func (h *UpdateDefectHandler) executeSingleUpdate(ctx context.Context, projectID
 
 	body := make(map[string]interface{})
 
-	if status := GetOptionalString(args, "status", ""); status != "" {
-		body["status"] = status
+	// 所有可更新字段
+	if title := GetOptionalString(args, "title", ""); title != "" {
+		body["title"] = title
+	}
+	if subject := GetOptionalString(args, "subject", ""); subject != "" {
+		body["subject"] = subject
+	}
+	if description := GetOptionalString(args, "description", ""); description != "" {
+		body["description"] = description
+	}
+	if recoveryMethod := GetOptionalString(args, "recovery_method", ""); recoveryMethod != "" {
+		body["recovery_method"] = recoveryMethod
+	}
+	if priority := GetOptionalString(args, "priority", ""); priority != "" {
+		body["priority"] = priority
 	}
 	if severity := GetOptionalString(args, "severity", ""); severity != "" {
 		body["severity"] = severity
 	}
+	if defectType := GetOptionalString(args, "type", ""); defectType != "" {
+		body["type"] = defectType
+	}
+	if frequency := GetOptionalString(args, "frequency", ""); frequency != "" {
+		body["frequency"] = frequency
+	}
+	if detectedVersion := GetOptionalString(args, "detected_version", ""); detectedVersion != "" {
+		body["detected_version"] = detectedVersion
+	}
+	if phase := GetOptionalString(args, "phase", ""); phase != "" {
+		body["phase"] = phase
+	}
+	if caseID := GetOptionalString(args, "case_id", ""); caseID != "" {
+		body["case_id"] = caseID
+	}
 	if assignee := GetOptionalString(args, "assignee", ""); assignee != "" {
 		body["assignee"] = assignee
 	}
+	if detectionTeam := GetOptionalString(args, "detection_team", ""); detectionTeam != "" {
+		body["detection_team"] = detectionTeam
+	}
+	if location := GetOptionalString(args, "location", ""); location != "" {
+		body["location"] = location
+	}
+	if fixVersion := GetOptionalString(args, "fix_version", ""); fixVersion != "" {
+		body["fix_version"] = fixVersion
+	}
+	if sqaMemo := GetOptionalString(args, "sqa_memo", ""); sqaMemo != "" {
+		body["sqa_memo"] = sqaMemo
+	}
+	if component := GetOptionalString(args, "component", ""); component != "" {
+		body["component"] = component
+	}
+	if resolution := GetOptionalString(args, "resolution", ""); resolution != "" {
+		body["resolution"] = resolution
+	}
+	if models := GetOptionalString(args, "models", ""); models != "" {
+		body["models"] = models
+	}
+	if status := GetOptionalString(args, "status", ""); status != "" {
+		body["status"] = status
+	}
 	if comment := GetOptionalString(args, "comment", ""); comment != "" {
 		body["comment"] = comment
-	}
-	if description := GetOptionalString(args, "description", ""); description != "" {
-		body["description"] = description
 	}
 
 	if len(body) == 0 {

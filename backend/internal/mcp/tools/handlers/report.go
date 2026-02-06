@@ -99,9 +99,10 @@ func (h *CreateAIReportHandler) Execute(ctx context.Context, args map[string]int
 		title = fmt.Sprintf("Others_%s", timestamp)
 	}
 
-	// 首先创建报告（只设置名称）
+	// 首先创建报告（设置名称和类型）
 	createBody := map[string]interface{}{
-		"name": title, // 使用自动生成的标题
+		"name": title,      // 使用自动生成的标题
+		"type": reportType, // 设置报告类型以便前端正确分类
 	}
 
 	path := fmt.Sprintf("/api/v1/projects/%d/ai-reports", projectID)
@@ -157,7 +158,7 @@ func (h *UpdateAIReportHandler) Name() string {
 }
 
 func (h *UpdateAIReportHandler) Description() string {
-	return "更新AI测试报告，支持通过报告ID或报告名称（精确或模糊匹配）更新"
+	return "更新AI测试报告，支持通过报告ID或报告名称（精确或模糊匹配）更新或追加内容"
 }
 
 func (h *UpdateAIReportHandler) InputSchema() map[string]interface{} {
@@ -183,6 +184,10 @@ func (h *UpdateAIReportHandler) InputSchema() map[string]interface{} {
 			"name": map[string]interface{}{
 				"type":        "string",
 				"description": "报告新名称（可选，用于重命名报告）",
+			},
+			"append": map[string]interface{}{
+				"type":        "boolean",
+				"description": "是否追加内容（默认true为追加到现有内容后，false为替换内容）",
 			},
 		},
 		"required": []interface{}{"project_id"},
@@ -229,7 +234,40 @@ func (h *UpdateAIReportHandler) Execute(ctx context.Context, args map[string]int
 
 	// 处理内容更新
 	if content := GetOptionalString(args, "content", ""); content != "" {
-		body["content"] = content
+		// 检查是否需要追加内容（默认为追加模式）
+		appendMode := GetOptionalBool(args, "append", true)
+
+		if appendMode {
+			// 追加模式：先获取现有内容
+			getPath := fmt.Sprintf("/api/v1/projects/%d/ai-reports/%s", projectID, reportID)
+			getData, err := h.client.Get(ctx, getPath, nil)
+			if err != nil {
+				return tools.NewErrorResult(fmt.Sprintf("获取报告现有内容失败: %s", err.Error())), nil
+			}
+
+			// 解析现有报告内容
+			var getResponse struct {
+				Data struct {
+					Content string `json:"content"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(getData, &getResponse); err != nil {
+				return tools.NewErrorResult(fmt.Sprintf("解析报告内容失败: %s", err.Error())), nil
+			}
+
+			// 拼接内容：现有内容 + 新内容
+			existingContent := getResponse.Data.Content
+			if existingContent != "" {
+				// 如果现有内容不为空，添加换行符作为分隔
+				body["content"] = existingContent + "\n\n" + content
+			} else {
+				// 如果现有内容为空，直接使用新内容
+				body["content"] = content
+			}
+		} else {
+			// 替换模式：直接使用新内容
+			body["content"] = content
+		}
 	}
 
 	if len(body) == 0 {

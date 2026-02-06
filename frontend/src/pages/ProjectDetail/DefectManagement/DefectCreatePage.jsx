@@ -5,10 +5,15 @@ import { SaveOutlined, UploadOutlined } from '@ant-design/icons';
 import {
   DEFECT_STATUS,
   DEFECT_STATUS_COLORS,
+  DEFECT_STATUS_I18N_KEYS,
   DEFECT_PRIORITY,
   DEFECT_PRIORITY_COLORS,
   DEFECT_SEVERITY,
   DEFECT_SEVERITY_COLORS,
+  DEFECT_SEVERITY_I18N_KEYS,
+  DEFECT_TYPE,
+  DEFECT_TYPE_COLORS,
+  DEFECT_TYPE_I18N_KEYS,
 } from '../../../constants/defect';
 import { createDefect, uploadDefectAttachment } from '../../../api/defect';
 
@@ -62,14 +67,23 @@ const DefectCreatePage = ({
     recoveryMethodPlaceholder: t('defect.recoveryMethodPlaceholder', '请输入恢复方法'),
     priority: t('defect.priority', 'Priority'),
     severity: t('defect.severity', 'Severity'),
+    type: t('defect.type', 'Type'),
     frequency: t('defect.frequency', 'Frequency(%)'),
     frequencyPlaceholder: t('defect.frequencyPlaceholder', '请输入复现频率百分比'),
-    detectedInRelease: t('defect.detectedInRelease', 'Detected in Release'),
-    detectedInReleasePlaceholder: t('defect.detectedInReleasePlaceholder', '请输入发现版本'),
+    detectedVersion: t('defect.detectedVersion', 'Detected Version'),
+    detectedVersionPlaceholder: t('defect.detectedVersionPlaceholder', '请输入发现版本'),
     caseId: t('defect.caseId', 'Case ID'),
     caseIdPlaceholder: t('defect.caseIdPlaceholder', '请输入关联的Case ID'),
     phase: t('defect.phase', 'Phase'),
     status: t('defect.status', 'Status'),
+    recoveryRank: t('defect.recoveryRank', 'Recovery Rank'),
+    detectionTeam: t('defect.detectionTeam', 'Detection Team'),
+    location: t('defect.location', 'Location'),
+    fixVersion: t('defect.fixVersion', 'Fix Version'),
+    component: t('defect.component', 'Component'),
+    resolution: t('defect.resolution', 'Resolution'),
+    models: t('defect.models', 'Models'),
+    sqaMemo: t('defect.sqaMemo', 'SQA MEMO'),
     attachments: t('defect.attachments', 'Attachments'),
     upload: t('common.upload', '上传'),
     pleaseSelect: t('common.pleaseSelect', '请选择'),
@@ -81,10 +95,13 @@ const DefectCreatePage = ({
 
   // 状态选项
   const statusOptions = useMemo(() => [
-    { value: DEFECT_STATUS.NEW, label: t('defect.statusNew', '新建'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.NEW] },
-    { value: DEFECT_STATUS.ACTIVE, label: t('defect.statusActive', '处理中'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.ACTIVE] },
-    { value: DEFECT_STATUS.RESOLVED, label: t('defect.statusResolved', '已解决'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.RESOLVED] },
-    { value: DEFECT_STATUS.CLOSED, label: t('defect.statusClosed', '已关闭'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.CLOSED] },
+    { value: DEFECT_STATUS.NEW, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.NEW], '新建'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.NEW] },
+    { value: DEFECT_STATUS.IN_PROGRESS, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.IN_PROGRESS], '处理中'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.IN_PROGRESS] },
+    { value: DEFECT_STATUS.CONFIRMED, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.CONFIRMED], '已确认'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.CONFIRMED] },
+    { value: DEFECT_STATUS.RESOLVED, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.RESOLVED], '已解决'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.RESOLVED] },
+    { value: DEFECT_STATUS.REOPENED, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.REOPENED], '重新打开'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.REOPENED] },
+    { value: DEFECT_STATUS.REJECTED, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.REJECTED], '已驳回'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.REJECTED] },
+    { value: DEFECT_STATUS.CLOSED, label: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.CLOSED], '已关闭'), color: DEFECT_STATUS_COLORS[DEFECT_STATUS.CLOSED] },
   ], [t, i18n.language]);
 
   // 优先级选项（按需求文档FR-03：A/B/C/D）
@@ -95,13 +112,20 @@ const DefectCreatePage = ({
     { value: DEFECT_PRIORITY.D, label: t('defect.priorityD', 'D'), color: DEFECT_PRIORITY_COLORS[DEFECT_PRIORITY.D] },
   ], [t, i18n.language]);
 
-  // 严重程度选项（按需求文档FR-03：A/B/C/D）
+  // 严重程度选项
   const severityOptions = useMemo(() => [
-    { value: DEFECT_SEVERITY.A, label: t('defect.severityA', 'A'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.A] },
-    { value: DEFECT_SEVERITY.B, label: t('defect.severityB', 'B'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.B] },
-    { value: DEFECT_SEVERITY.C, label: t('defect.severityC', 'C'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.C] },
-    { value: DEFECT_SEVERITY.D, label: t('defect.severityD', 'D'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.D] },
+    { value: DEFECT_SEVERITY.CRITICAL, label: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.CRITICAL], '致命'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.CRITICAL] },
+    { value: DEFECT_SEVERITY.MAJOR, label: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.MAJOR], '严重'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.MAJOR] },
+    { value: DEFECT_SEVERITY.MINOR, label: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.MINOR], '一般'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.MINOR] },
+    { value: DEFECT_SEVERITY.TRIVIAL, label: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.TRIVIAL], '轻微'), color: DEFECT_SEVERITY_COLORS[DEFECT_SEVERITY.TRIVIAL] },
   ], [t, i18n.language]);
+
+  // 类型选项
+  const typeOptions = useMemo(() => Object.values(DEFECT_TYPE).map((value) => ({
+    value,
+    label: t(DEFECT_TYPE_I18N_KEYS[value], value),
+    color: DEFECT_TYPE_COLORS[value],
+  })), [t, i18n.language]);
 
   // 提交表单
   const handleSubmit = async (values) => {
@@ -181,47 +205,33 @@ const DefectCreatePage = ({
           initialValues={{
             status: DEFECT_STATUS.NEW,
             priority: DEFECT_PRIORITY.B,
-            severity: DEFECT_SEVERITY.B,
+            severity: DEFECT_SEVERITY.MAJOR,
             description: getDefaultDescriptionTemplate(),
           }}
         >
-          <Row gutter={24}>
-            {/* 左侧: 基本信息 */}
-            <Col span={16}>
-              {/* Title - 必填 */}
-              <Form.Item
-                name="title"
-                label={labels.title}
-                rules={[{ required: true, message: labels.required }]}
-              >
-                <Input placeholder={labels.titlePlaceholder} maxLength={200} />
-              </Form.Item>
+          {/* 标题 */}
+          <Form.Item
+            name="title"
+            label={labels.title}
+            rules={[{ required: true, message: labels.required }]}
+          >
+            <Input placeholder={labels.titlePlaceholder} maxLength={200} />
+          </Form.Item>
 
-              {/* Subject - 可选 */}
-              <Form.Item name="subject_id" label={labels.subject}>
-                <Select allowClear placeholder={labels.pleaseSelect}>
-                  {subjects?.map((subject) => (
-                    <Option key={subject.id} value={subject.id}>
-                      {subject.name}
+          {/* 状态信息行 */}
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="status" label={labels.status}>
+                <Select>
+                  {statusOptions.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      <span style={{ color: opt.color }}>{opt.label}</span>
                     </Option>
                   ))}
                 </Select>
               </Form.Item>
-
-              {/* Description - 可选，带默认模板 */}
-              <Form.Item name="description" label={labels.description}>
-                <TextArea rows={12} placeholder={labels.descriptionPlaceholder} />
-              </Form.Item>
-
-              {/* Recovery Method - 可选 */}
-              <Form.Item name="recovery_method" label={labels.recoveryMethod}>
-                <Input placeholder={labels.recoveryMethodPlaceholder} maxLength={500} />
-              </Form.Item>
             </Col>
-
-            {/* 右侧: 属性信息 */}
-            <Col span={8}>
-              {/* Priority - 必填，默认B */}
+            <Col span={6}>
               <Form.Item 
                 name="priority" 
                 label={labels.priority}
@@ -235,8 +245,8 @@ const DefectCreatePage = ({
                   ))}
                 </Select>
               </Form.Item>
-
-              {/* Severity - 必填，默认B */}
+            </Col>
+            <Col span={6}>
               <Form.Item 
                 name="severity" 
                 label={labels.severity}
@@ -250,8 +260,28 @@ const DefectCreatePage = ({
                   ))}
                 </Select>
               </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="recovery_method" label={labels.recoveryMethod}>
+                <Input placeholder={labels.recoveryMethodPlaceholder} maxLength={500} />
+              </Form.Item>
+            </Col>
+          </Row>
 
-              {/* Frequency(%) - 必填 */}
+          {/* 基本信息行 */}
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="type" label={labels.type}>
+                <Select allowClear placeholder={labels.pleaseSelect}>
+                  {typeOptions.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item 
                 name="frequency" 
                 label={labels.frequency}
@@ -259,17 +289,37 @@ const DefectCreatePage = ({
               >
                 <Input placeholder={labels.frequencyPlaceholder} maxLength={10} />
               </Form.Item>
-
-              {/* Detected in Release - 必填 */}
+            </Col>
+            <Col span={6}>
               <Form.Item 
-                name="detected_in_release" 
-                label={labels.detectedInRelease}
+                name="detected_version" 
+                label={labels.detectedVersion}
                 rules={[{ required: true, message: labels.required }]}
               >
-                <Input placeholder={labels.detectedInReleasePlaceholder} maxLength={50} />
+                <Input placeholder={labels.detectedVersionPlaceholder} maxLength={50} />
               </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="case_id" label={labels.caseId}>
+                <Input placeholder={labels.caseIdPlaceholder} maxLength={50} />
+              </Form.Item>
+            </Col>
+          </Row>
 
-              {/* Phase - 可选 */}
+          {/* 扩展信息行 */}
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="subject_id" label={labels.subject}>
+                <Select allowClear placeholder={labels.pleaseSelect}>
+                  {subjects?.map((subject) => (
+                    <Option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
               <Form.Item name="phase_id" label={labels.phase}>
                 <Select allowClear placeholder={labels.pleaseSelect}>
                   {phases?.map((phase) => (
@@ -279,26 +329,65 @@ const DefectCreatePage = ({
                   ))}
                 </Select>
               </Form.Item>
-
-              {/* Case ID - 可选 */}
-              <Form.Item name="case_id" label={labels.caseId}>
-                <Input placeholder={labels.caseIdPlaceholder} maxLength={50} />
-              </Form.Item>
-
-              {/* Attachments - 可选，最大100MB */}
-              <Form.Item label={labels.attachments} extra={labels.maxFileSize}>
-                <Upload
-                  fileList={fileList}
-                  beforeUpload={handleBeforeUpload}
-                  onRemove={handleRemoveFile}
-                  multiple
-                  maxCount={10}
-                >
-                  <Button icon={<UploadOutlined />}>{labels.upload}</Button>
-                </Upload>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="detection_team" label={labels.detectionTeam}>
+                <Input maxLength={100} />
               </Form.Item>
             </Col>
           </Row>
+
+          {/* 更多信息行 */}
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="location" label={labels.location}>
+                <Input maxLength={200} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="fix_version" label={labels.fixVersion}>
+                <Input maxLength={50} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="component" label={labels.component}>
+                <Input maxLength={100} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="models" label={labels.models}>
+                <Input maxLength={200} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* 描述 */}
+          <Form.Item name="description" label={labels.description}>
+            <TextArea rows={8} placeholder={labels.descriptionPlaceholder} />
+          </Form.Item>
+
+          {/* SQA MEMO */}
+          <Form.Item name="sqa_memo" label={labels.sqaMemo}>
+            <TextArea rows={3} />
+          </Form.Item>
+
+          {/* Resolution */}
+          <Form.Item name="resolution" label={labels.resolution}>
+            <TextArea rows={3} />
+          </Form.Item>
+
+          {/* 附件 */}
+          <Form.Item label={labels.attachments} extra={labels.maxFileSize}>
+            <Upload
+              fileList={fileList}
+              beforeUpload={handleBeforeUpload}
+              onRemove={handleRemoveFile}
+              multiple
+              maxCount={10}
+            >
+              <Button icon={<UploadOutlined />}>{labels.upload}</Button>
+            </Upload>
+          </Form.Item>
         </Form>
       </Card>
     </div>

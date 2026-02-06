@@ -304,6 +304,7 @@ const DefectList = ({ projectId, subjects, phases }) => {
       key: 'reporter',
       width: 100,
       ellipsis: true,
+      render: (text, record) => record.detected_by || text || '-',
     },
     {
       title: t('defect.createdAt'),
@@ -352,18 +353,6 @@ const DefectList = ({ projectId, subjects, phases }) => {
     </Menu>
   ), []);
 
-  // 下载菜单
-  const downloadMenu = useMemo(() => (
-    <Menu>
-      <Menu.Item key="csv" onClick={() => handleConfirmDownloadTemplate('csv')}>
-        CSV
-      </Menu.Item>
-      <Menu.Item key="xlsx" onClick={() => handleConfirmDownloadTemplate('xlsx')}>
-        XLSX
-      </Menu.Item>
-    </Menu>
-  ), []);
-
   return (
     <div className="defect-list-container">
       {/* 工具栏 */}
@@ -373,7 +362,7 @@ const DefectList = ({ projectId, subjects, phases }) => {
             {t('defect.create')}
           </Button>
           <Upload
-            accept=".csv,.xlsx"
+            accept=".xlsx"
             showUploadList={false}
             beforeUpload={handleImport}
           >
@@ -382,9 +371,12 @@ const DefectList = ({ projectId, subjects, phases }) => {
           <Dropdown overlay={exportMenu} placement="bottomRight">
             <Button icon={<ExportOutlined />}>{t('defect.export')}</Button>
           </Dropdown>
-          <Dropdown overlay={downloadMenu} placement="bottomRight">
-            <Button icon={<DownloadOutlined />}>{t('defect.downloadTemplate')}</Button>
-          </Dropdown>
+          <Button 
+            icon={<DownloadOutlined />} 
+            onClick={() => handleDownloadTemplate('xlsx')}
+          >
+            {t('defect.downloadTemplate')}
+          </Button>
         </Space>
         <Button icon={<ReloadOutlined />} onClick={loadDefects}>
           {t('common.refresh') || '刷新'}

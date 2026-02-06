@@ -277,13 +277,15 @@ const DefectListPage = ({
 
   // Subject配置更新
   const handleSubjectUpdate = () => {
-    setSubjectModalVisible(false);
+    // 不再自动关闭对话框，由用户手动关闭
+    // setSubjectModalVisible(false);
     onConfigUpdate?.();
   };
 
   // Phase配置更新
   const handlePhaseUpdate = () => {
-    setPhaseModalVisible(false);
+    // 不再自动关闭对话框，由用户手动关闭
+    // setPhaseModalVisible(false);
     onConfigUpdate?.();
   };
 
@@ -309,18 +311,6 @@ const DefectListPage = ({
         CSV
       </Menu.Item>
       <Menu.Item key="xlsx" onClick={() => handleConfirmExport('xlsx')}>
-        XLSX
-      </Menu.Item>
-    </Menu>
-  ), []);
-
-  // 下载菜单
-  const downloadMenu = useMemo(() => (
-    <Menu>
-      <Menu.Item key="csv" onClick={() => handleConfirmDownloadTemplate('csv')}>
-        CSV
-      </Menu.Item>
-      <Menu.Item key="xlsx" onClick={() => handleConfirmDownloadTemplate('xlsx')}>
         XLSX
       </Menu.Item>
     </Menu>
@@ -394,7 +384,7 @@ const DefectListPage = ({
       
       {/* 提出人列 */}
       <div style={{ width: '100px', flexShrink: 0, color: '#666', fontSize: 14 }}>
-        {defect.created_by_user?.username || '-'}
+        {defect.detected_by || defect.created_by_user?.username || '-'}
       </div>
       
       {/* Operation */}
@@ -426,7 +416,7 @@ const DefectListPage = ({
             </Button>
 
             <Upload
-              accept=".csv,.xlsx"
+              accept=".xlsx"
               showUploadList={false}
               beforeUpload={(file) => {
                 handleImport(file);
@@ -440,9 +430,12 @@ const DefectListPage = ({
               <Button icon={<ExportOutlined />}>{labels.export}</Button>
             </Dropdown>
 
-            <Dropdown overlay={downloadMenu} placement="bottomRight">
-              <Button icon={<DownloadOutlined />}>{labels.downloadTemplate}</Button>
-            </Dropdown>
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={() => handleDownloadTemplate('xlsx')}
+            >
+              {labels.downloadTemplate}
+            </Button>
 
             <Dropdown overlay={configMenu} placement="bottomRight">
               <Button icon={<SettingOutlined />}>{labels.settings}</Button>

@@ -187,7 +187,7 @@ func main() {
 	)
 
 	// 缺陷管理相关Service
-	defectService := services.NewDefectService(defectRepo)
+	defectService := services.NewDefectService(defectRepo, userRepo)
 	defectAttachmentService := services.NewDefectAttachmentService(defectAttachmentRepo, "storage")
 	defectConfigService := services.NewDefectConfigService(defectSubjectRepo, defectPhaseRepo)
 	defectCommentService := services.NewDefectCommentService(defectCommentRepo, defectRepo)

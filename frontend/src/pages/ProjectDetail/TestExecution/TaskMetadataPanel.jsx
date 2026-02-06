@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Form, Input, Select, DatePicker, Button, Space, Empty, message, Row, Col, Modal, Table, Radio, Progress, Tooltip, Tag } from 'antd';
-import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, SettingOutlined, RightOutlined, LeftOutlined } from '@ant-design/icons';
+import { FileSearchOutlined, DownloadOutlined, SaveOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, SettingOutlined, RightOutlined, LeftOutlined, BugOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
 import { updateExecutionTask, executeExecutionTask, executeSingleCase } from '../../../api/executionTask';
 import { saveExecutionCaseResults, getExecutionCaseResults } from '../../../api/executionCaseResult';
 import { getWebCaseGroups, getApiCaseGroupsFromTable } from '../../../api/autoCase';
+import { createDefect } from '../../../api/defect';
 import { getTaskVariables, saveTaskVariables } from '../../../api/variable';
 import CaseSelectionPanel from './CaseSelectionPanel';
 import CaseDetailModal from './CaseDetailModal';
@@ -39,6 +41,9 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
   // 单条用例执行状态
   const [executingSingleCase, setExecutingSingleCase] = useState(null); // 正在执行的用例ID
+
+  // 提Bug状态
+  const [submittingBugCase, setSubmittingBugCase] = useState(null); // 正在提交Bug的用例ID
 
   // 执行完成对话框状态
   const [completionModalVisible, setCompletionModalVisible] = useState(false);
@@ -575,6 +580,120 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     }
   };
 
+  // ========== 提Bug功能相关工具函数 ==========
+
+  // 提取Remark第一句用于缺陷标题
+  const extractFirstSentence = (text) => {
+    if (!text || text.trim() === '') {
+      return '执行失败';
+    }
+    // 使用正则匹配第一句：以句号、感叹号、问号、换行符分隔
+    const match = text.match(/^[^。！？\n]+/);
+    if (match && match[0]) {
+      const sentence = match[0].trim();
+      // 限制最大50字符
+      return sentence.length > 50 ? sentence.substring(0, 50) + '...' : sentence;
+    }
+    // 无匹配时取前50字符
+    return text.length > 50 ? text.substring(0, 50) + '...' : text;
+  };
+
+  // 根据语言后缀获取多语言字段值
+  const getFieldByLanguage = (record, fieldName, lang) => {
+    if (!record) return '';
+    // 标准化语言代码
+    const langCode = lang === 'all' ? 'cn' : lang;
+    // 优先使用指定语言后缀
+    const withLang = record[`${fieldName}_${langCode}`];
+    if (withLang) return withLang;
+    // 回退到中文后缀
+    const withCn = record[`${fieldName}_cn`];
+    if (withCn) return withCn;
+    // 再回退到无后缀
+    const noSuffix = record[fieldName];
+    if (noSuffix) return noSuffix;
+    return '';
+  };
+
+  // 组装缺陷数据
+  const buildDefectData = (record, taskData, lang) => {
+    const executionType = taskData?.execution_type;
+    const firstSentence = extractFirstSentence(record.remark);
+    const langCode = lang === 'all' ? 'cn' : lang;
+
+    // 公共默认值
+    const commonFields = {
+      priority: 'B',
+      severity: 'Major',
+      type: 'Functional',
+      frequency: '100%',
+      detected_version: taskData?.test_version || '',
+      models: taskData?.test_env || '',
+    };
+
+    if (executionType === 'api') {
+      // API类型
+      const url = record.url || '';
+      const method = record.method || '';
+      const response = record.response || '';
+      const title = `${url}_${method}_${response}, ${firstSentence}`;
+      const caseId = `${taskData?.case_group_name || ''}_No.${record.no || ''}`;
+      const subject = record.screen_en || record.screen || '';
+      const description = `[Actual result]\n${url}_${method}_${response}\n${record.remark || ''}\n\n[Expected result]\n${record.expected_result || record.response || ''}`;
+
+      return {
+        title,
+        case_id: caseId,
+        subject,
+        description,
+        detection_team: 'Auto',
+        ...commonFields,
+      };
+    } else if (executionType === 'automation') {
+      // Web类型
+      const screenName = getFieldByLanguage(record, 'screen', langCode);
+      const functionName = getFieldByLanguage(record, 'function', langCode);
+      const remarkText = record.remark || '';
+      const title = extractFirstSentence(remarkText);
+      const caseId = `${taskData?.case_group_name || ''}_${record.case_num || ''}`;
+      const subject = screenName;
+      const precondition = getFieldByLanguage(record, 'precondition', langCode);
+      const testSteps = getFieldByLanguage(record, 'test_steps', langCode);
+      const expect = getFieldByLanguage(record, 'expected_result', langCode);
+      const description = `[Actual result]\nScreen: ${screenName}\nFunction: ${functionName}\nRemark: ${remarkText}\n\n[Test Steps]\nPrecondition: ${precondition}\nTest Steps: ${testSteps}\n\n[Expected result]\n${expect}`;
+
+      return {
+        title,
+        case_id: caseId,
+        subject,
+        description,
+        detection_team: 'Auto',
+        ...commonFields,
+      };
+    } else {
+      // Manual类型
+      const minorFunction = getFieldByLanguage(record, 'minor_function', langCode);
+      const title = `${minorFunction}, ${firstSentence}`;
+      const caseId = `${taskData?.case_group_name || ''}_${record.case_num || ''}`;
+      const subject = getFieldByLanguage(record, 'major_function', langCode);
+      const majorFunction = getFieldByLanguage(record, 'major_function', langCode);
+      const middleFunction = getFieldByLanguage(record, 'middle_function', langCode);
+      const precondition = getFieldByLanguage(record, 'precondition', langCode);
+      const testSteps = getFieldByLanguage(record, 'test_steps', langCode);
+      const expect = getFieldByLanguage(record, 'expected_result', langCode);
+      const description = `[Actual result]\n大功能: ${majorFunction}\n中功能: ${middleFunction}\n小功能: ${minorFunction}\n${record.remark || ''}\n\n[Test Steps]\nPrecondition: ${precondition}\nTest Steps: ${testSteps}\n\n[Expected result]\n${expect}`;
+
+      return {
+        title,
+        case_id: caseId,
+        subject,
+        description,
+        // Manual类型不设置detection_team
+        ...commonFields,
+      };
+    }
+  };
+
   // 获取语言后缀 - 使用displayLanguage作为当前显示语言
   // 优先级：displayLanguage状态 > filterConditions > task.display_language > 默认cn
   const getLanguageSuffix = () => {
@@ -812,6 +931,138 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     message.success('下载成功');
   };
 
+  // BugID单元格组件
+  const BugIdCell = ({ value, record, projectId, onSave }) => {
+    const navigate = useNavigate();
+    const [editing, setEditing] = useState(false);
+    const [tempValue, setTempValue] = useState(value || '');
+
+    if (editing) {
+      return (
+        <Input
+          value={tempValue}
+          size="small"
+          placeholder="Bug ID"
+          autoFocus
+          onChange={(e) => setTempValue(e.target.value)}
+          onBlur={() => {
+            setEditing(false);
+            if (tempValue !== value) {
+              onSave(record.case_id, 'bug_id', tempValue);
+            }
+          }}
+          onPressEnter={(e) => {
+            e.target.blur();
+          }}
+        />
+      );
+    }
+
+    if (value) {
+      return (
+        <Space size="small">
+          <a
+            onClick={() => {
+              // 跳转到缺陷管理标签页，使用tab参数
+              navigate(`/projects/${projectId}?tab=bug&defectId=${value}`);
+            }}
+            style={{ color: '#1890ff', cursor: 'pointer' }}
+          >
+            {value}
+          </a>
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => setEditing(true)}
+            style={{ padding: 0, height: 'auto' }}
+          />
+        </Space>
+      );
+    }
+
+    return (
+      <Button
+        type="link"
+        size="small"
+        icon={<EditOutlined />}
+        onClick={() => setEditing(true)}
+        style={{ padding: 0 }}
+      >
+        {t('testExecution.bugId.edit')}
+      </Button>
+    );
+  };
+
+  // Remark单元格组件
+  const RemarkCell = ({ value, record, isManual, onSave }) => {
+    const [editing, setEditing] = useState(false);
+    const [tempValue, setTempValue] = useState(value || '');
+
+    if (editing) {
+      if (isManual) {
+        return (
+          <Input.TextArea
+            value={tempValue}
+            size="small"
+            placeholder="备注"
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            style={{ resize: 'vertical' }}
+            autoFocus
+            onChange={(e) => setTempValue(e.target.value)}
+            onBlur={() => {
+              setEditing(false);
+              if (tempValue !== value) {
+                onSave(record.case_id, 'remark', tempValue);
+              }
+            }}
+          />
+        );
+      }
+      return (
+        <Input
+          value={tempValue}
+          size="small"
+          placeholder="备注"
+          autoFocus
+          onChange={(e) => setTempValue(e.target.value)}
+          onBlur={() => {
+            setEditing(false);
+            if (tempValue !== value) {
+              onSave(record.case_id, 'remark', tempValue);
+            }
+          }}
+          onPressEnter={(e) => {
+            e.target.blur();
+          }}
+        />
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '4px' }}>
+        <Tooltip title={value || t('testExecution.remark.empty')} placement="topLeft">
+          <div style={{ 
+            flex: 1, 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis', 
+            whiteSpace: 'nowrap',
+            minWidth: 0
+          }}>
+            {value || <span style={{ color: '#999' }}>{t('testExecution.remark.empty')}</span>}
+          </div>
+        </Tooltip>
+        <Button
+          type="text"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => setEditing(true)}
+          style={{ padding: 0, height: 'auto', flexShrink: 0 }}
+        />
+      </div>
+    );
+  };
+
   // 生成表格列配置
   const getCaseTableColumns = () => {
     const langSuffix = getLanguageSuffix();
@@ -823,7 +1074,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     const expandColumn = {
       title: '',
       key: 'expand_action',
-      width: 100, // 所有类型都显示执行按钮，需要更宽
+      width: 130, // 包含查看详情、执行、提Bug三个按钮
       render: (_, record) => (
         <Space size="small">
           <Button
@@ -843,6 +1094,16 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             disabled={isManual || !record.script_code || (executingSingleCase !== null && executingSingleCase !== record.id)}
             style={{ color: isManual ? '#d9d9d9' : '#52c41a' }}
             title={isManual ? t('testExecution.execute.manualDisabled') : t('testExecution.execute.singleCase')}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<BugOutlined />}
+            onClick={() => handleSubmitBug(record)}
+            loading={submittingBugCase === record.id}
+            disabled={record.test_result !== 'NG' || (submittingBugCase !== null && submittingBugCase !== record.id)}
+            style={{ color: record.test_result === 'NG' ? '#faad14' : '#d9d9d9' }}
+            title={record.test_result !== 'NG' ? t('testExecution.submitBug.disabledNotNG') : t('testExecution.submitBug.title')}
           />
         </Space>
       ),
@@ -916,20 +1177,13 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       title: 'BugID',
       dataIndex: 'bug_id',
       key: 'bug_id',
-      width: 120,
+      width: 150,
       render: (value, record) => (
-        <Input
-          defaultValue={value || ''}
-          size="small"
-          placeholder="Bug ID"
-          onBlur={(e) => {
-            if (e.target.value !== value) {
-              handleCaseFieldChange(record.case_id, 'bug_id', e.target.value);
-            }
-          }}
-          onPressEnter={(e) => {
-            e.target.blur();
-          }}
+        <BugIdCell
+          value={value}
+          record={record}
+          projectId={projectId}
+          onSave={handleCaseFieldChange}
         />
       ),
     };
@@ -939,41 +1193,15 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       title: 'Remark',
       dataIndex: 'remark',
       key: 'remark',
-      width: isManual ? 200 : 150,
-      render: (value, record) => {
-        // Manual类型使用多行TextArea，其他类型使用单行Input
-        if (isManual) {
-          return (
-            <Input.TextArea
-              defaultValue={value || ''}
-              size="small"
-              placeholder="备注"
-              autoSize={{ minRows: 2, maxRows: 4 }}
-              style={{ resize: 'vertical' }}
-              onBlur={(e) => {
-                if (e.target.value !== value) {
-                  handleCaseFieldChange(record.case_id, 'remark', e.target.value);
-                }
-              }}
-            />
-          );
-        }
-        return (
-          <Input
-            defaultValue={value || ''}
-            size="small"
-            placeholder="备注"
-            onBlur={(e) => {
-              if (e.target.value !== value) {
-                handleCaseFieldChange(record.case_id, 'remark', e.target.value);
-              }
-            }}
-            onPressEnter={(e) => {
-              e.target.blur();
-            }}
-          />
-        );
-      },
+      width: isManual ? 220 : 180,
+      render: (value, record) => (
+        <RemarkCell
+          value={value}
+          record={record}
+          isManual={isManual}
+          onSave={handleCaseFieldChange}
+        />
+      ),
     };
 
     // 根据展开状态组合末尾列
@@ -1366,6 +1594,49 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
     } finally {
       setExecuting(false);
       setExecutingSingleCase(null);
+    }
+  };
+
+  // 提交Bug处理函数
+  const handleSubmitBug = async (record) => {
+    console.log('🐛 [TaskMetadataPanel] handleSubmitBug called, case_id:', record.case_id);
+
+    setSubmittingBugCase(record.id);
+
+    try {
+      // 获取当前语言
+      const currentLang = displayLanguage || task?.display_language || 'cn';
+
+      // 组装缺陷数据
+      const defectData = buildDefectData(record, task, currentLang);
+      console.log('🐛 [TaskMetadataPanel] buildDefectData result:', defectData);
+
+      // 调用创建缺陷API
+      const response = await createDefect(projectId, defectData);
+      const defectId = response.defect_id;
+      console.log('✅ [TaskMetadataPanel] Bug created:', defectId);
+
+      // 更新本地表格数据
+      setCaseTableData(prev => prev.map(c =>
+        c.case_id === record.case_id ? { ...c, bug_id: defectId } : c
+      ));
+
+      // 持久化保存bug_id
+      await autoSaveCaseResult(record.case_id, 'bug_id', defectId);
+
+      // 自动展开BugID列
+      setShowExtraColumns(true);
+
+      // 刷新用例结果数据以显示BugID
+      await loadSavedCaseResults();
+
+      // 显示成功消息
+      message.success(t('testExecution.submitBug.success') + ': ' + defectId);
+    } catch (error) {
+      console.error('❌ [TaskMetadataPanel] Create bug failed:', error.message);
+      message.error(t('testExecution.submitBug.failed') + ': ' + (error.message || error));
+    } finally {
+      setSubmittingBugCase(null);
     }
   };
 

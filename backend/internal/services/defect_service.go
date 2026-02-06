@@ -38,12 +38,16 @@ type DefectService interface {
 }
 
 type defectService struct {
-	repo repositories.DefectRepository
+	repo     repositories.DefectRepository
+	userRepo repositories.UserRepository
 }
 
 // NewDefectService 创建缺陷服务实例
-func NewDefectService(repo repositories.DefectRepository) DefectService {
-	return &defectService{repo: repo}
+func NewDefectService(repo repositories.DefectRepository, userRepo repositories.UserRepository) DefectService {
+	return &defectService{
+		repo:     repo,
+		userRepo: userRepo,
+	}
 }
 
 // generateDefectID 生成缺陷显示ID
@@ -108,30 +112,68 @@ func (s *defectService) Create(projectID uint, userID uint, req *models.DefectCr
 		status = req.Status
 	}
 
+	// 处理DetectedBy：如果请求中有值则使用，否则使用创建人的用户名
+	detectedBy := req.DetectedBy
+	if detectedBy == "" {
+		// 查询创建人的用户名
+		user, err := s.userRepo.FindByID(userID)
+		if err == nil && user != nil {
+			detectedBy = user.Username
+		}
+	}
+
 	defect := &models.Defect{
-		DefectID:          defectID,
-		ProjectID:         projectID,
-		Title:             req.Title,
-		Subject:           subject,
-		Description:       req.Description,
-		RecoveryMethod:    req.RecoveryMethod,
-		Priority:          req.Priority,
-		Severity:          req.Severity,
-		Frequency:         req.Frequency,
-		DetectedInRelease: req.DetectedInRelease,
-		Phase:             phase,
-		CaseID:            req.CaseID,
-		Status:            status,
-		CreatedBy:         userID,
-		UpdatedBy:         userID,
+		DefectID:        defectID,
+		ProjectID:       projectID,
+		Title:           req.Title,
+		Subject:         subject,
+		Description:     req.Description,
+		RecoveryMethod:  req.RecoveryMethod,
+		Priority:        req.Priority,
+		Severity:        req.Severity,
+		Type:            req.Type,
+		Frequency:       req.Frequency,
+		DetectedVersion: req.DetectedVersion,
+		Phase:           phase,
+		CaseID:          req.CaseID,
+		RecoveryRank:    req.RecoveryRank,
+		DetectionTeam:   req.DetectionTeam,
+		Location:        req.Location,
+		FixVersion:      req.FixVersion,
+		SQAMemo:         req.SQAMemo,
+		Component:       req.Component,
+		Resolution:      req.Resolution,
+		Models:          req.Models,
+		DetectedBy:      detectedBy,
+		Status:          status,
+		CreatedBy:       userID,
+		UpdatedBy:       userID,
 	}
 
 	// 处理CreatedAt：如果提供了有效日期则使用
 	if req.CreatedAt != "" {
-		if parsedTime, err := time.Parse("2006-01-02", req.CreatedAt); err == nil {
-			defect.CreatedAt = parsedTime
-		} else if parsedTime, err := time.Parse(time.RFC3339, req.CreatedAt); err == nil {
-			defect.CreatedAt = parsedTime
+		log.Printf("[Defect Create] Parsing CreatedAt: '%s'", req.CreatedAt)
+		// 尝试多种日期格式
+		formats := []string{
+			"2006-01-02",
+			"2006-01-02 15:04:05",
+			"2006/01/02", // Excel常用格式
+			"2006/1/2",   // Excel可能的短格式
+			"01-02-06",   // Excel短格式：月-日-年(YY)
+			"1-2-06",     // Excel短格式：月-日-年(YY)，单数字
+			time.RFC3339,
+		}
+		parsed := false
+		for _, format := range formats {
+			if parsedTime, err := time.Parse(format, req.CreatedAt); err == nil {
+				defect.CreatedAt = parsedTime
+				log.Printf("[Defect Create] Successfully parsed CreatedAt with format '%s': %v", format, parsedTime)
+				parsed = true
+				break
+			}
+		}
+		if !parsed {
+			log.Printf("[Defect Create] WARNING: Failed to parse CreatedAt: '%s'", req.CreatedAt)
 		}
 	}
 
@@ -139,7 +181,7 @@ func (s *defectService) Create(projectID uint, userID uint, req *models.DefectCr
 		return nil, fmt.Errorf("create defect: %w", err)
 	}
 
-	log.Printf("[Defect Create] user_id=%d, project_id=%d, defect_id=%s", userID, projectID, defect.DefectID)
+	log.Printf("[Defect Create] user_id=%d, project_id=%d, defect_id=%s, created_at=%v", userID, projectID, defect.DefectID, defect.CreatedAt)
 	return defect, nil
 }
 
@@ -220,11 +262,44 @@ func (s *defectService) Update(id string, userID uint, req *models.DefectUpdateR
 		}
 		updates["severity"] = *req.Severity
 	}
+	if req.Type != nil {
+		if *req.Type != "" && !models.IsValidDefectType(*req.Type) {
+			return errors.New("invalid type value")
+		}
+		updates["type"] = *req.Type
+	}
 	if req.Frequency != nil {
 		updates["frequency"] = *req.Frequency
 	}
-	if req.DetectedInRelease != nil {
-		updates["detected_in_release"] = *req.DetectedInRelease
+	if req.DetectedVersion != nil {
+		updates["detected_version"] = *req.DetectedVersion
+	}
+	if req.RecoveryRank != nil {
+		updates["recovery_rank"] = *req.RecoveryRank
+	}
+	if req.DetectionTeam != nil {
+		updates["detection_team"] = *req.DetectionTeam
+	}
+	if req.Location != nil {
+		updates["location"] = *req.Location
+	}
+	if req.FixVersion != nil {
+		updates["fix_version"] = *req.FixVersion
+	}
+	if req.SQAMemo != nil {
+		updates["sqa_memo"] = *req.SQAMemo
+	}
+	if req.Component != nil {
+		updates["component"] = *req.Component
+	}
+	if req.Resolution != nil {
+		updates["resolution"] = *req.Resolution
+	}
+	if req.Models != nil {
+		updates["models"] = *req.Models
+	}
+	if req.DetectedBy != nil {
+		updates["detected_by"] = *req.DetectedBy
 	}
 
 	// 处理Phase：如果提供了PhaseID，查找名称
@@ -336,11 +411,24 @@ func convertToDefectSlice(defects []*models.Defect) []models.Defect {
 	return result
 }
 
-// CSV列定义
+// getExcelColumn 将列索引转换为Excel列名（1-based: 1->A, 2->B, ..., 27->AA）
+func getExcelColumn(col int) string {
+	result := ""
+	for col > 0 {
+		col--
+		result = string(rune('A'+col%26)) + result
+		col /= 26
+	}
+	return result
+}
+
+// CSV列定义（除ID外的全部字段）
 var csvHeaders = []string{
-	"Title", "Subject", "Description", "Recovery Method",
-	"Priority", "Severity", "Frequency", "Detected In Release", "Phase",
-	"Status", "Created At",
+	"Title", "Module", "Description", "Recovery Method",
+	"Priority", "Severity", "Type", "Frequency", "Detected Version", "Phase",
+	"Detection Team", "Location", "Fix Version", "SQA MEMO", "Component",
+	"Resolution", "Models",
+	"Status", "Created At", "Detected By",
 }
 
 // GenerateTemplate 生成导入模板（支持CSV和XLSX格式）
@@ -368,17 +456,26 @@ func (s *defectService) generateCSVTemplate() ([]byte, error) {
 
 	// 写入说明行（字段要求）
 	instructions := []string{
-		"(Required)",               // Title - 必填
-		"(Optional)",               // Subject - 可选，模块名称
-		"(Optional)",               // Description - 可选
-		"(Optional)",               // Recovery Method - 可选
-		"(A/B/C/D)",                // Priority - 必须是A/B/C/D之一
-		"(A/B/C/D)",                // Severity - 必须是A/B/C/D之一
+		"(Required)", // Title - 必填
+		"(Optional)", // Module - 可选，模块名称
+		"(Optional)", // Description - 可选
+		"(Optional)", // Recovery Method - 可选
+		"(A/B/C/D)",  // Priority - 必须是A/B/C/D之一
+		"(Critical/Major/Minor/Trivial or A/B/C/D)", // Severity - 新值或旧值
+		"(Optional: Functional/UI/UIInteraction/Compatibility/BrowserSpecific/Performance/Security/Environment/UserError)", // Type - 可选
 		"(Optional, e.g., 100%)",   // Frequency - 可选
-		"(Optional, e.g., v1.0.0)", // Detected In Release - 可选
+		"(Optional, e.g., v1.0.0)", // Detected Version - 可选
 		"(Optional)",               // Phase - 可选，阶段名称
-		"(Optional: New/Active/Resolved/Closed, default: New)", // Status - 可选
-		"(Auto-generated or YYYY-MM-DD)",                       // Created At - 自动生成或指定日期
+		"(Optional)",               // Detection Team - 可选
+		"(Optional)",               // Location - 可选
+		"(Optional, e.g., v1.1.0)", // Fix Version - 可选
+		"(Optional)",               // SQA MEMO - 可选
+		"(Optional)",               // Component - 可选
+		"(Optional)",               // Resolution - 可选，解决方案
+		"(Optional)",               // Models - 可选，机型
+		"(Optional: New/InProgress/Confirmed/Resolved/Reopened/Rejected/Closed, default: New)", // Status - 可选
+		"(Auto-generated or YYYY-MM-DD)", // Created At - 自动生成或指定日期
+		"(Optional)",                     // Detected By - 可选，提出人
 	}
 	if err := writer.Write(instructions); err != nil {
 		return nil, fmt.Errorf("write csv instructions: %w", err)
@@ -386,17 +483,26 @@ func (s *defectService) generateCSVTemplate() ([]byte, error) {
 
 	// 写入示例数据
 	example := []string{
-		"登录页面无法输入用户名",      // Title
-		"登录模块",             // Subject
-		"用户无法在用户名输入框中输入内容", // Description
-		"刷新页面后重试",          // Recovery Method
-		"A",                // Priority (必须是A/B/C/D)
-		"B",                // Severity (必须是A/B/C/D)
-		"100%",             // Frequency
-		"v1.0.0",           // Detected In Release
-		"系统测试",             // Phase
-		"New",              // Status (可选：New/Active/Resolved/Closed)
-		"2025-12-03",       // Created At
+		"登录页面无法输入用户名",           // Title
+		"登录模块",                  // Module
+		"用户无法在用户名输入框中输入内容",      // Description
+		"刷新页面后重试",               // Recovery Method
+		"A",                     // Priority
+		"Major",                 // Severity
+		"Functional",            // Type
+		"100%",                  // Frequency
+		"v1.0.0",                // Detected Version
+		"系统测试",                  // Phase
+		"QA Team A",             // Detection Team
+		"Login Page",            // Location
+		"v1.1.0",                // Fix Version
+		"Needs code review",     // SQA MEMO
+		"Auth Module",           // Component
+		"Clear cache and retry", // Resolution
+		"Chrome, Firefox",       // Models
+		"New",                   // Status
+		"2025-12-03",            // Created At
+		"test_user",             // Detected By
 	}
 	if err := writer.Write(example); err != nil {
 		return nil, fmt.Errorf("write csv example: %w", err)
@@ -420,45 +526,63 @@ func (s *defectService) generateXLSXTemplate() ([]byte, error) {
 
 	// 写入表头
 	for col, header := range csvHeaders {
-		cell := fmt.Sprintf("%s1", string(rune('A'+col)))
+		cell := fmt.Sprintf("%s1", getExcelColumn(col+1))
 		f.SetCellValue(sheetName, cell, header)
 	}
 
 	// 写入说明行
 	instructions := []string{
-		"(Required)",               // Title - 必填
-		"(Optional)",               // Subject - 可选，模块名称
-		"(Optional)",               // Description - 可选
-		"(Optional)",               // Recovery Method - 可选
-		"(A/B/C/D)",                // Priority - 必须是A/B/C/D之一
-		"(A/B/C/D)",                // Severity - 必须是A/B/C/D之一
-		"(Optional, e.g., 100%)",   // Frequency - 可选
-		"(Optional, e.g., v1.0.0)", // Detected In Release - 可选
-		"(Optional)",               // Phase - 可选，阶段名称
-		"(Optional: New/Active/Resolved/Closed, default: New)", // Status - 可选
-		"(Auto-generated or YYYY-MM-DD)",                       // Created At - 自动生成或指定日期
+		"(Required)", // Title - 必填
+		"(Optional)", // Module - 可选
+		"(Optional)", // Description - 可选
+		"(Optional)", // Recovery Method - 可选
+		"(A/B/C/D)",  // Priority
+		"(Critical/Major/Minor/Trivial or A/B/C/D)", // Severity
+		"(Optional: Functional/UI/UIInteraction/Compatibility/BrowserSpecific/Performance/Security/Environment/UserError)", // Type
+		"(Optional, e.g., 100%)",   // Frequency
+		"(Optional, e.g., v1.0.0)", // Detected Version
+		"(Optional)",               // Phase
+		"(Optional)",               // Detection Team
+		"(Optional)",               // Location
+		"(Optional, e.g., v1.1.0)", // Fix Version
+		"(Optional)",               // SQA MEMO
+		"(Optional)",               // Component
+		"(Optional)",               // Resolution
+		"(Optional)",               // Models
+		"(Optional: New/InProgress/Confirmed/Resolved/Reopened/Rejected/Closed, default: New)", // Status
+		"(Auto-generated or YYYY-MM-DD)", // Created At
+		"(Optional)",                     // Detected By
 	}
 	for col, instr := range instructions {
-		cell := fmt.Sprintf("%s2", string(rune('A'+col)))
+		cell := fmt.Sprintf("%s2", getExcelColumn(col+1))
 		f.SetCellValue(sheetName, cell, instr)
 	}
 
 	// 写入示例数据
 	example := []string{
-		"登录页面无法输入用户名",      // Title
-		"登录模块",             // Subject
-		"用户无法在用户名输入框中输入内容", // Description
-		"刷新页面后重试",          // Recovery Method
-		"A",                // Priority (必须是A/B/C/D)
-		"B",                // Severity (必须是A/B/C/D)
-		"100%",             // Frequency
-		"v1.0.0",           // Detected In Release
-		"系统测试",             // Phase
-		"New",              // Status (可选：New/Active/Resolved/Closed)
-		"2025-12-03",       // Created At
+		"登录页面无法输入用户名",           // Title
+		"登录模块",                  // Module
+		"用户无法在用户名输入框中输入内容",      // Description
+		"刷新页面后重试",               // Recovery Method
+		"A",                     // Priority
+		"Major",                 // Severity
+		"Functional",            // Type
+		"100%",                  // Frequency
+		"v1.0.0",                // Detected Version
+		"系统测试",                  // Phase
+		"QA Team",               // Detection Team
+		"Login Page",            // Location
+		"v1.1.0",                // Fix Version
+		"需要优先修复",                // SQA MEMO
+		"Login Component",       // Component
+		"Clear cache and retry", // Resolution
+		"Chrome, Firefox",       // Models
+		"New",                   // Status
+		"2025-12-03",            // Created At
+		"test_user",             // Detected By
 	}
 	for col, value := range example {
-		cell := fmt.Sprintf("%s3", string(rune('A'+col)))
+		cell := fmt.Sprintf("%s3", getExcelColumn(col+1))
 		f.SetCellValue(sheetName, cell, value)
 	}
 
@@ -579,7 +703,7 @@ func (s *defectService) importXLSX(projectID uint, userID uint, reader io.Reader
 				defectID = value
 			case "Title":
 				req.Title = value
-			case "Subject":
+			case "Module":
 				req.Subject = value
 			case "Description":
 				req.Description = value
@@ -593,16 +717,36 @@ func (s *defectService) importXLSX(projectID uint, userID uint, reader io.Reader
 				if value != "" && models.IsValidDefectSeverity(value) {
 					req.Severity = value
 				}
+			case "Type":
+				if value != "" && models.IsValidDefectType(value) {
+					req.Type = value
+				}
 			case "Frequency":
 				req.Frequency = value
-			case "Detected In Release":
-				req.DetectedInRelease = value
+			case "Detected Version":
+				req.DetectedVersion = value
 			case "Phase":
 				req.Phase = value
+			case "Detection Team":
+				req.DetectionTeam = value
+			case "Location":
+				req.Location = value
+			case "Fix Version":
+				req.FixVersion = value
+			case "SQA MEMO":
+				req.SQAMemo = value
+			case "Component":
+				req.Component = value
+			case "Resolution":
+				req.Resolution = value
+			case "Models":
+				req.Models = value
 			case "Status":
 				req.Status = value
 			case "Created At":
 				req.CreatedAt = value
+			case "Detected By":
+				req.DetectedBy = value
 			}
 		}
 
@@ -618,16 +762,25 @@ func (s *defectService) importXLSX(projectID uint, userID uint, reader io.Reader
 			if err == nil && existingDefect != nil {
 				// 找到已有缺陷，进行更新
 				updateReq := &models.DefectUpdateRequest{
-					Title:             &req.Title,
-					Subject:           &req.Subject,
-					Description:       &req.Description,
-					RecoveryMethod:    &req.RecoveryMethod,
-					Priority:          &req.Priority,
-					Severity:          &req.Severity,
-					Frequency:         &req.Frequency,
-					DetectedInRelease: &req.DetectedInRelease,
-					Phase:             &req.Phase,
-					Status:            &req.Status,
+					Title:           &req.Title,
+					Subject:         &req.Subject,
+					Description:     &req.Description,
+					RecoveryMethod:  &req.RecoveryMethod,
+					Priority:        &req.Priority,
+					Severity:        &req.Severity,
+					Type:            &req.Type,
+					Frequency:       &req.Frequency,
+					DetectedVersion: &req.DetectedVersion,
+					Phase:           &req.Phase,
+					DetectionTeam:   &req.DetectionTeam,
+					Location:        &req.Location,
+					FixVersion:      &req.FixVersion,
+					SQAMemo:         &req.SQAMemo,
+					Component:       &req.Component,
+					Resolution:      &req.Resolution,
+					Models:          &req.Models,
+					DetectedBy:      &req.DetectedBy,
+					Status:          &req.Status,
 				}
 				err := s.Update(existingDefect.ID, userID, updateReq)
 				if err != nil {
@@ -775,19 +928,49 @@ func (s *defectService) Import(projectID uint, userID uint, reader io.Reader) (*
 			}
 		}
 		if len(record) > titleIdx+6 {
-			req.Frequency = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+6]))
+			defectType := strings.TrimSpace(record[titleIdx+6])
+			if defectType != "" && models.IsValidDefectType(defectType) {
+				req.Type = defectType
+			}
 		}
 		if len(record) > titleIdx+7 {
-			req.DetectedInRelease = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+7]))
+			req.Frequency = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+7]))
 		}
 		if len(record) > titleIdx+8 {
-			req.Phase = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+8]))
+			req.DetectedVersion = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+8]))
 		}
 		if len(record) > titleIdx+9 {
-			req.Status = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+9]))
+			req.Phase = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+9]))
 		}
 		if len(record) > titleIdx+10 {
-			req.CreatedAt = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+10]))
+			req.DetectionTeam = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+10]))
+		}
+		if len(record) > titleIdx+11 {
+			req.Location = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+11]))
+		}
+		if len(record) > titleIdx+12 {
+			req.FixVersion = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+12]))
+		}
+		if len(record) > titleIdx+13 {
+			req.SQAMemo = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+13]))
+		}
+		if len(record) > titleIdx+14 {
+			req.Component = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+14]))
+		}
+		if len(record) > titleIdx+15 {
+			req.Resolution = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+15]))
+		}
+		if len(record) > titleIdx+16 {
+			req.Models = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+16]))
+		}
+		if len(record) > titleIdx+17 {
+			req.Status = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+17]))
+		}
+		if len(record) > titleIdx+18 {
+			req.CreatedAt = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+18]))
+		}
+		if len(record) > titleIdx+19 {
+			req.DetectedBy = decodeHTMLEntities(strings.TrimSpace(record[titleIdx+19]))
 		}
 
 		// 如果有Defect ID，尝试更新已有缺陷
@@ -796,16 +979,26 @@ func (s *defectService) Import(projectID uint, userID uint, reader io.Reader) (*
 			if err == nil && existingDefect != nil {
 				// 找到已有缺陷，进行更新
 				updateReq := &models.DefectUpdateRequest{
-					Title:             &req.Title,
-					Subject:           &req.Subject,
-					Description:       &req.Description,
-					RecoveryMethod:    &req.RecoveryMethod,
-					Priority:          &req.Priority,
-					Severity:          &req.Severity,
-					Frequency:         &req.Frequency,
-					DetectedInRelease: &req.DetectedInRelease,
-					Phase:             &req.Phase,
-					Status:            &req.Status,
+					Title:           &req.Title,
+					Subject:         &req.Subject,
+					Description:     &req.Description,
+					RecoveryMethod:  &req.RecoveryMethod,
+					Priority:        &req.Priority,
+					Severity:        &req.Severity,
+					Type:            &req.Type,
+					Frequency:       &req.Frequency,
+					DetectedVersion: &req.DetectedVersion,
+					Phase:           &req.Phase,
+					RecoveryRank:    &req.RecoveryRank,
+					DetectionTeam:   &req.DetectionTeam,
+					Location:        &req.Location,
+					FixVersion:      &req.FixVersion,
+					SQAMemo:         &req.SQAMemo,
+					Component:       &req.Component,
+					Resolution:      &req.Resolution,
+					Models:          &req.Models,
+					DetectedBy:      &req.DetectedBy,
+					Status:          &req.Status,
 				}
 				err := s.Update(existingDefect.ID, userID, updateReq)
 				if err != nil {
@@ -882,10 +1075,12 @@ func (s *defectService) exportCSV(projectID uint) ([]byte, error) {
 	buf.Write([]byte{0xEF, 0xBB, 0xBF})
 	writer := csv.NewWriter(&buf)
 
-	// 写入表头（包含 Defect ID 和 Status，其他字段按 csvHeaders 顺序）
-	exportHeaders := []string{"Defect ID", "Title", "Subject", "Description", "Recovery Method",
-		"Priority", "Severity", "Frequency", "Detected In Release", "Phase",
-		"Status", "Created At", "Created By"}
+	// 写入表头（除了ID之外的全部字段）
+	exportHeaders := []string{"Defect ID", "Title", "Module", "Description", "Recovery Method",
+		"Priority", "Severity", "Type", "Frequency", "Detected Version", "Phase",
+		"Detection Team", "Location", "Fix Version", "SQA MEMO", "Component",
+		"Resolution", "Models",
+		"Status", "Created At", "Detected By"}
 	if err := writer.Write(exportHeaders); err != nil {
 		return nil, fmt.Errorf("write csv header: %w", err)
 	}
@@ -895,10 +1090,13 @@ func (s *defectService) exportCSV(projectID uint) ([]byte, error) {
 		// 格式化创建时间
 		createdAt := defect.CreatedAt.Format("2006-01-02 15:04:05")
 
-		// 获取创建人昵称
-		createdBy := userMap[defect.CreatedBy]
-		if createdBy == "" {
-			createdBy = fmt.Sprintf("User#%d", defect.CreatedBy)
+		// 获取提出人：优先使用DetectedBy字段，否则使用创建人昵称
+		detectedBy := defect.DetectedBy
+		if detectedBy == "" {
+			detectedBy = userMap[defect.CreatedBy]
+			if detectedBy == "" {
+				detectedBy = fmt.Sprintf("User#%d", defect.CreatedBy)
+			}
 		}
 
 		// Subject和Phase在创建时已经存储为名称字符串
@@ -910,12 +1108,20 @@ func (s *defectService) exportCSV(projectID uint) ([]byte, error) {
 			defect.RecoveryMethod,
 			defect.Priority,
 			defect.Severity,
+			defect.Type,
 			defect.Frequency,
-			defect.DetectedInRelease,
+			defect.DetectedVersion,
 			defect.Phase,
+			defect.DetectionTeam,
+			defect.Location,
+			defect.FixVersion,
+			defect.SQAMemo,
+			defect.Component,
+			defect.Resolution,
+			defect.Models,
 			defect.Status,
 			createdAt,
-			createdBy,
+			detectedBy,
 		}
 		if err := writer.Write(row); err != nil {
 			return nil, fmt.Errorf("write csv row: %w", err)
@@ -967,9 +1173,11 @@ func (s *defectService) exportXLSX(projectID uint) ([]byte, error) {
 	f.SetSheetName("Sheet1", sheetName)
 
 	// 写入表头
-	headers := []string{"Defect ID", "Title", "Subject", "Description", "Recovery Method",
-		"Priority", "Severity", "Frequency", "Detected In Release", "Phase",
-		"Status", "Created At", "Created By"}
+	headers := []string{"Defect ID", "Title", "Module", "Description", "Recovery Method",
+		"Priority", "Severity", "Type", "Frequency", "Detected Version", "Phase",
+		"Detection Team", "Location", "Fix Version", "SQA MEMO", "Component",
+		"Resolution", "Models",
+		"Status", "Created At", "Detected By"}
 
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
@@ -983,10 +1191,13 @@ func (s *defectService) exportXLSX(projectID uint) ([]byte, error) {
 		// 格式化创建时间
 		createdAt := defect.CreatedAt.Format("2006-01-02 15:04:05")
 
-		// 获取创建人昵称
-		createdBy := userMap[defect.CreatedBy]
-		if createdBy == "" {
-			createdBy = fmt.Sprintf("User#%d", defect.CreatedBy)
+		// 获取提出人：优先使用DetectedBy字段，如果为空则使用创建人昵称
+		detectedBy := defect.DetectedBy
+		if detectedBy == "" {
+			detectedBy = userMap[defect.CreatedBy]
+			if detectedBy == "" {
+				detectedBy = fmt.Sprintf("User#%d", defect.CreatedBy)
+			}
 		}
 
 		data := []interface{}{
@@ -997,12 +1208,20 @@ func (s *defectService) exportXLSX(projectID uint) ([]byte, error) {
 			defect.RecoveryMethod,
 			defect.Priority,
 			defect.Severity,
+			defect.Type,
 			defect.Frequency,
-			defect.DetectedInRelease,
+			defect.DetectedVersion,
 			defect.Phase,
+			defect.DetectionTeam,
+			defect.Location,
+			defect.FixVersion,
+			defect.SQAMemo,
+			defect.Component,
+			defect.Resolution,
+			defect.Models,
 			defect.Status,
 			createdAt,
-			createdBy,
+			detectedBy,
 		}
 
 		for colIndex, value := range data {

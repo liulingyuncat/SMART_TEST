@@ -21,6 +21,7 @@ import {
   Divider,
   Image,
   Modal,
+  Tooltip,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -39,6 +40,11 @@ import {
   DEFECT_PRIORITY_COLORS,
   DEFECT_SEVERITY,
   DEFECT_SEVERITY_COLORS,
+  DEFECT_TYPE,
+  DEFECT_TYPE_COLORS,
+  DEFECT_TYPE_I18N_KEYS,
+  DEFECT_SEVERITY_I18N_KEYS,
+  DEFECT_STATUS_I18N_KEYS,
 } from '../../../constants/defect';
 import {
   fetchDefect,
@@ -127,10 +133,19 @@ const DefectDetailPage = ({
     description: t('defect.description', 'Description'),
     recoveryMethod: t('defect.recoveryMethod', 'Recovery Method'),
     frequency: t('defect.frequency', 'Frequency(%)'),
-    detectedInRelease: t('defect.detectedInRelease', 'Detected in Release'),
+    detectedVersion: t('defect.detectedVersion', 'Detected Version'),
     status: t('defect.status', 'Status'),
     priority: t('defect.priority', 'Priority'),
     severity: t('defect.severity', 'Severity'),
+    type: t('defect.type', 'Type'),
+    recoveryRank: t('defect.recoveryRank', 'Recovery Rank'),
+    detectionTeam: t('defect.detectionTeam', 'Detection Team'),
+    location: t('defect.location', 'Location'),
+    fixVersion: t('defect.fixVersion', 'Fix Version'),
+    sqaMemo: t('defect.sqaMemo', 'SQA MEMO'),
+    component: t('defect.component', 'Component'),
+    resolution: t('defect.resolution', 'Resolution'),
+    models: t('defect.models', 'Models'),
     subject: t('defect.subject', 'Subject'),
     phase: t('defect.phase', 'Phase'),
     attachments: t('defect.attachments', 'Attachments'),
@@ -150,10 +165,14 @@ const DefectDetailPage = ({
 
   // 状态标签映射
   const statusLabels = useMemo(() => ({
-    [DEFECT_STATUS.NEW]: t('defect.statusNew', '新建'),
-    [DEFECT_STATUS.ACTIVE]: t('defect.statusActive', '处理中'),
-    [DEFECT_STATUS.RESOLVED]: t('defect.statusResolved', '已解决'),
-    [DEFECT_STATUS.CLOSED]: t('defect.statusClosed', '已关闭'),
+    [DEFECT_STATUS.NEW]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.NEW], '新建'),
+    [DEFECT_STATUS.IN_PROGRESS]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.IN_PROGRESS], '处理中'),
+    [DEFECT_STATUS.ACTIVE]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.ACTIVE], '处理中'),
+    [DEFECT_STATUS.CONFIRMED]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.CONFIRMED], '已确认'),
+    [DEFECT_STATUS.RESOLVED]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.RESOLVED], '已解决'),
+    [DEFECT_STATUS.REOPENED]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.REOPENED], '重新打开'),
+    [DEFECT_STATUS.REJECTED]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.REJECTED], '已驳回'),
+    [DEFECT_STATUS.CLOSED]: t(DEFECT_STATUS_I18N_KEYS[DEFECT_STATUS.CLOSED], '已关闭'),
   }), [t, i18n.language]);
 
   // 优先级标签映射（A/B/C/D）
@@ -164,12 +183,30 @@ const DefectDetailPage = ({
     [DEFECT_PRIORITY.D]: t('defect.priorityD', 'D'),
   }), [t, i18n.language]);
 
-  // 严重程度标签映射（A/B/C/D）
+  // 严重程度标签映射
   const severityLabels = useMemo(() => ({
-    [DEFECT_SEVERITY.A]: t('defect.severityA', 'A'),
-    [DEFECT_SEVERITY.B]: t('defect.severityB', 'B'),
-    [DEFECT_SEVERITY.C]: t('defect.severityC', 'C'),
-    [DEFECT_SEVERITY.D]: t('defect.severityD', 'D'),
+    [DEFECT_SEVERITY.CRITICAL]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.CRITICAL], '致命'),
+    [DEFECT_SEVERITY.MAJOR]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.MAJOR], '严重'),
+    [DEFECT_SEVERITY.MINOR]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.MINOR], '一般'),
+    [DEFECT_SEVERITY.TRIVIAL]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.TRIVIAL], '轻微'),
+    // 向后兼容
+    [DEFECT_SEVERITY.A]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.A], '致命'),
+    [DEFECT_SEVERITY.B]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.B], '严重'),
+    [DEFECT_SEVERITY.C]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.C], '一般'),
+    [DEFECT_SEVERITY.D]: t(DEFECT_SEVERITY_I18N_KEYS[DEFECT_SEVERITY.D], '轻微'),
+  }), [t, i18n.language]);
+
+  // 缺陷类型标签映射（新增）
+  const typeLabels = useMemo(() => ({
+    [DEFECT_TYPE.FUNCTIONAL]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.FUNCTIONAL], '功能性'),
+    [DEFECT_TYPE.UI]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.UI], 'UI界面'),
+    [DEFECT_TYPE.UI_INTERACTION]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.UI_INTERACTION], 'UI交互'),
+    [DEFECT_TYPE.COMPATIBILITY]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.COMPATIBILITY], '兼容性'),
+    [DEFECT_TYPE.BROWSER_SPECIFIC]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.BROWSER_SPECIFIC], '浏览器特定'),
+    [DEFECT_TYPE.PERFORMANCE]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.PERFORMANCE], '性能'),
+    [DEFECT_TYPE.SECURITY]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.SECURITY], '安全'),
+    [DEFECT_TYPE.ENVIRONMENT]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.ENVIRONMENT], '环境'),
+    [DEFECT_TYPE.USER_ERROR]: t(DEFECT_TYPE_I18N_KEYS[DEFECT_TYPE.USER_ERROR], '用户错误'),
   }), [t, i18n.language]);
 
   // 状态选项
@@ -187,11 +224,20 @@ const DefectDetailPage = ({
   })), [priorityLabels]);
 
   // 严重程度选项
-  const severityOptions = useMemo(() => Object.values(DEFECT_SEVERITY).map((value) => ({
+  const severityOptions = useMemo(() => Object.values(DEFECT_SEVERITY)
+    .filter(v => !['A', 'B', 'C', 'D'].includes(v)) // 过滤旧值
+    .map((value) => ({
+      value,
+      label: severityLabels[value],
+      color: DEFECT_SEVERITY_COLORS[value],
+    })), [severityLabels]);
+
+  // 类型选项（新增）
+  const typeOptions = useMemo(() => Object.values(DEFECT_TYPE).map((value) => ({
     value,
-    label: severityLabels[value],
-    color: DEFECT_SEVERITY_COLORS[value],
-  })), [severityLabels]);
+    label: typeLabels[value],
+    color: DEFECT_TYPE_COLORS[value],
+  })), [typeLabels]);
 
   // 加载缺陷详情
   const loadDefect = useCallback(async () => {
@@ -372,8 +418,8 @@ const DefectDetailPage = ({
             {getSeverityTag(defect?.severity)}
           </Col>
           <Col span={6}>
-            <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.recoveryMethod}:</span>
-            <span style={{ color: '#303133' }}>{defect?.recovery_method || '-'}</span>
+            <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.type}:</span>
+            {defect?.type ? <Tag color={DEFECT_TYPE_COLORS[defect.type]}>{typeLabels[defect.type]}</Tag> : '-'}
           </Col>
         </Row>
       </div>
@@ -381,32 +427,62 @@ const DefectDetailPage = ({
       {/* 基本信息行 */}
       <Row gutter={24} style={{ marginBottom: 8 }}>
         <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.recoveryMethod}:</span>
+          <span style={{ color: '#303133' }}>{defect?.recovery_method || '-'}</span>
+        </Col>
+        <Col span={6}>
           <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.frequency}:</span>
           <span style={{ color: '#303133' }}>{defect?.frequency || '-'}</span>
         </Col>
         <Col span={6}>
-          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.detectedInRelease}:</span>
-          <span style={{ color: '#303133' }}>{defect?.detected_in_release || '-'}</span>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.detectedVersion}:</span>
+          <span style={{ color: '#303133' }}>{defect?.detected_version || '-'}</span>
         </Col>
         <Col span={6}>
           <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{t('defect.caseId', 'Case ID')}:</span>
           <span style={{ color: '#303133' }}>{defect?.case_id || '-'}</span>
         </Col>
+      </Row>
+
+      <Row gutter={24} style={{ marginBottom: 8 }}>
         <Col span={6}>
           <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.subject}:</span>
           <span style={{ color: '#303133' }}>{defect?.subject || '-'}</span>
         </Col>
-      </Row>
-
-      <Row gutter={24} style={{ marginBottom: 12 }}>
         <Col span={6}>
           <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.phase}:</span>
           <span style={{ color: '#303133' }}>{defect?.phase || '-'}</span>
         </Col>
         <Col span={6}>
-          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{t('defect.detectedBy', '提出人')}:</span>
-          <span style={{ color: '#303133' }}>{defect?.created_by_user?.username || '-'}</span>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.detectionTeam}:</span>
+          <span style={{ color: '#303133' }}>{defect?.detection_team || '-'}</span>
         </Col>
+        <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{t('defect.detectedBy', '提出人')}:</span>
+          <span style={{ color: '#303133' }}>{defect?.detected_by || defect?.created_by_user?.username || '-'}</span>
+        </Col>
+      </Row>
+
+      <Row gutter={24} style={{ marginBottom: 8 }}>
+        <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.location}:</span>
+          <span style={{ color: '#303133' }}>{defect?.location || '-'}</span>
+        </Col>
+        <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.fixVersion}:</span>
+          <span style={{ color: '#303133' }}>{defect?.fix_version || '-'}</span>
+        </Col>
+        <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.component}:</span>
+          <span style={{ color: '#303133' }}>{defect?.component || '-'}</span>
+        </Col>
+        <Col span={6}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.models}:</span>
+          <span style={{ color: '#303133' }}>{defect?.models || '-'}</span>
+        </Col>
+      </Row>
+
+      <Row gutter={24} style={{ marginBottom: 8 }}>
         <Col span={6}>
           <span style={{ color: '#8c8c8c', fontSize: 12, marginRight: 8 }}>{labels.createdAt}:</span>
           <span style={{ color: '#303133' }}>{defect?.created_at ? dayjs(defect.created_at).format('YYYY-MM-DD') : '-'}</span>
@@ -416,6 +492,8 @@ const DefectDetailPage = ({
           <span style={{ color: '#303133' }}>{defect?.updated_at ? dayjs(defect.updated_at).format('YYYY-MM-DD') : '-'}</span>
         </Col>
       </Row>
+
+      <div style={{ borderTop: '1px solid #f0f0f0', marginTop: 12, marginBottom: 12 }}></div>
 
       {/* 详细描述 - 自适应高度，预设文字高亮 */}
       <div style={{ marginBottom: 8 }}>
@@ -445,6 +523,47 @@ const DefectDetailPage = ({
           ) : '-'}
         </div>
       </div>
+
+      {/* SQA MEMO - 新增字段 */}
+      {defect?.sqa_memo && (
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, display: 'block', marginBottom: 4 }}>{labels.sqaMemo}:</span>
+          <div style={{ 
+            background: '#fafafa', 
+            border: '1px solid #f0f0f0', 
+            borderRadius: 4, 
+            padding: '10px 12px',
+            lineHeight: 1.6,
+            fontSize: 14,
+            color: '#303133',
+          }}>
+            {defect.sqa_memo.split('\n').map((line, index) => (
+              <div key={index}>{line || '\u00A0'}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Resolution - 解决方案 */}
+      {defect?.resolution && (
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ color: '#8c8c8c', fontSize: 12, display: 'block', marginBottom: 4 }}>{labels.resolution}:</span>
+          <div style={{ 
+            background: '#fafafa', 
+            border: '1px solid #f0f0f0', 
+            borderRadius: 4, 
+            padding: '10px 12px',
+            lineHeight: 1.6,
+            fontSize: 14,
+            color: '#303133',
+          }}>
+            {defect.resolution.split('\n').map((line, index) => (
+              <div key={index}>{line || '\u00A0'}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 
@@ -455,36 +574,19 @@ const DefectDetailPage = ({
       layout="vertical"
       onFinish={handleSubmit}
     >
-      <Row gutter={24}>
-        <Col span={16}>
-          <Form.Item
-            name="title"
-            label={labels.title}
-            rules={[{ required: true, message: labels.required }]}
-          >
-            <Input maxLength={200} />
-          </Form.Item>
+      {/* 标题 */}
+      <Form.Item
+        name="title"
+        label={labels.title}
+        rules={[{ required: true, message: labels.required }]}
+      >
+        <Input maxLength={200} />
+      </Form.Item>
 
-          <Form.Item name="subject_id" label={labels.subject}>
-            <Select allowClear>
-              {subjects?.map((subject) => (
-                <Option key={subject.id} value={subject.id}>
-                  {subject.name}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item name="description" label={labels.description}>
-            <TextArea rows={12} />
-          </Form.Item>
-        </Col>
-
-        <Col span={8}>
-          <Form.Item 
-            name="status" 
-            label={labels.status}
-          >
+      {/* 状态信息行 */}
+      <Row gutter={16}>
+        <Col span={6}>
+          <Form.Item name="status" label={labels.status}>
             <Select>
               {statusOptions.map((opt) => (
                 <Option key={opt.value} value={opt.value}>
@@ -493,11 +595,8 @@ const DefectDetailPage = ({
               ))}
             </Select>
           </Form.Item>
-
-          <Form.Item name="recovery_method" label={labels.recoveryMethod}>
-            <Input maxLength={500} />
-          </Form.Item>
-
+        </Col>
+        <Col span={6}>
           <Form.Item 
             name="priority" 
             label={labels.priority}
@@ -511,8 +610,11 @@ const DefectDetailPage = ({
               ))}
             </Select>
           </Form.Item>
-
-          <Form.Item name="severity" label={labels.severity}
+        </Col>
+        <Col span={6}>
+          <Form.Item 
+            name="severity" 
+            label={labels.severity}
             rules={[{ required: true, message: labels.required }]}
           >
             <Select>
@@ -523,29 +625,68 @@ const DefectDetailPage = ({
               ))}
             </Select>
           </Form.Item>
+        </Col>
+        <Col span={6}>
+          <Form.Item name="recovery_method" label={labels.recoveryMethod}>
+            <Input maxLength={500} />
+          </Form.Item>
+        </Col>
+      </Row>
 
+      {/* 基本信息行 */}
+      <Row gutter={16}>
+        <Col span={6}>
+          <Form.Item name="type" label={labels.type}>
+            <Select allowClear placeholder={labels.type}>
+              {typeOptions.map((opt) => (
+                <Option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Col>
+        <Col span={6}>
           <Form.Item 
             name="frequency" 
             label={labels.frequency}
             rules={[{ required: true, message: labels.required }]}
           >
-            <Input maxLength={10} />
+            <Input maxLength={10} placeholder="e.g., 100%" />
           </Form.Item>
-
+        </Col>
+        <Col span={6}>
           <Form.Item 
-            name="detected_in_release" 
-            label={labels.detectedInRelease}
+            name="detected_version" 
+            label={labels.detectedVersion}
             rules={[{ required: true, message: labels.required }]}
           >
-            <Input maxLength={50} />
+            <Input maxLength={50} placeholder="e.g., v1.0.0" />
           </Form.Item>
-
+        </Col>
+        <Col span={6}>
           <Form.Item name="case_id" label={t('defect.caseId', 'Case ID')}>
             <Input maxLength={50} />
           </Form.Item>
+        </Col>
+      </Row>
 
+      {/* 扩展信息行 */}
+      <Row gutter={16}>
+        <Col span={6}>
+          <Form.Item name="subject_id" label={labels.subject}>
+            <Select allowClear placeholder={labels.subject}>
+              {subjects?.map((subject) => (
+                <Option key={subject.id} value={subject.id}>
+                  {subject.name}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Col>
+        <Col span={6}>
           <Form.Item name="phase_id" label={labels.phase}>
-            <Select allowClear>
+            <Select allowClear placeholder={labels.phase}>
               {phases?.map((phase) => (
                 <Option key={phase.id} value={phase.id}>
                   {phase.name}
@@ -554,7 +695,51 @@ const DefectDetailPage = ({
             </Select>
           </Form.Item>
         </Col>
+        <Col span={6}>
+          <Form.Item name="detection_team" label={labels.detectionTeam}>
+            <Input maxLength={100} />
+          </Form.Item>
+        </Col>
       </Row>
+
+      {/* 更多信息行 */}
+      <Row gutter={16}>
+        <Col span={6}>
+          <Form.Item name="location" label={labels.location}>
+            <Input maxLength={200} />
+          </Form.Item>
+        </Col>
+        <Col span={6}>
+          <Form.Item name="fix_version" label={labels.fixVersion}>
+            <Input maxLength={50} placeholder="e.g., v1.1.0" />
+          </Form.Item>
+        </Col>
+        <Col span={6}>
+          <Form.Item name="component" label={labels.component}>
+            <Input maxLength={100} />
+          </Form.Item>
+        </Col>
+        <Col span={6}>
+          <Form.Item name="models" label={labels.models}>
+            <Input maxLength={200} />
+          </Form.Item>
+        </Col>
+      </Row>
+
+      {/* 描述 */}
+      <Form.Item name="description" label={labels.description}>
+        <TextArea rows={8} placeholder={labels.description} />
+      </Form.Item>
+
+      {/* SQA MEMO */}
+      <Form.Item name="sqa_memo" label={labels.sqaMemo}>
+        <TextArea rows={3} placeholder={labels.sqaMemo} />
+      </Form.Item>
+
+      {/* Resolution */}
+      <Form.Item name="resolution" label={labels.resolution}>
+        <TextArea rows={3} placeholder={labels.resolution} />
+      </Form.Item>
     </Form>
   );
 
@@ -568,26 +753,28 @@ const DefectDetailPage = ({
             border: '1px solid #f0f0f0'
           }}
           title={
-            <Space align="start">
+            <Space align="start" style={{ width: '100%', maxWidth: 'calc(100% - 350px)' }}>
               <Button icon={<ArrowLeftOutlined />} onClick={onBack} style={{ marginTop: 4 }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ color: '#8c8c8c', fontSize: 16, fontWeight: 500, flexShrink: 0 }}>{defect?.defect_id || ''}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+                <div style={{ color: '#8c8c8c', fontSize: 15, fontWeight: 500, flexShrink: 0 }}>{defect?.defect_id || ''}</div>
                 {defect?.title && (
-                  <div 
-                    style={{ 
-                      fontSize: 20, 
-                      fontWeight: 600, 
-                      color: '#262626',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: '600px',
-                      cursor: 'default'
-                    }}
-                    title={defect.title}
-                  >
-                    {defect.title}
-                  </div>
+                  <Tooltip title={defect.title} placement="topLeft">
+                    <div 
+                      style={{ 
+                        fontSize: 18, 
+                        fontWeight: 600, 
+                        color: '#262626',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        minWidth: 0,
+                        flex: 1,
+                        cursor: 'default'
+                      }}
+                    >
+                      {defect.title}
+                    </div>
+                  </Tooltip>
                 )}
               </div>
             </Space>

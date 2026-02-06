@@ -315,7 +315,12 @@ const Header = () => {
       {/* 中间：当前项目选择器 */}
       {(user?.role === 'project_manager' || user?.role === 'project_member') && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '8px' }}>
-          <Typography.Text style={{ marginRight: '8px', color: 'rgba(0, 0, 0, 0.85)' }}>
+          <Typography.Text style={{ 
+            marginRight: '8px', 
+            color: 'rgba(0, 0, 0, 0.85)',
+            fontSize: '13px',
+            whiteSpace: 'nowrap'
+          }}>
             {t('assign.currentProject')}
           </Typography.Text>
           

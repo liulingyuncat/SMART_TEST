@@ -11,18 +11,27 @@ import (
 type DefectStatus string
 
 const (
-	DefectStatusNew      DefectStatus = "New"
-	DefectStatusActive   DefectStatus = "Active"
-	DefectStatusResolved DefectStatus = "Resolved"
-	DefectStatusClosed   DefectStatus = "Closed"
+	DefectStatusNew        DefectStatus = "New"
+	DefectStatusInProgress DefectStatus = "InProgress" // 变更：Active → InProgress
+	DefectStatusResolved   DefectStatus = "Resolved"
+	DefectStatusClosed     DefectStatus = "Closed"
+	DefectStatusConfirmed  DefectStatus = "Confirmed" // 新增
+	DefectStatusReopened   DefectStatus = "Reopened"  // 新增
+	DefectStatusRejected   DefectStatus = "Rejected"  // 新增
+	// 向后兼容：保留Active用于旧数据
+	DefectStatusActive DefectStatus = "Active" // deprecated: use InProgress instead
 )
 
 // ValidDefectStatuses 有效的缺陷状态列表
 var ValidDefectStatuses = []DefectStatus{
 	DefectStatusNew,
-	DefectStatusActive,
+	DefectStatusInProgress,
 	DefectStatusResolved,
 	DefectStatusClosed,
+	DefectStatusConfirmed,
+	DefectStatusReopened,
+	DefectStatusRejected,
+	DefectStatusActive, // 向后兼容
 }
 
 // IsValidDefectStatus 检查状态是否有效
@@ -67,14 +76,24 @@ func IsValidDefectPriority(priority string) bool {
 type DefectSeverity string
 
 const (
-	DefectSeverityA DefectSeverity = "A"
-	DefectSeverityB DefectSeverity = "B"
-	DefectSeverityC DefectSeverity = "C"
-	DefectSeverityD DefectSeverity = "D"
+	DefectSeverityCritical DefectSeverity = "Critical" // 变更：A → Critical
+	DefectSeverityMajor    DefectSeverity = "Major"    // 变更：B → Major
+	DefectSeverityMinor    DefectSeverity = "Minor"    // 变更：C → Minor
+	DefectSeverityTrivial  DefectSeverity = "Trivial"  // 变更：D → Trivial
+	// 向后兼容：保留ABCD用于旧数据
+	DefectSeverityA DefectSeverity = "A" // deprecated: use Critical instead
+	DefectSeverityB DefectSeverity = "B" // deprecated: use Major instead
+	DefectSeverityC DefectSeverity = "C" // deprecated: use Minor instead
+	DefectSeverityD DefectSeverity = "D" // deprecated: use Trivial instead
 )
 
 // ValidDefectSeverities 有效的严重程度列表
 var ValidDefectSeverities = []DefectSeverity{
+	DefectSeverityCritical,
+	DefectSeverityMajor,
+	DefectSeverityMinor,
+	DefectSeverityTrivial,
+	// 向后兼容
 	DefectSeverityA,
 	DefectSeverityB,
 	DefectSeverityC,
@@ -91,25 +110,73 @@ func IsValidDefectSeverity(severity string) bool {
 	return false
 }
 
+// DefectType 缺陷类型枚举（新增）
+type DefectType string
+
+const (
+	DefectTypeFunctional      DefectType = "Functional"
+	DefectTypeUI              DefectType = "UI"
+	DefectTypeUIInteraction   DefectType = "UIInteraction"
+	DefectTypeCompatibility   DefectType = "Compatibility"
+	DefectTypeBrowserSpecific DefectType = "BrowserSpecific"
+	DefectTypePerformance     DefectType = "Performance"
+	DefectTypeSecurity        DefectType = "Security"
+	DefectTypeEnvironment     DefectType = "Environment"
+	DefectTypeUserError       DefectType = "UserError"
+)
+
+// ValidDefectTypes 有效的缺陷类型列表
+var ValidDefectTypes = []DefectType{
+	DefectTypeFunctional,
+	DefectTypeUI,
+	DefectTypeUIInteraction,
+	DefectTypeCompatibility,
+	DefectTypeBrowserSpecific,
+	DefectTypePerformance,
+	DefectTypeSecurity,
+	DefectTypeEnvironment,
+	DefectTypeUserError,
+}
+
+// IsValidDefectType 检查缺陷类型是否有效
+func IsValidDefectType(defectType string) bool {
+	for _, t := range ValidDefectTypes {
+		if string(t) == defectType {
+			return true
+		}
+	}
+	return false
+}
+
 // Defect 缺陷模型
 type Defect struct {
-	ID                string `gorm:"type:varchar(36);primaryKey" json:"id"`                                         // UUID主键
-	DefectID          string `gorm:"type:varchar(20);uniqueIndex:idx_defects_defect_id;not null" json:"defect_id"`  // 显示ID（XXXXXX）
-	ProjectID         uint   `gorm:"not null;index:idx_defects_project_status" json:"project_id"`                   // 所属项目ID
-	Title             string `gorm:"type:varchar(200);not null" json:"title"`                                       // 缺陷标题
-	Subject           string `gorm:"type:varchar(100)" json:"subject"`                                              // 主题分类
-	Description       string `gorm:"type:text" json:"description"`                                                  // 详细描述
-	RecoveryMethod    string `gorm:"type:varchar(500)" json:"recovery_method"`                                      // 恢复方法
-	Priority          string `gorm:"type:varchar(1);default:'B'" json:"priority"`                                   // 优先级(A/B/C/D)
-	Severity          string `gorm:"type:varchar(1);default:'B'" json:"severity"`                                   // 严重程度(A/B/C/D)
-	Frequency         string `gorm:"type:varchar(10)" json:"frequency"`                                             // 复现频率
-	DetectedInRelease string `gorm:"type:varchar(50)" json:"detected_in_release"`                                   // 发现版本
-	Phase             string `gorm:"type:varchar(100)" json:"phase"`                                                // 测试阶段
-	CaseID            string `gorm:"type:varchar(50)" json:"case_id"`                                               // 关联的Case ID
-	Assignee          string `gorm:"type:varchar(100)" json:"assignee"`                                             // 指派人
-	Status            string `gorm:"type:varchar(20);default:'New';index:idx_defects_project_status" json:"status"` // 状态
-	CreatedBy         uint   `gorm:"not null" json:"created_by"`                                                    // 创建人ID
-	UpdatedBy         uint   `json:"updated_by"`                                                                    // 更新人ID
+	ID              string `gorm:"type:varchar(36);primaryKey" json:"id"`                                         // UUID主键
+	DefectID        string `gorm:"type:varchar(20);uniqueIndex:idx_defects_defect_id;not null" json:"defect_id"`  // 显示ID（XXXXXX）
+	ProjectID       uint   `gorm:"not null;index:idx_defects_project_status" json:"project_id"`                   // 所属项目ID
+	Title           string `gorm:"type:varchar(200);not null" json:"title"`                                       // 缺陷标题
+	Subject         string `gorm:"type:varchar(100)" json:"subject"`                                              // 主题分类
+	Description     string `gorm:"type:text" json:"description"`                                                  // 详细描述
+	RecoveryMethod  string `gorm:"type:varchar(500)" json:"recovery_method"`                                      // 恢复方法
+	Priority        string `gorm:"type:varchar(1);default:'B'" json:"priority"`                                   // 优先级(A/B/C/D)
+	Severity        string `gorm:"type:varchar(20);default:'Major'" json:"severity"`                              // 严重程度(Critical/Major/Minor/Trivial)
+	Type            string `gorm:"type:varchar(30)" json:"type"`                                                  // 缺陷类型（新增）
+	Frequency       string `gorm:"type:varchar(10)" json:"frequency"`                                             // 复现频率
+	DetectedVersion string `gorm:"type:varchar(50)" json:"detected_version"`                                      // 发现版本
+	Phase           string `gorm:"type:varchar(100)" json:"phase"`                                                // 测试阶段
+	CaseID          string `gorm:"type:varchar(50)" json:"case_id"`                                               // 关联的Case ID
+	Assignee        string `gorm:"type:varchar(100)" json:"assignee"`                                             // 指派人
+	RecoveryRank    string `gorm:"type:varchar(50)" json:"recovery_rank"`                                         // 恢复等级（新增）
+	DetectionTeam   string `gorm:"type:varchar(100)" json:"detection_team"`                                       // 检测团队（新增）
+	Location        string `gorm:"type:varchar(200)" json:"location"`                                             // 位置（新增）
+	FixVersion      string `gorm:"type:varchar(50)" json:"fix_version"`                                           // 修复版本（新增）
+	SQAMemo         string `gorm:"type:text" json:"sqa_memo"`                                                     // SQA备注（新增）
+	Component       string `gorm:"type:varchar(100)" json:"component"`                                            // 组件（新增）
+	Resolution      string `gorm:"type:text" json:"resolution"`                                                   // 解决方案（新增）
+	Models          string `gorm:"type:varchar(200)" json:"models"`                                               // 机型（新增）
+	DetectedBy      string `gorm:"type:varchar(100)" json:"detected_by"`                                          // 提出人名字
+	Status          string `gorm:"type:varchar(20);default:'New';index:idx_defects_project_status" json:"status"` // 状态
+	CreatedBy       uint   `gorm:"not null" json:"created_by"`                                                    // 创建人ID
+	UpdatedBy       uint   `json:"updated_by"`                                                                    // 更新人ID
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -137,7 +204,7 @@ func (d *Defect) BeforeCreate(tx *gorm.DB) error {
 		d.Priority = string(DefectPriorityB)
 	}
 	if d.Severity == "" {
-		d.Severity = string(DefectSeverityB)
+		d.Severity = string(DefectSeverityMajor)
 	}
 	return nil
 }
@@ -153,38 +220,58 @@ type DefectListResponse struct {
 
 // DefectCreateRequest 创建缺陷请求
 type DefectCreateRequest struct {
-	Title             string `json:"title" binding:"required,max=200"`
-	SubjectID         *uint  `json:"subject_id"` // 主题ID
-	Subject           string `json:"subject"`    // 兼容直接传名称
-	Description       string `json:"description"`
-	RecoveryMethod    string `json:"recovery_method"`
-	Priority          string `json:"priority"`
-	Severity          string `json:"severity"`
-	Frequency         string `json:"frequency"`
-	DetectedInRelease string `json:"detected_in_release"`
-	PhaseID           *uint  `json:"phase_id"`   // 阶段ID
-	Phase             string `json:"phase"`      // 兼容直接传名称
-	CaseID            string `json:"case_id"`    // 关联的Case ID
-	Status            string `json:"status"`     // 状态（导入时使用）
-	CreatedAt         string `json:"created_at"` // 创建时间（导入时使用，格式：YYYY-MM-DD）
+	Title           string `json:"title" binding:"required,max=200"`
+	SubjectID       *uint  `json:"subject_id"` // 主题ID
+	Subject         string `json:"subject"`    // 兼容直接传名称
+	Description     string `json:"description"`
+	RecoveryMethod  string `json:"recovery_method"`
+	Priority        string `json:"priority"`
+	Severity        string `json:"severity"`
+	Type            string `json:"type"` // 新增：缺陷类型
+	Frequency       string `json:"frequency"`
+	DetectedVersion string `json:"detected_version"` // 发现版本
+	PhaseID         *uint  `json:"phase_id"`         // 阶段ID
+	Phase           string `json:"phase"`            // 兼容直接传名称
+	CaseID          string `json:"case_id"`          // 关联的Case ID
+	RecoveryRank    string `json:"recovery_rank"`    // 新增：恢复等级
+	DetectionTeam   string `json:"detection_team"`   // 新增：检测团队
+	Location        string `json:"location"`         // 新增：位置
+	FixVersion      string `json:"fix_version"`      // 新增：修复版本
+	SQAMemo         string `json:"sqa_memo"`         // 新增：SQA备注
+	Component       string `json:"component"`        // 新增：组件
+	Resolution      string `json:"resolution"`       // 新增：解决方案
+	Models          string `json:"models"`           // 新增：机型
+	DetectedBy      string `json:"detected_by"`      // 提出人名字（导入时使用）
+	Status          string `json:"status"`           // 状态（导入时使用）
+	CreatedAt       string `json:"created_at"`       // 创建时间（导入时使用，格式：YYYY-MM-DD）
 }
 
 // DefectUpdateRequest 更新缺陷请求
 type DefectUpdateRequest struct {
-	Title             *string `json:"title"`
-	SubjectID         *uint   `json:"subject_id"` // 主题ID
-	Subject           *string `json:"subject"`    // 兼容直接传名称
-	Description       *string `json:"description"`
-	RecoveryMethod    *string `json:"recovery_method"`
-	Priority          *string `json:"priority"`
-	Severity          *string `json:"severity"`
-	Frequency         *string `json:"frequency"`
-	DetectedInRelease *string `json:"detected_in_release"`
-	PhaseID           *uint   `json:"phase_id"` // 阶段ID
-	Phase             *string `json:"phase"`    // 兼容直接传名称
-	CaseID            *string `json:"case_id"`  // 关联的Case ID
-	Assignee          *string `json:"assignee"`
-	Status            *string `json:"status"`
+	Title           *string `json:"title"`
+	SubjectID       *uint   `json:"subject_id"` // 主题ID
+	Subject         *string `json:"subject"`    // 兼容直接传名称
+	Description     *string `json:"description"`
+	RecoveryMethod  *string `json:"recovery_method"`
+	Priority        *string `json:"priority"`
+	Severity        *string `json:"severity"`
+	Type            *string `json:"type"` // 新增：缺陷类型
+	Frequency       *string `json:"frequency"`
+	DetectedVersion *string `json:"detected_version"` // 发现版本
+	PhaseID         *uint   `json:"phase_id"`         // 阶段ID
+	Phase           *string `json:"phase"`            // 兼容直接传名称
+	CaseID          *string `json:"case_id"`          // 关联的Case ID
+	Assignee        *string `json:"assignee"`
+	RecoveryRank    *string `json:"recovery_rank"`  // 新增：恢复等级
+	DetectionTeam   *string `json:"detection_team"` // 新增：检测团队
+	Location        *string `json:"location"`       // 新增：位置
+	FixVersion      *string `json:"fix_version"`    // 新增：修复版本
+	SQAMemo         *string `json:"sqa_memo"`       // 新增：SQA备注
+	Component       *string `json:"component"`      // 新增：组件
+	Resolution      *string `json:"resolution"`     // 新增：解决方案
+	Models          *string `json:"models"`         // 新增：机型
+	DetectedBy      *string `json:"detected_by"`    // 提出人名字
+	Status          *string `json:"status"`
 }
 
 // ImportError 导入错误记录

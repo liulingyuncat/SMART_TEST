@@ -217,7 +217,7 @@ func (h *defectHandler) ExportTemplate(c *gin.Context) {
 	}
 }
 
-// ImportDefects 导入缺陷（支持CSV和XLSX格式）
+// ImportDefects 导入缺陷（仅支持XLSX格式）
 // POST /api/v1/projects/:id/defects/import
 func (h *defectHandler) ImportDefects(c *gin.Context) {
 	projectIDStr := c.Param("id")
@@ -240,6 +240,13 @@ func (h *defectHandler) ImportDefects(c *gin.Context) {
 		return
 	}
 
+	// 验证文件格式 - 只接受XLSX
+	filename := strings.ToLower(file.Filename)
+	if !strings.HasSuffix(filename, ".xlsx") {
+		utils.ResponseError(c, 400, "only XLSX format is supported")
+		return
+	}
+
 	src, err := file.Open()
 	if err != nil {
 		utils.ResponseError(c, 500, "failed to open file")
@@ -247,12 +254,8 @@ func (h *defectHandler) ImportDefects(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// 根据文件扩展名检测格式
-	filename := strings.ToLower(file.Filename)
-	isXLSX := strings.HasSuffix(filename, ".xlsx")
-
-	// 导入缺陷
-	result, err := h.defectService.ImportWithFormat(uint(projectID), userID, src, isXLSX)
+	// 导入缺陷（强制使用XLSX格式）
+	result, err := h.defectService.ImportWithFormat(uint(projectID), userID, src, true)
 	if err != nil {
 		log.Printf("[Defect Import Failed] project_id=%d, user_id=%d, error=%v", projectID, userID, err)
 		utils.ResponseError(c, 400, err.Error())

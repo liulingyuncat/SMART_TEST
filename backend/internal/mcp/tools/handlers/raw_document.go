@@ -126,6 +126,28 @@ func GetOptionalInt(args map[string]interface{}, key string, defaultVal int) int
 	}
 }
 
+// GetOptionalBool extracts an optional boolean from args.
+func GetOptionalBool(args map[string]interface{}, key string, defaultVal bool) bool {
+	val, ok := args[key]
+	if !ok {
+		return defaultVal
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "1"
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	default:
+		return defaultVal
+	}
+}
+
 // ListRawDocumentsHandler handles listing raw documents.
 type ListRawDocumentsHandler struct {
 	*BaseHandler

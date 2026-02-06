@@ -292,14 +292,23 @@ arguments:
 **AI 执行流程：**
 
 1. 调用 `get_current_project_name` → 获取 project_id: 1, 项目名: TestNew
+
 2. 调用 `list_requirement_items` → 显示需求文档列表
+
 3. 用户选择需求文档 → 调用 `get_requirement_item` 获取内容
+
 4. 调用 `list_viewpoint_items` → 显示观点文档列表
+
 5. 用户选择观点文档 → 调用 `get_viewpoint_item` 获取内容
+
 6. 调用 `list_manual_groups` → 显示用例集列表
+
 7. 调用 `list_manual_cases(project_id=1, group_name="登录功能")`
+
 8. 执行评审分析，对比需求、观点与用例
+
 9. 生成完整的评审报告（Markdown格式）
+
 10. 调用 `create_ai_report` 工具创建评审文档：
     
     ```json
@@ -312,6 +321,7 @@ arguments:
     ```
     
     系统自动生成报告名称：`登录功能_Review_20260127_143052`
+
 11. 向用户展示评审结果摘要和报告保存位置
 
 ### 示例对话：简化评审流程（仅评审用例规范）

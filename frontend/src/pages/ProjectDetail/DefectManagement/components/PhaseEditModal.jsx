@@ -75,6 +75,7 @@ const PhaseEditModal = ({
       addForm.resetFields();
       await refreshPhases();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to create phase:', error);
       message.error(labels.createFailed);
@@ -93,6 +94,7 @@ const PhaseEditModal = ({
       setEditingId(null);
       await refreshPhases();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to update phase:', error);
       message.error(labels.saveFailed);
@@ -109,6 +111,7 @@ const PhaseEditModal = ({
       message.success(labels.deleteSuccess);
       await refreshPhases();
       onUpdate?.();
+      // 不再自动关闭对话框，由用户手动关闭
     } catch (error) {
       console.error('Failed to delete phase:', error);
       message.error(labels.deleteFailed);
