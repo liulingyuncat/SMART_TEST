@@ -1,5 +1,5 @@
 ---
-name: S8_web_cases_translate
+name: S08_web_cases_translate
 description: Web测试用例多语言翻译工具
 version: 1.1
 arguments:

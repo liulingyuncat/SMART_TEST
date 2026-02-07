@@ -1,5 +1,5 @@
 ---
-name: S3_manual_cases_generate
+name: S03_manual_cases_generate
 description: 用于将测试观点转化为可执行的手工测试用例的提示词模版，确保用例结构化、可追溯且100%覆盖。
 version: 2.0
 arguments:

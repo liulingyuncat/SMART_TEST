@@ -1,5 +1,5 @@
 ---
-name: S1_requirements_organization
+name: S01_requirements_organization
 description: 用于将转换后的文档进行需求整理的提示词模版，确保需求清晰、结构化且易于引用。
 version: 2.0
 arguments:

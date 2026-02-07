@@ -1,5 +1,5 @@
 ---
-name: S9_web_cases_execute
+name: S09_web_cases_execute
 description: 基于Playwright MCP服务执行Web测试用例的提示词模版，支持自动化测试执行和结果回填。
 version: 1.1
 arguments:

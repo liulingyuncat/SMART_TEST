@@ -1,5 +1,5 @@
 ---
-name: S4_manual_cases_review
+name: S04_manual_cases_review
 description: 手工测试用例评审提示词，基于需求和观点文档对用例集进行全面评审
 version: 1.1
 arguments:

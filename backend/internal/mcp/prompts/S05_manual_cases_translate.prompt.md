@@ -1,5 +1,5 @@
 ---
-name: S5_manual_cases_translate
+name: S05_manual_cases_translate
 description: 用于手工测试用例库多语言字段翻译的提示词模版，支持中日英三语自动补全。
 version: 1.1
 arguments:

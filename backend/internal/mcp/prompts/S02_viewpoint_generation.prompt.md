@@ -1,5 +1,5 @@
 ---
-name: S2_viewpoint_generation
+name: S02_viewpoint_generation
 description: 用于从需求文档生成测试观点的提示词模版，确保测试覆盖全面且可追溯。
 version: 1.2
 arguments:

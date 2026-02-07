@@ -1,5 +1,5 @@
 ---
-name: S7_web_cases_generate
+name: S07_web_cases_generate
 description: Web自动化测试用例生成提示词模板
 version: 4.1
 arguments:
@@ -553,6 +553,7 @@ await p.getByPlaceholder('用户名').fill('admin');
 ```
 
 **⚠️ 重要说明：**
+
 1. **验证阶段**：使用上述方法在browser_run_code中测试脚本
 2. **script_code字段**：写入数据库的脚本无需特殊处理（Docker执行环境已配置跳过证书验证）
 3. **变量使用**：script_code中仍使用 `${BASE_URL}` 等变量占位符
