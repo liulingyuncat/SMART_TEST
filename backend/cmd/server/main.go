@@ -20,6 +20,42 @@ import (
 	"gorm.io/gorm"
 )
 
+// getStorageBasePath 返回存储目录的绝对路径
+func getStorageBasePath() string {
+	// 获取可执行文件所在目录
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("Warning: could not get executable path: %v, using relative path", err)
+		return "storage"
+	}
+	exeDir := filepath.Dir(exePath)
+	log.Printf("Executable directory: %s", exeDir)
+
+	// 尝试多种路径：
+	// 1. Docker 容器路径: /app/server -> /app/storage
+	// 2. 本地开发路径: backend/ -> backend/storage
+	candidates := []string{
+		filepath.Join(exeDir, "storage"),       // Docker/部署: exeDir/storage
+		filepath.Join(exeDir, "..", "storage"), // Local: exeDir/../storage
+	}
+
+	for _, candidate := range candidates {
+		absPath, err := filepath.Abs(candidate)
+		if err != nil {
+			continue
+		}
+		// 检查目录是否存在
+		if _, err := os.Stat(absPath); err == nil {
+			log.Printf("Found storage at: %s", absPath)
+			return absPath
+		}
+	}
+
+	// 默认返回相对路径
+	log.Printf("Warning: could not find storage directory, using relative path")
+	return "storage"
+}
+
 // getFrontendBuildPath 返回前端 build 目录的绝对路径
 func getFrontendBuildPath() string {
 	// 获取可执行文件所在目录
@@ -166,7 +202,7 @@ func main() {
 	aiReportService := services.NewAIReportService(aiReportRepo)
 
 	// 需求管理相关Service (T42)
-	storageDir := "storage"
+	storageDir := getStorageBasePath()
 	requirementItemService := services.NewRequirementItemService(requirementItemRepo, requirementChunkRepo, versionRepo, storageDir)
 	viewpointItemService := services.NewViewpointItemService(viewpointItemRepo, viewpointChunkRepo, versionRepo, storageDir)
 
@@ -188,7 +224,7 @@ func main() {
 
 	// 缺陷管理相关Service
 	defectService := services.NewDefectService(defectRepo, userRepo)
-	defectAttachmentService := services.NewDefectAttachmentService(defectAttachmentRepo, "storage")
+	defectAttachmentService := services.NewDefectAttachmentService(defectAttachmentRepo, getStorageBasePath())
 	defectConfigService := services.NewDefectConfigService(defectSubjectRepo, defectPhaseRepo)
 	defectCommentService := services.NewDefectCommentService(defectCommentRepo, defectRepo)
 

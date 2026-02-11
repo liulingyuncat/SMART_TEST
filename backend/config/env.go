@@ -99,3 +99,11 @@ func GetEnvBool(key string, defaultValue bool) bool {
 func GetPromptsDir() string {
 	return getEnv("PROMPTS_DIR", "internal/mcp/prompts")
 }
+
+// getStorageBasePath 获取存储基础路径
+// 通过环境变量 STORAGE_BASE_PATH 配置，默认为 "storage"
+// 开发环境可使用相对路径 "storage"
+// 部署环境可设置为绝对路径如 "/app/storage" 或 "C:\app\storage"
+func getStorageBasePath() string {
+	return getEnv("STORAGE_BASE_PATH", "storage")
+}
