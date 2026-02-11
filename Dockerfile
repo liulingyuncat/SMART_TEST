@@ -103,10 +103,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 设置时区
 ENV TZ=Asia/Shanghai
 
-# 创建非 root 用户
-RUN groupadd -g 1000 webtest && \
-    useradd -u 1000 -g webtest -m webtest
-
 WORKDIR /app
 
 # 从构建阶段复制产物
@@ -114,11 +110,8 @@ COPY --from=backend-builder /app/backend/server ./server
 COPY --from=backend-builder /app/backend/mcp-server ./mcp-server
 COPY --from=frontend-builder /app/frontend/build ./frontend/build
 
-# 复制 playwright-go 驱动文件到 webtest 用户的 home 目录
-COPY --from=backend-builder /root/.cache/ms-playwright-go /home/webtest/.cache/ms-playwright-go
-
-# 修复驱动文件权限
-RUN chown -R webtest:webtest /home/webtest/.cache
+# 复制 playwright-go 驱动文件（以 root 运行，直接使用 /root）
+COPY --from=backend-builder /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
 
 # 复制配置文件
 COPY backend/config/mcp-server.yaml ./config/mcp-server.yaml
@@ -133,12 +126,12 @@ RUN mkdir -p ./certs
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-# 创建存储目录并设置权限
-RUN mkdir -p ./storage && \
-    chown -R webtest:webtest /app
+# 创建存储目录
+RUN mkdir -p ./storage
 
-# 切换到非 root 用户
-USER webtest
+# 注意: 以 root 用户运行以避免挂载卷的权限问题
+# 在生产环境中，通过 docker-compose 的 volume 挂载可能导致权限冲突
+# 使用 root 可以确保应用始终能访问挂载的目录
 
 # 暴露端口
 EXPOSE 8443 16410

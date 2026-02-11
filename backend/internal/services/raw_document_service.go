@@ -280,8 +280,30 @@ func (s *rawDocumentService) convertDocumentAsync(documentID uint, taskID string
 		return
 	}
 
+	// 验证文件路径是否存在（防止数据不完整）
+	if doc.OriginalFilepath == "" {
+		errMsg := "document file path is empty (upload incomplete)"
+		log.Printf("[Convert Failed] documentId=%d, error: %s, filename=%s", documentID, errMsg, doc.OriginalFilename)
+		s.updateConvertStatus(documentID, "failed", 0, "", "", 0, errMsg)
+		return
+	}
+
 	// 构建原始文件的完整路径
 	fullPath := filepath.Join(s.storageBasePath, doc.OriginalFilepath)
+
+	// 验证文件是否存在
+	if _, err := os.Stat(fullPath); err != nil {
+		if os.IsNotExist(err) {
+			errMsg := fmt.Sprintf("file not found: %s", doc.OriginalFilepath)
+			log.Printf("[Convert Failed] documentId=%d, error: %s", documentID, errMsg)
+			s.updateConvertStatus(documentID, "failed", 0, "", "", 0, errMsg)
+			return
+		}
+		errMsg := fmt.Sprintf("cannot access file: %v", err)
+		log.Printf("[Convert Failed] documentId=%d, error: %s", documentID, errMsg)
+		s.updateConvertStatus(documentID, "failed", 0, "", "", 0, errMsg)
+		return
+	}
 
 	// 读取原始文件
 	content, err := os.ReadFile(fullPath)

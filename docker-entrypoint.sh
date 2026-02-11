@@ -27,6 +27,60 @@ generate_certs() {
     fi
 }
 
+# 检查和创建存储目录
+check_storage_directories() {
+    local storage_base="${STORAGE_BASE_PATH:-/app/storage}"
+    
+    echo "[entrypoint] Checking storage directories..."
+    echo "[entrypoint] Storage base path: ${storage_base}"
+    echo "[entrypoint] Running as user: $(whoami), UID: $(id -u), GID: $(id -g)"
+    
+    # 创建基础目录（如果不存在）
+    if [ ! -d "${storage_base}" ]; then
+        echo "[entrypoint] Creating storage directory..."
+        mkdir -p "${storage_base}" || {
+            echo "[entrypoint] ERROR: Cannot create storage directory: ${storage_base}"
+            exit 1
+        }
+    fi
+    
+    # 确保目录可写
+    if [ ! -w "${storage_base}" ]; then
+        echo "[entrypoint] Storage directory is not writable, fixing permissions..."
+        chmod 755 "${storage_base}" || {
+            echo "[entrypoint] WARNING: Failed to fix permissions on ${storage_base}"
+        }
+    fi
+    
+    # 创建子目录结构（按功能分组）
+    local subdirs=(
+        "raw_documents"         # 原始需求文档上传
+        "test_files"            # 测试文件
+        "screenshots"           # 执行截图
+        "defects"               # 缺陷附件上传
+        "versions"              # 版本文件
+        "versions/auto-cases"   # Web自动化用例版本
+        "versions/api-cases"    # API用例版本
+        "versions/web-cases"    # Web用例版本打包
+        "temp"                  # 临时文件
+    )
+    
+    for subdir in "${subdirs[@]}"; do
+        local dir_path="${storage_base}/${subdir}"
+        if [ ! -d "${dir_path}" ]; then
+            echo "[entrypoint] Creating directory: ${dir_path}"
+            mkdir -p "${dir_path}" || {
+                echo "[entrypoint] WARNING: Failed to create ${dir_path}"
+            }
+        fi
+    done
+    
+    # 显示最终权限状态
+    echo "[entrypoint] Storage directory permissions:"
+    ls -ld "${storage_base}" || true
+    echo "[entrypoint] Storage directories verified"
+}
+
 # 检查数据库连接和必需的表
 check_database() {
     local max_attempts=30
@@ -89,6 +143,9 @@ echo "[entrypoint] Starting SMART_TEST services..."
 
 # 生成证书
 generate_certs
+
+# 检查存储目录
+check_storage_directories
 
 # 检查数据库连接
 check_database
