@@ -123,6 +123,37 @@ arguments: []
 
 **数据来源**: `created_at` 字段，按时间统计Bug数量
 
+**图表生成要点**：
+
+1. **时间粒度选择**：
+   - 数据周期 < 30天：按**每日**聚合
+   - 30天 ≤ 数据周期 < 90天：按**每周**聚合（周一至周日为一周）
+   - 数据周期 ≥ 90天：按**每月**聚合
+   - **⚠️ 禁止直接使用原始日期**：必须进行聚合统计，避免数据点过多（超过30个点）
+
+2. **坐标计算规范**：
+   - X轴：将时间周期均匀分布在可用宽度内（建议：50px ~ 450px，共400px宽）
+   - Y轴：根据最大值动态缩放（`maxValue * 1.2` 留出顶部空间）
+   - 数据点间距：`x间距 = 可用宽度 / (数据点数 - 1)`
+
+3. **路径构建示例（7个数据点）**：
+   ```
+   假设数据：[(2025-11-12, 3), (2025-11-19, 5), (2025-11-26, 2), ...]
+   X坐标：[50, 117, 183, 250, 317, 383, 450]  // 等间距分布
+   Y坐标：根据数值映射到图表高度
+   
+   折线路径: M 50,200 L 117,180 L 183,215 L 250,190 ...
+   面积路径: M 50,200 L 117,180 ... L 450,xxx L 450,250 L 50,250 Z
+                                       ↑最后一点  ↑垂直下降  ↑水平回起点
+   ```
+
+4. **零值处理**：如果某个时间段Bug数量为0，Y坐标应设为底部（250），确保折线触及X轴
+
+5. **日期标签**：X轴底部显示日期标签，格式根据粒度选择：
+   - 每日：`MM/DD`（如 `11/12`）
+   - 每周：`MM/DD` 显示周一日期
+   - 每月：`YYYY-MM`（如 `2025-11`）
+
 **核心分析方向**：
 
 1. **收敛性判断**：根据Bug发现总趋势，判断是否出现收敛（后期Bug数量逐渐减少）
@@ -236,7 +267,13 @@ arguments: []
   - 主色系: `#4F46E5` (靛蓝) `#7C3AED` (紫色) `#2563EB` (蓝色)
   - 警示色系: `#EF4444` (红-Critical) `#F59E0B` (橙-Major) `#10B981` (绿-Minor) `#6B7280` (灰-Trivial)
   - 状态色系: `#3B82F6` (蓝-New) `#8B5CF6` (紫-InProgress) `#10B981` (绿-Resolved) `#6B7280` (灰-Closed)
-* **字体:** 使用清晰可读的字体
+* **字体规范:** 严格控制字体大小，避免重叠和截断
+  - **图表标题**: 14-16px, font-weight: 600-700
+  - **数据标签**: 10-12px (柱顶/数据点数值), font-weight: 600-700
+  - **轴标签/分类名**: 10-11px (X轴/Y轴刻度值和分类名称)
+  - **图例文字**: 10-11px (右侧图例说明文字)
+  - **辅助说明**: 9-10px (注释、百分比等次要信息)
+  - **⚠️ 字号上限**: 任何数据标签不得超过12px，图表标题不得超过16px
 * **图表尺寸:** 宽度≤500px，高度≤300px，viewBox推荐 `viewBox="0 0 500 280"`
 
 ### 4.2 SVG代码格式
@@ -266,16 +303,24 @@ arguments: []
 
 **推荐图表类型：**
 
-| 图表类型                     | 适用场景        | 技术要点                               | 优先级  |
-| ------------------------ | ----------- | ---------------------------------- | ---- |
+| 图表类型                     | 适用场景        | 技术要点                               | 优先级 |
+| ------------------------ | ----------- | ---------------------------------- | --- |
 | 圆环图 (Donut Chart)        | 状态/类型/优先级分布 | 使用 `<circle>` + `stroke-dasharray` | ⭐⭐⭐ |
 | 柱状图 (Bar Chart)          | 模块/版本/阶段分布  | 使用 `<rect>` + `linearGradient`     | ⭐⭐⭐ |
 | 折线/面积图 (Line/Area Chart) | Bug趋势分析     | 使用 `<path>` + `<linearGradient>`   | ⭐⭐⭐ |
 | 横向柱状图 (Horizontal Bar)   | 模块排名/责任人工作量 | 使用 `<rect>` 横向排列                   | ⭐⭐  |
 | 堆叠柱状图 (Stacked Bar)      | 模块×严重程度交叉   | 多层 `<rect>` 堆叠                     | ⭐⭐  |
-| ❌ 传统饼图 (Pie Chart)       | ~~不推荐~~     | ~~复杂 `<path>` 计算，易出错~~            | 禁用   |
+| ❌ 传统饼图 (Pie Chart)       | ~~不推荐~~     | ~~复杂 `<path>` 计算，易出错~~             | 禁用  |
 
 **示例1：圆环图（状态分布）**
+
+**🚨 圆环图核心规范（必须严格遵守）：**
+
+1. **严禁在圆环上绘制数据标签** - 圆环图的所有数据（名称、数值、百分比）只能通过右侧独立图例展示
+2. **圆心只显示总数** - 圆环中心区域只显示总数和说明文字（如"102 总缺陷数"），字号不超过28px（总数）和12px（说明）
+3. **图例位置固定** - 图例必须放在圆环右侧（x≥320），垂直排列，间距25px
+4. **图例字号** - 图例文字固定使用 `font-size="10"` 或 `font-size="11"`，确保不会超出边界
+5. **空间预留** - 右侧图例区域宽度至少180px，高度根据项目数动态调整（项目数 × 25px + 60px）
 
 使用 `stroke-dasharray` 技术绘制，核心参数：
 
@@ -309,17 +354,17 @@ arguments: []
   <text x="150" y="155" font-size="12" fill="#6B7280" text-anchor="middle">总缺陷数</text>
   <g transform="translate(320, 60)">
     <rect x="0" y="0" width="12" height="12" fill="#3B82F6" rx="2"/>
-    <text x="20" y="10" font-size="12" fill="#374151">New: 30 (30%)</text>
+    <text x="20" y="10" font-size="10" fill="#374151">New: 30 (30%)</text>
     <rect x="0" y="25" width="12" height="12" fill="#8B5CF6" rx="2"/>
-    <text x="20" y="35" font-size="12" fill="#374151">InProgress: 25 (25%)</text>
+    <text x="20" y="35" font-size="10" fill="#374151">InProgress: 25 (25%)</text>
     <rect x="0" y="50" width="12" height="12" fill="#10B981" rx="2"/>
-    <text x="20" y="60" font-size="12" fill="#374151">Resolved: 20 (20%)</text>
+    <text x="20" y="60" font-size="10" fill="#374151">Resolved: 20 (20%)</text>
     <rect x="0" y="75" width="12" height="12" fill="#6B7280" rx="2"/>
-    <text x="20" y="85" font-size="12" fill="#374151">Closed: 15 (15%)</text>
+    <text x="20" y="85" font-size="10" fill="#374151">Closed: 15 (15%)</text>
     <rect x="0" y="100" width="12" height="12" fill="#EF4444" rx="2"/>
-    <text x="20" y="110" font-size="12" fill="#374151">Reopened: 7 (7%)</text>
+    <text x="20" y="110" font-size="10" fill="#374151">Reopened: 7 (7%)</text>
     <rect x="0" y="125" width="12" height="12" fill="#4B5563" rx="2"/>
-    <text x="20" y="135" font-size="12" fill="#374151">Rejected: 3 (3%)</text>
+    <text x="20" y="135" font-size="10" fill="#374151">Rejected: 3 (3%)</text>
   </g>
 </svg>
 ```
@@ -332,6 +377,7 @@ arguments: []
 - 柱子间距: 20-30px
 - Y轴最大值: 自动计算 `Math.max(...values) * 1.2`
 - 数值标注: 使用 `<text>` 在柱顶显示
+- **⚠️ 标注间距规范**: 数值标签必须放在柱顶上方至少8-10px处，避免与柱子重叠。标签的y坐标应为 `柱顶y坐标 - 7` 或更小
 
 **完整代码示例：**
 
@@ -370,19 +416,36 @@ arguments: []
   <text x="40" y="205" font-size="10" fill="#6B7280" text-anchor="end">5</text>
   <text x="40" y="253" font-size="10" fill="#6B7280" text-anchor="end">0</text>
   <rect x="80" y="82" width="50" height="168" fill="url(#gradCritical)" rx="4" filter="url(#barShadow)"/>
-  <text x="105" y="75" font-size="14" font-weight="bold" fill="#1F2937" text-anchor="middle">18</text>
-  <text x="105" y="265" font-size="12" fill="#374151" text-anchor="middle">Critical</text>
+  <text x="105" y="75" font-size="12" font-weight="bold" fill="#1F2937" text-anchor="middle">18</text>
+  <text x="105" y="265" font-size="10" fill="#374151" text-anchor="middle">Critical</text>
   <rect x="180" y="62" width="50" height="188" fill="url(#gradMajor)" rx="4" filter="url(#barShadow)"/>
-  <text x="205" y="55" font-size="14" font-weight="bold" fill="#1F2937" text-anchor="middle">21</text>
-  <text x="205" y="265" font-size="12" fill="#374151" text-anchor="middle">Major</text>
+  <text x="205" y="55" font-size="12" font-weight="bold" fill="#1F2937" text-anchor="middle">21</text>
+  <text x="205" y="265" font-size="10" fill="#374151" text-anchor="middle">Major</text>
   <rect x="280" y="32" width="50" height="218" fill="url(#gradMinor)" rx="4" filter="url(#barShadow)"/>
-  <text x="305" y="25" font-size="14" font-weight="bold" fill="#1F2937" text-anchor="middle">26</text>
-  <text x="305" y="265" font-size="12" fill="#374151" text-anchor="middle">Minor</text>
-  <rect x="380" y="152" width="50" height="98" fill="url(#gradTrivial)" rx="4" filter="url(#barShadow)"/>
-  <text x="405" y="145" font-size="14" font-weight="bold" fill="#1F2937" text-anchor="middle">36</text>
-  <text x="405" y="265" font-size="12" fill="#374151" text-anchor="middle">未分类</text>
+  <text x="305" y="25" font-size="12" font-weight="bold" fill="#1F2937" text-anchor="middle">26</text>
+  <text x="305" y="265" font-size="10" fill="#374151" text-anchor="middle">Minor</text>
+  <rect x="380" y="202" width="50" height="48" fill="url(#gradTrivial)" rx="4" filter="url(#barShadow)"/>
+  <text x="405" y="195" font-size="12" font-weight="bold" fill="#1F2937" text-anchor="middle">6</text>
+  <text x="405" y="265" font-size="10" fill="#374151" text-anchor="middle">Trivial</text>
 </svg>
 ```
+
+**📊 柱状图数值标注计算示例：**
+
+以上图中的4个柱子为例，正确的标注位置计算：
+
+| 柱子       | 柱顶y坐标 | 标签y坐标 | 计算公式    | 说明      |
+| -------- | ----- | ----- | ------- | ------- |
+| Critical | 82    | 75    | 82 - 7  | 柱顶上方7px |
+| Major    | 62    | 55    | 62 - 7  | 柱顶上方7px |
+| Minor    | 32    | 25    | 32 - 7  | 柱顶上方7px |
+| Trivial  | 202   | 195   | 202 - 7 | 柱顶上方7px |
+
+**⚠️ 错误示例（会导致重叠）：**
+
+❌ 将标签y坐标设置为柱顶y坐标，或只减少2-3px，会导致数值与柱子顶部重叠
+❌ 示例：`<text y="82">18</text>` - 数值会与柱子顶部边缘重叠
+✅ 正确：`<text y="75">18</text>` - 数值清晰显示在柱顶上方
 
 **示例3：折线图（Bug趋势）**
 
@@ -391,6 +454,29 @@ arguments: []
 - 路径: `M x1,y1 L x2,y2 L x3,y3 ...`
 - 填充: 使用 `<linearGradient>` 渐变
 - 数据点: 使用 `<circle>` 标记关键点
+
+**⚠️ 面积填充路径绘制规范（重要）：**
+
+面积填充必须正确闭合，避免形成错误的大块填充区域：
+
+1. **正确闭合方式**: 从最后一个数据点垂直向下到X轴底部，然后沿X轴水平回到第一个点下方，再自动闭合回到起点
+2. **错误示例**: ❌ 如果数据点横跨较大范围，路径 `L 450,250 L 50,250` 会在最后一段和第一段之间形成错误的倾斜填充块
+3. **关键要点**: 确保最后一个数据点到底部是**垂直线段** `L xN,底部Y`，然后水平回到起点 `L x1,底部Y`
+
+**📊 面积填充路径构建算法：**
+
+假设有N个数据点 `(x1,y1), (x2,y2), ..., (xN,yN)`，X轴底部坐标为 `bottomY`：
+
+```
+面积路径 = M x1,y1           // 移动到第一个点
+         L x2,y2           // 连接各数据点
+         L x3,y3
+         ...
+         L xN,yN           // 连接到最后一个点
+         L xN,bottomY      // ⚠️ 关键：垂直向下到X轴
+         L x1,bottomY      // ⚠️ 关键：水平向左回到起点下方
+         Z                 // 闭合路径（自动回到起点）
+```
 
 **关键代码片段：**
 
@@ -401,7 +487,7 @@ arguments: []
     <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:0" />
   </linearGradient>
 </defs>
-<!-- 面积填充 -->
+<!-- 面积填充 - 注意正确的闭合路径 -->
 <path d="M 50,200 L 120,180 L 190,150 L 260,170 L 330,140 L 400,160 L 450,130 L 450,250 L 50,250 Z" 
       fill="url(#areaGrad)"/>
 <!-- 折线 -->
@@ -410,7 +496,112 @@ arguments: []
 <!-- 数据点 -->
 <circle cx="50" cy="200" r="4" fill="#3B82F6"/>
 <circle cx="120" cy="180" r="4" fill="#3B82F6"/>
+<circle cx="190" cy="150" r="4" fill="#3B82F6"/>
+<circle cx="260" cy="170" r="4" fill="#3B82F6"/>
+<circle cx="330" cy="140" r="4" fill="#3B82F6"/>
+<circle cx="400" cy="160" r="4" fill="#3B82F6"/>
+<circle cx="450" cy="130" r="4" fill="#3B82F6"/>
 ```
+
+**⚠️ 常见错误案例：**
+
+| 错误路径示例                                                | 问题描述                            | 正确做法                                  |
+| ----------------------------------------------------- | ------------------------------- | ------------------------------------- |
+| `M 50,200 ... L 450,130 Z`                            | 缺少闭合到底部的路径，面积填充不完整              | 必须添加 `L 450,250 L 50,250` 再 Z        |
+| `M 50,200 ... L 450,130 L 50,250 Z`                   | 从最后一点直接斜线回到起点底部，形成错误的三角形填充块     | 应先垂直下降 `L 450,250` 再水平回 `L 50,250`  |
+| 数据点过多（100+个点）导致路径字符串过长                                | 渲染性能差或失败                        | 对数据进行周/月聚合，或采样保持数据点在30个以内             |
+| 横跨时间过长导致点密集不清晰                                        | X轴拥挤，数据点重叠                      | 使用周/双周粒度而非每日，或采用滚动窗口显示最近N天           |
+| 所有数据点Y坐标相同（平线）                                        | 视觉效果差，看不出趋势                     | 添加说明文字"本周期内Bug数量保持稳定"，并调整Y轴范围突出细微变化 |
+```
+
+**完整Bug趋势图示例（推荐）:**
+
+以下是一个完整的Bug发现趋势图示例，包含标题、网格线、坐标轴、数据标签：
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 280">
+  <defs>
+    <linearGradient id="bugTrendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:0.25"/>
+      <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:0.05"/>
+    </linearGradient>
+    <filter id="dropShadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
+      <feOffset dx="0" dy="1" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.2"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 标题 -->
+  <text x="250" y="25" font-size="16" font-weight="bold" fill="#1F2937" text-anchor="middle">Bug发现趋势 (2025-11-12 ~ 2026-02-14)</text>
+  
+  <!-- 网格线 -->
+  <line x1="50" y1="50" x2="50" y2="250" stroke="#E5E7EB" stroke-width="1"/>
+  <line x1="50" y1="250" x2="450" y2="250" stroke="#374151" stroke-width="2"/>
+  <line x1="50" y1="200" x2="450" y2="200" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+  <line x1="50" y1="150" x2="450" y2="150" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+  <line x1="50" y1="100" x2="450" y2="100" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+  <line x1="50" y1="50" x2="450" y2="50" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+  
+  <!-- Y轴标签 -->
+  <text x="45" y="53" font-size="10" fill="#6B7280" text-anchor="end">10</text>
+  <text x="45" y="103" font-size="10" fill="#6B7280" text-anchor="end">8</text>
+  <text x="45" y="153" font-size="10" fill="#6B7280" text-anchor="end">5</text>
+  <text x="45" y="203" font-size="10" fill="#6B7280" text-anchor="end">3</text>
+  <text x="45" y="253" font-size="10" fill="#6B7280" text-anchor="end">0</text>
+  
+  <!-- 数据：周聚合，7个数据点 -->
+  <!-- Week1(11/12): 3个, Week2(11/19): 5个, Week3(11/26): 2个, Week4(12/03): 7个, Week5(12/10): 4个, Week6(12/17): 1个, Week7(12/24): 0个 -->
+  <!-- Y坐标计算: y = 250 - (数值 / 最大值10) * 200 -->
+  <!-- 3→190, 5→150, 2→210, 7→110, 4→170, 1→230, 0→250 -->
+  
+  <!-- 面积填充 -->
+  <path d="M 50,190 L 117,150 L 183,210 L 250,110 L 317,170 L 383,230 L 450,250 L 450,250 L 50,250 Z" 
+        fill="url(#bugTrendGrad)"/>
+  
+  <!-- 折线 -->
+  <path d="M 50,190 L 117,150 L 183,210 L 250,110 L 317,170 L 383,230 L 450,250" 
+        stroke="#3B82F6" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" 
+        filter="url(#dropShadow)"/>
+  
+  <!-- 数据点 -->
+  <circle cx="50" cy="190" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="117" cy="150" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="183" cy="210" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="250" cy="110" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="317" cy="170" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="383" cy="230" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  <circle cx="450" cy="250" r="4" fill="#3B82F6" stroke="#fff" stroke-width="2"/>
+  
+  <!-- 数据标签（仅显示非零值） -->
+  <text x="50" y="183" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">3</text>
+  <text x="117" y="143" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">5</text>
+  <text x="183" y="203" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">2</text>
+  <text x="250" y="103" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">7</text>
+  <text x="317" y="163" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">4</text>
+  <text x="383" y="223" font-size="10" font-weight="bold" fill="#3B82F6" text-anchor="middle">1</text>
+  
+  <!-- X轴日期标签 -->
+  <text x="50" y="265" font-size="9" fill="#6B7280" text-anchor="middle">11/12</text>
+  <text x="117" y="265" font-size="9" fill="#6B7280" text-anchor="middle">11/19</text>
+  <text x="183" y="265" font-size="9" fill="#6B7280" text-anchor="middle">11/26</text>
+  <text x="250" y="265" font-size="9" fill="#6B7280" text-anchor="middle">12/03</text>
+  <text x="317" y="265" font-size="9" fill="#6B7280" text-anchor="middle">12/10</text>
+  <text x="383" y="265" font-size="9" fill="#6B7280" text-anchor="middle">12/17</text>
+  <text x="450" y="265" font-size="9" fill="#6B7280" text-anchor="middle">12/24</text>
+</svg>
+```
+
+**关键要点总结:**
+
+1. ✅ 面积路径最后必须是 `L xN,250 L 50,250 Z` - 垂直下降再水平回到起点
+2. ✅ 折线路径不闭合，只连接数据点
+3. ✅ 数据点用带白边的圆圈突出显示
+4. ✅ 数据标签放在点的上方（y坐标 - 7px）
+5. ✅ 零值点标签可省略，避免与X轴重叠
+6. ✅ 使用周聚合而非每日，避免点过密
+7. ✅ Y轴最大值设为 `Math.ceil(maxValue * 1.2)` 留出顶部空间
 
 **示例4：横向柱状图（模块排名）**
 
@@ -451,41 +642,41 @@ arguments: []
   <g transform="translate(0, 55)">
     <circle cx="12" cy="9" r="10" fill="#6366F1" opacity="0.1"/>
     <text x="12" y="13" font-size="11" text-anchor="middle" fill="#6366F1" font-weight="700">1</text>
-    <text x="100" y="13" font-size="12" text-anchor="end" fill="#334155" font-weight="500">Game Library</text>
+    <text x="100" y="13" font-size="10" text-anchor="end" fill="#334155" font-weight="500">Game Library</text>
     <rect x="110" y="1" width="280" height="16" fill="url(#rank1)" rx="4" filter="url(#hBarShadow)"/>
-    <text x="395" y="12" font-size="12" font-weight="700" fill="#6366F1">11件</text>
+    <text x="395" y="12" font-size="11" font-weight="700" fill="#6366F1">11件</text>
     <circle cx="465" cy="9" r="8" fill="#EF4444" filter="url(#hBarShadow)"/>
     <text x="465" y="12" font-size="10" text-anchor="middle" fill="white" font-weight="700">!</text>
   </g>
   <g transform="translate(0, 90)">
     <circle cx="12" cy="9" r="10" fill="#8B5CF6" opacity="0.1"/>
     <text x="12" y="13" font-size="11" text-anchor="middle" fill="#8B5CF6" font-weight="700">2</text>
-    <text x="100" y="13" font-size="12" text-anchor="end" fill="#334155" font-weight="500">Storage</text>
+    <text x="100" y="13" font-size="10" text-anchor="end" fill="#334155" font-weight="500">Storage</text>
     <rect x="110" y="1" width="254" height="16" fill="url(#rank2)" rx="4" filter="url(#hBarShadow)"/>
-    <text x="369" y="12" font-size="12" font-weight="700" fill="#8B5CF6">10件</text>
+    <text x="369" y="12" font-size="11" font-weight="700" fill="#8B5CF6">10件</text>
     <circle cx="465" cy="9" r="8" fill="#EF4444" filter="url(#hBarShadow)"/>
     <text x="465" y="12" font-size="10" text-anchor="middle" fill="white" font-weight="700">!</text>
   </g>
   <g transform="translate(0, 125)">
     <circle cx="12" cy="9" r="10" fill="#3B82F6" opacity="0.1"/>
     <text x="12" y="13" font-size="11" text-anchor="middle" fill="#3B82F6" font-weight="700">3</text>
-    <text x="100" y="13" font-size="12" text-anchor="end" fill="#334155" font-weight="500">User Account</text>
+    <text x="100" y="13" font-size="10" text-anchor="end" fill="#334155" font-weight="500">User Account</text>
     <rect x="110" y="1" width="228" height="16" fill="url(#rank3)" rx="4" filter="url(#hBarShadow)"/>
-    <text x="343" y="12" font-size="12" font-weight="700" fill="#3B82F6">9件</text>
+    <text x="343" y="12" font-size="11" font-weight="700" fill="#3B82F6">9件</text>
   </g>
   <g transform="translate(0, 160)">
     <circle cx="12" cy="9" r="10" fill="#10B981" opacity="0.1"/>
     <text x="12" y="13" font-size="11" text-anchor="middle" fill="#10B981" font-weight="700">4</text>
-    <text x="100" y="13" font-size="12" text-anchor="end" fill="#334155" font-weight="500">Share/Capture</text>
+    <text x="100" y="13" font-size="10" text-anchor="end" fill="#334155" font-weight="500">Share/Capture</text>
     <rect x="110" y="1" width="228" height="16" fill="url(#rank4)" rx="4" filter="url(#hBarShadow)"/>
-    <text x="343" y="12" font-size="12" font-weight="700" fill="#10B981">9件</text>
+    <text x="343" y="12" font-size="11" font-weight="700" fill="#10B981">9件</text>
   </g>
   <g transform="translate(0, 195)">
     <circle cx="12" cy="9" r="10" fill="#84CC16" opacity="0.1"/>
     <text x="12" y="13" font-size="11" text-anchor="middle" fill="#84CC16" font-weight="700">5</text>
-    <text x="100" y="13" font-size="12" text-anchor="end" fill="#334155" font-weight="500">Remote Play</text>
+    <text x="100" y="13" font-size="10" text-anchor="end" fill="#334155" font-weight="500">Remote Play</text>
     <rect x="110" y="1" width="203" height="16" fill="url(#rank5)" rx="4" filter="url(#hBarShadow)"/>
-    <text x="318" y="12" font-size="12" font-weight="700" fill="#84CC16">8件</text>
+    <text x="318" y="12" font-size="11" font-weight="700" fill="#84CC16">8件</text>
   </g>
   <g transform="translate(320, 205)">
     <circle cx="0" cy="0" r="6" fill="#EF4444"/>
@@ -495,6 +686,17 @@ arguments: []
   <rect x="10" y="10" width="480" height="200" fill="none" stroke="#e2e8f0" stroke-width="1" rx="8" opacity="0.5"/>
 </svg>
 ```
+
+**📏 横向柱状图文字截断处理规范：**
+
+1. **模块名长度限制** - 模块名显示区域宽度固定为90px，字号10px
+2. **超长文字处理** - 当模块名超过10个字符时：
+   - **优先方案**：使用缩写（如"LocalizationModule" → "Localization"）
+   - **备选方案**：使用省略号（如"ローカライゼーション" → "ローカライゼ..."）
+   - **底线显示**：如"其の他5モジュール（各3件）"，可缩写为"其の他5項目"
+3. **行高自动调整** - 当TOP10项目较多时，行间距从35px缩小到28-30px
+4. **字号动态调整** - 如果7个以上项目，考虑将模块名字号从10px缩小到9px
+5. **viewBox高度** - 根据项目数动态计算：`height = 55 + 项目数 × 行高 + 50`
 
 **示例5：堆叠柱状图（模块×严重程度）**
 
@@ -636,28 +838,41 @@ arguments: []
 4. **专业性**: 添加阴影、渐变等视觉效果
 5. **一致性**: 同类图表使用相同的配色和样式
 6. **标签分离**: 图例必须放在图表外部独立区域（通常右侧），禁止覆盖在图形上
+7. **字号控制**: 严格遵守字号规范（标题≤16px，数据标签≤12px，图例≤11px）
+8. **空间预留**: 为每个文字元素预留充足空间（最小间距7px），避免重叠和截断
+9. **动态布局**: 根据项目数和文字长度动态调整viewBox高度、行间距、字号
 
 **📍 标签位置规范：**
 
 - **圆环图**: 图例放在右侧垂直排列，使用小方块+文字+数值+百分比格式
-- **柱状图**: 数值标签放在柱子顶部，分类标签放在X轴下方
+- **柱状图**: 
+  - 数值标签放在柱子顶部上方（y坐标 = 柱顶y - 7px以上），确保不与柱子重叠
+  - 分类标签放在X轴下方（y = 265或更大）
+  - 避免多个柱子数值在同一高度重叠，根据柱高调整标签y坐标
 - **折线图**: 数据点标签放在点的上方或下方，避免遮挡折线
 - **横向柱状图**: 类别标签放在左侧，数值标签放在柱子右端
-- **堆叠图**: 总数标签放在堆叠柱顶部，图例放在底部或右侧
+- **堆叠图**: 总数标签放在堆叠柱顶部上方（y坐标 = 柱顶y - 10px以上），图例放在底部或右侧
 
 **⚠️ 禁止做法：**
 
+- ❌ **圆环图在环上绘制数据** - 严禁在圆环上添加任何数据标签（名称、数值、百分比），所有数据只能通过右侧图例展示
 - ❌ 将文字标签直接覆盖在扇形、柱子上（除非空间充足且对比度高）
-- ❌ 标签互相重叠
-- ❌ 使用过小的字体（建议最小10px）
+- ❌ 标签互相重叠或与图形重叠
+- ❌ 数值标签紧贴柱顶，必须保持至少7px的间距
+- ❌ **字号过大** - 数据标签超过12px，图表标题超过16px，图例文字超过11px
+- ❌ 使用过小的字体（建议最小9px，常规10px）
+- ❌ 类别名称显示不完整（如"Critical"显示为"未分类ical"）
+- ❌ **长文本截断** - 模块名/类别名超出显示区域被截断，应使用缩写或省略号
+- ❌ **文字挤压** - 行间距过小（<25px）导致文字上下挤压重叠
 
 **生成流程：**
 
 1. 统计分析数据（数量、占比、排序）
 2. 计算图表参数（坐标、尺寸、角度）
-3. 生成SVG代码（使用模板+数据填充）
-4. 包裹 Markdown 代码块（` ```svg ... ``` `）
-5. 转义为JSON字符串（保留 `\n` 换行）
+3. **计算标注位置**（柱状图数值标签y坐标 = 柱顶y - 7，确保不重叠）
+4. 生成SVG代码（使用模板+数据填充）
+5. 包裹 Markdown 代码块（` ```svg ... ``` `）
+6. 转义为JSON字符串（保留 `\n` 换行）
 
 ## 5. 任务执行工作流 (Task Execution Workflow)
 

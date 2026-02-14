@@ -61,6 +61,10 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
   const saveTimeoutRef = useRef(null);
   const pendingSaveRef = useRef(null);
 
+  // 表格容器ref，用于动态计算高度
+  const tableContainerRef = useRef(null);
+  const [tableScrollY, setTableScrollY] = useState(400);
+
   console.log('🟡 [TaskMetadataPanel] Render with projectId:', projectId, 'task:', task?.task_name);
 
   // 打开用例详细弹窗
@@ -331,6 +335,29 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
       setCaseTableData(tableData);
     }
   }, [selectedCasesData]);
+
+  // 动态计算表格高度
+  useEffect(() => {
+    const calculateTableHeight = () => {
+      if (tableContainerRef.current) {
+        const container = tableContainerRef.current;
+        const containerTop = container.getBoundingClientRect().top;
+        const windowHeight = window.innerHeight;
+        // 预留底部空间（分页器 + 边距）约100px
+        const availableHeight = windowHeight - containerTop - 100;
+        // 设置最小高度300px，使用计算出的可用高度
+        const calculatedHeight = Math.max(300, availableHeight);
+        setTableScrollY(calculatedHeight);
+      }
+    };
+
+    // 初始计算
+    calculateTableHeight();
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', calculateTableHeight);
+    return () => window.removeEventListener('resize', calculateTableHeight);
+  }, [selectedCasesData, caseTableData]);
 
   // 自动保存单条记录（防抖）
   const autoSaveCaseResult = useCallback(async (caseId, field, value) => {
@@ -2122,7 +2149,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
 
       {/* 选中的用例展示区域 */}
       {selectedCasesData && selectedCasesData.cases && selectedCasesData.cases.length > 0 && (
-        <div className="selected-cases-section" style={{ marginTop: 16 }}>
+        <div className="selected-cases-section" style={{ marginTop: 16 }} ref={tableContainerRef}>
           {/* 统计信息区域 */}
           {(() => {
             const total = caseTableData.length;
@@ -2196,7 +2223,7 @@ const TaskMetadataPanel = ({ task, projectId, projectName, onSave }) => {
             columns={getCaseTableColumns()}
             dataSource={caseTableData}
             size="small"
-            scroll={{ y: 400 }}
+            scroll={{ y: tableScrollY }}
             pagination={{
               current: currentPage,
               pageSize: pageSize,
